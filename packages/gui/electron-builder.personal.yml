@@ -1,0 +1,61 @@
+# Personal Windows baseline: no upstream feed, voice payload, native TTS or 3D.
+# Kept separate so electron-builder.yml remains an attributable upstream input.
+appId: personal.herta.atelier
+productName: The Herta
+electronDist: node_modules/electron/dist
+copyright: Copyright © 2026 PersonaCLI and contributors. Personal derivative; see LICENSE and THIRD-PARTY-NOTICES.md.
+directories:
+  buildResources: build
+  output: release-round-21
+files:
+  - out/**
+  - "!out/bundle-manifest.json"
+  - "!out/main/tts-worker.cjs"
+  - "!out/main/comm-channel-effect.cjs"
+  - "!out/main/sherpa-punctuation.cjs"
+  - "!out/renderer/device-scene/**"
+  - "!out/renderer/upstream-assets/**"
+  - resources/herta-icon.png
+  - "!node_modules/**"
+asarUnpack:
+  - resources/herta-icon.png
+npmRebuild: false
+electronLanguages:
+  - en-US
+  - zh-CN
+  - zh-TW
+extraResources:
+  - from: ../../LICENSE
+    to: LICENSE
+  - from: ../../THIRD-PARTY-NOTICES.md
+    to: THIRD-PARTY-NOTICES.md
+  - from: ../../assets/ASSET_MANIFEST.md
+    to: ASSET_MANIFEST.md
+  - from: ../../docs/ASSET_AUDIT.md
+    to: ASSET_AUDIT.md
+  - from: resources/licenses/atelier-geometric-LICENSE.txt
+    to: licenses/atelier-geometric-LICENSE.txt
+  - from: resources/licenses/MapleMono-OFL.txt
+    to: licenses/MapleMono-OFL.txt
+publish: null
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: build/icon.ico
+  forceCodeSigning: false
+nsis:
+  artifactName: The-Herta-Setup-${version}-${arch}.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: The Herta
+  uninstallDisplayName: The Herta
+  deleteAppDataOnUninstall: false
+portable:
+  artifactName: The-Herta-${version}-portable-${arch}.${ext}
+
+

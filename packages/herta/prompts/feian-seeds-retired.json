@@ -1,0 +1,25 @@
+{
+  "_comment": "Seed 废案 files that no longer ship (ADR 0053: 废案_08–12 were consolidated into two longer conversations, so 10/11/12 have no successor file). materializeSeedFeian only ever WRITES, so without this an existing workspace would keep the retired files alongside the consolidated ones and Herta would read both. A live file is archived (moved into the dream archive, the same place cap-eviction sends things — never deleted) ONLY when its name appears here AND its content hashes to one of that file's shipped bodies. A user-edited copy hashes to nothing listed and is therefore left alone (D7). Add every shipped body of a retired file, not just the last one.",
+  "zh": {
+    "### 废案_10：远程办公的一百种无聊方式.txt": [
+      "0942d8f0899b5f4fe3c828869bf17500f30e398f"
+    ],
+    "### 废案_11：远程办公的一百种无聊方式.txt": [
+      "351cfe8ca02b99255e2182e7334200fb8fd30999"
+    ],
+    "### 废案_12：远程办公的一百种无聊方式.txt": [
+      "5806940bea03b0ddc52770f7a96f8fb090f3fc90"
+    ]
+  },
+  "en": {
+    "### 废案_10：远程办公的一百种无聊方式.txt": [
+      "26c0003c838f72a326653d1c268046c9e6c798d5"
+    ],
+    "### 废案_11：远程办公的一百种无聊方式.txt": [
+      "c7bd80e965fa8b055380bc2fc1e866cf3ea39724"
+    ],
+    "### 废案_12：远程办公的一百种无聊方式.txt": [
+      "84c6455a27105b27edcd3b79733e4effc549949c"
+    ]
+  }
+}

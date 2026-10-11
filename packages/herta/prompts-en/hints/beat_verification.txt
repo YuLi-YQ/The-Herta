@@ -1,0 +1,1 @@
+〔板砖 finished the run. Results are above. One line: if it passed, a quick nod; if it failed, say where it blew up. Don't read out the output, don't recite the stack trace. Short. {{no_banzhuan}}Must start with （我 说） and end with （/我 说）.〕

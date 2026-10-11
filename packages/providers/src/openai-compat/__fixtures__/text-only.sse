@@ -1,0 +1,10 @@
+data: {"id":"x","choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}
+
+data: {"id":"x","choices":[{"index":0,"delta":{"content":"Hello"}}]}
+
+data: {"id":"x","choices":[{"index":0,"delta":{"content":" world"}}]}
+
+data: {"id":"x","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: [DONE]
+

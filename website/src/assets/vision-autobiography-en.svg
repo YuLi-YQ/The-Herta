@@ -1,0 +1,65 @@
+<svg viewBox="0 0 940 620" xmlns="http://www.w3.org/2000/svg" font-family="Inter, ui-sans-serif, system-ui, 'Segoe UI', 'Microsoft YaHei', sans-serif">
+  <!-- EN twin of vision-autobiography.svg (owner 2026-08-03: the diagrams
+       were CN-only even on the EN site). Same geometry, English text. The
+       （我 说） cursor beat stays CN — it is the literal completion prompt
+       the actor continues, in EN sessions too (ADR 0014), and it is the
+       image the caption beneath it explains. -->
+  <style>
+    .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, "Microsoft YaHei", monospace; }
+    .cursor { animation: blink 1.1s steps(2) infinite; }
+    .flow { stroke-dasharray: 7 6; animation: march 1.6s linear infinite; }
+    @keyframes march { to { stroke-dashoffset: -26; } }
+    @keyframes blink { 50% { opacity: 0.1; } }
+    @media (prefers-reduced-motion: reduce) {
+      .cursor, .flow { animation: none; }
+    }
+  </style>
+  <defs>
+    <marker id="ab" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4d86ff"/>
+    </marker>
+  </defs>
+
+  <!-- the manuscript -->
+  <rect x="60" y="40" width="470" height="540" rx="20" fill="#ffffff" fill-opacity="0.88" stroke="rgba(17,20,23,.09)"/>
+  <text x="88" y="78" class="mono" font-size="12" letter-spacing="1.6" fill="#6f7782">HERTA'S FIRST-PERSON AUTOBIOGRAPHY · 我的自传</text>
+  <line x1="88" y1="92" x2="502" y2="92" stroke="rgba(17,20,23,.08)"/>
+
+  <rect x="84" y="110" width="422" height="76" rx="12" fill="#f6f8f9" stroke="rgba(17,20,23,.06)"/>
+  <text x="106" y="142" font-size="15" font-weight="600" fill="#111417">Who I am <tspan font-weight="400" font-size="12" fill="#6f7782">· HertaBio</tspan></text>
+  <text x="106" y="166" font-size="12" fill="#59616e">Voice, identity, invariants — no persona switch.</text>
+
+  <rect x="84" y="200" width="422" height="76" rx="12" fill="#f6f8f9" stroke="rgba(17,20,23,.06)"/>
+  <text x="106" y="232" font-size="15" font-weight="600" fill="#111417">What I remember <tspan font-weight="400" font-size="12" fill="#6f7782">· memory</tspan></text>
+  <text x="106" y="256" font-size="12" fill="#59616e">Moments worth keeping, written down in dreams.</text>
+
+  <rect x="84" y="290" width="422" height="76" rx="12" fill="#f6f8f9" stroke="rgba(17,20,23,.06)"/>
+  <text x="106" y="322" font-size="15" font-weight="600" fill="#111417">My world <tspan font-weight="400" font-size="12" fill="#6f7782">· EnvSet</tspan></text>
+  <text x="106" y="346" font-size="12" fill="#59616e">The office, my Brick, and one remote conversation.</text>
+
+  <rect x="84" y="380" width="422" height="76" rx="12" fill="#f6f8f9" stroke="rgba(17,20,23,.06)"/>
+  <text x="106" y="412" font-size="15" font-weight="600" fill="#111417">My present <tspan font-weight="400" font-size="12" fill="#6f7782">· the terminal record</tspan></text>
+  <text x="106" y="436" font-size="12" fill="#59616e">This session, line by line; chapters that no longer fit, I retell myself.</text>
+
+  <text x="106" y="512" class="mono" font-size="17" fill="#111417">（我 说）<tspan class="cursor" fill="#4d86ff" font-weight="700">▊</tspan></text>
+  <text x="106" y="546" font-size="12" font-style="italic" fill="#6f7782">inference is continuation — completion, not instruction.</text>
+
+  <!-- the three timescale loops -->
+  <text x="620" y="72" class="mono" font-size="12" letter-spacing="1.6" fill="#6f7782">THREE TIMESCALES · NEVER RESETS</text>
+
+  <rect x="620" y="96" width="270" height="72" rx="14" fill="#ffffff" fill-opacity="0.85" stroke="rgba(17,20,23,.09)"/>
+  <text x="644" y="126" font-size="14" font-weight="600" fill="#111417">Weeks <tspan font-weight="400" font-size="11.5" fill="#6f7782">· while you are away</tspan></text>
+  <text x="644" y="150" font-size="11.5" fill="#59616e">Dreams: keepable moments enter the book.</text>
+
+  <rect x="620" y="240" width="270" height="72" rx="14" fill="#ffffff" fill-opacity="0.85" stroke="rgba(17,20,23,.09)"/>
+  <text x="644" y="270" font-size="14" font-weight="600" fill="#111417">Sessions <tspan font-weight="400" font-size="11.5" fill="#6f7782">· when the window fills</tspan></text>
+  <text x="644" y="294" font-size="11.5" fill="#59616e">Recap: overflow becomes her retold past.</text>
+
+  <rect x="620" y="384" width="270" height="72" rx="14" fill="#ffffff" fill-opacity="0.85" stroke="rgba(17,20,23,.09)"/>
+  <text x="644" y="414" font-size="14" font-weight="600" fill="#111417">Turns <tspan font-weight="400" font-size="11.5" fill="#6f7782">· every turn</tspan></text>
+  <text x="644" y="438" font-size="11.5" fill="#59616e">Beats: she cuts in mid-task, unprompted.</text>
+
+  <path class="flow" d="M 616 132 C 592 148, 572 172, 556 196 L 512 236" fill="none" stroke="#4d86ff" stroke-width="1.8" marker-end="url(#ab)"/>
+  <path class="flow" d="M 616 276 C 594 296, 572 320, 554 342 L 512 400" fill="none" stroke="#4d86ff" stroke-width="1.8" marker-end="url(#ab)"/>
+  <path class="flow" d="M 616 420 C 592 428, 568 434, 550 438 L 512 442" fill="none" stroke="#4d86ff" stroke-width="1.8" marker-end="url(#ab)"/>
+</svg>

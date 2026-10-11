@@ -1,0 +1,34 @@
+.herta-round-dashboard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 5px 16px;
+  padding: 7px 12px 2px;
+  color: var(--herta-muted, #a79cad);
+  font-size: 11px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.herta-round-dashboard > span {
+  white-space: nowrap;
+}
+.herta-context-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.herta-context-ring {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  opacity: 0.65;
+}
+@media (max-width: 760px) {
+  .herta-round-dashboard {
+    gap: 3px 10px;
+    font-size: 10px;
+  }
+}

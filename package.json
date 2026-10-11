@@ -1,0 +1,45 @@
+{
+  "name": "herta-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "build:clean": "tsc -b --clean",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:changed": "vitest run --changed",
+    "test:branch": "vitest run --changed origin/main",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck:apps": "pnpm --filter @herta/gui typecheck && pnpm --filter @herta/website typecheck",
+    "check": "pnpm build && pnpm typecheck:apps && pnpm lint && pnpm test",
+    "dev:gui": "pnpm --filter @herta/gui dev",
+    "build:gui": "pnpm --filter @herta/gui build",
+    "herta": "node packages/cli/dist/bin.js",
+    "prepare:desktop": "pnpm --filter @herta/gui exec install-electron",
+    "dist:personal": "pnpm build && pnpm --filter @herta/gui dist:personal"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.6"
+  },
+  "pnpm": {
+    "peerDependencyRules": {
+      "ignoreMissing": [
+        "electron-builder-squirrel-windows"
+      ]
+    },
+    "overrides": {
+      "@napi-rs/canvas": "-",
+      "js-yaml": "^4.3.2"
+    }
+  }
+}

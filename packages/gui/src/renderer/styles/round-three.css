@@ -1,0 +1,420 @@
+.herta-r3 .herta-history {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+.herta-r3 .herta-history > button:first-child {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  height: 48px;
+  max-height: 48px;
+  padding: 6px 12px;
+  line-height: 22px;
+}
+.herta-r3 .herta-task-actions {
+  position: relative;
+  flex-shrink: 0;
+  align-self: center;
+}
+.herta-r3 .herta-task-actions > summary {
+  list-style: none;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 6px 8px;
+  text-align: center;
+  border-radius: 6px;
+  color: var(--herta-secondary);
+  cursor: pointer;
+}
+.herta-r3 .herta-task-actions > summary:hover {
+  background: var(--herta-hover);
+}
+.herta-r3 .herta-project-name {
+  font-size: 14px;
+  color: var(--herta-text);
+  overflow-wrap: anywhere;
+}
+.herta-r3 .herta-project-details {
+  color: var(--herta-secondary);
+  font-size: 12px;
+}
+.herta-r3 .herta-session-details {
+  margin: 0 0 24px;
+  color: var(--herta-muted);
+  font-size: 12px;
+}
+.herta-r3 .herta-session-details > summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.herta-r3 .herta-transcript > article {
+  padding: 20px 0;
+}
+.herta-r3 .herta-transcript > article > strong {
+  font-size: 12px;
+  color: var(--herta-secondary);
+}
+.herta-r3 .herta-transcript > .herta-user {
+  padding: 16px 20px;
+  margin: 16px 0;
+}
+.herta-r3 .herta-task-title {
+  min-width: 0;
+  flex: 1;
+}
+.herta-r3 .herta-status {
+  flex-shrink: 0;
+}
+.herta-r3 .herta-latest {
+  align-self: center;
+  flex-shrink: 0;
+  margin: 4px 0;
+  border-color: var(--herta-border);
+  font-size: 12px;
+}
+.herta-r3 button[aria-current="page"] {
+  border-color: var(--herta-accent);
+  background: var(--herta-elevated);
+}
+.herta-r3 input:not([type="checkbox"]):not([type="radio"]) {
+  width: 100%;
+  padding: 8px;
+  background: var(--herta-panel);
+  color: var(--herta-text);
+  border: 1px solid var(--herta-control);
+  border-radius: 6px;
+  font: inherit;
+}
+.herta-r3 input:focus-visible {
+  outline: 2px solid var(--herta-focus);
+  outline-offset: 2px;
+}
+.herta-r3 :where(.herta-sidebar) details > button {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+}
+.herta-r3 .herta-transcript {
+  max-width: var(--herta-content-width);
+  margin: 0 auto;
+}
+.herta-r3 .herta-transcript article {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--herta-border);
+}
+.herta-r3 .herta-transcript .herta-user {
+  background: var(--herta-panel);
+  padding: 14px;
+  border-radius: 6px;
+}
+.herta-r3 pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: auto;
+  max-height: 480px;
+  font-family: "Maple Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+}
+.herta-r3 .herta-approval {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: calc(100% - 2 * var(--herta-content-gutter));
+  max-width: var(--herta-content-width);
+  max-height: min(40vh, 360px);
+  margin: 8px auto;
+  padding: 12px 16px;
+  border: 1px solid var(--herta-gold);
+  border-radius: 6px;
+  background: var(--herta-panel);
+}
+.herta-r3 .herta-content {
+  min-height: 0;
+  /* Reserve symmetric gutters so the transcript shares the composer's axis,
+     including on Windows where native scrollbars consume layout width. */
+  scrollbar-gutter: stable both-edges;
+  padding-inline: calc(var(--herta-content-gutter) - 8px);
+}
+.herta-r3 .herta-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.herta-r3 .herta-content::-webkit-scrollbar-thumb {
+  background: var(--herta-border);
+  border-radius: 8px;
+}
+.herta-r3 .herta-approval h2 {
+  flex-shrink: 0;
+  margin: 0 0 8px;
+  font-size: 15px;
+  line-height: 22px;
+}
+.herta-r3 .herta-approval-body {
+  min-height: 0;
+  max-height: 30vh;
+  overflow: auto;
+  flex: 1 1 auto;
+  overscroll-behavior: contain;
+}
+.herta-r3 .herta-approval .herta-actions {
+  flex-shrink: 0;
+  margin: 8px 0 0;
+}
+.herta-r3 .herta-toolbar > span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.herta-r3 form > button {
+  margin: 6px 4px 0 0;
+}
+.herta-r3 .herta-task-actions > button {
+  position: absolute;
+  right: 0;
+  top: 36px;
+  width: 120px;
+  z-index: 3;
+  background: var(--herta-elevated);
+}
+.herta-recovery-facts {
+  border-left: 2px solid var(--herta-gold);
+  padding: 8px 14px;
+  overflow-wrap: anywhere;
+  background: var(--herta-panel);
+}
+.herta-recovery-facts h3 {
+  margin-top: 0;
+}
+.herta-recovery-facts li {
+  margin: 10px 0;
+}
+
+/* One content column for transcript, intervention cards, and input. */
+.herta-r3 .herta-error-card {
+  flex: 0 0 auto;
+  width: calc(100% - 2 * var(--herta-content-gutter));
+  max-width: var(--herta-content-width);
+  margin: 8px auto;
+  padding: 12px 16px;
+  border: 1px solid var(--herta-error);
+  border-radius: 8px;
+  background: var(--herta-panel);
+  color: var(--herta-text);
+  overflow-wrap: anywhere;
+}
+.herta-r3 .herta-error-card p {
+  margin: 0 0 8px;
+}
+.herta-r3 .herta-error-card details {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--herta-secondary);
+}
+.herta-r3 .herta-composer-box {
+  display: block;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--herta-control);
+  border-radius: 12px;
+  background: var(--herta-panel);
+}
+.herta-r3 .herta-composer-box:focus-within {
+  border-color: var(--herta-accent);
+}
+.herta-r3 .herta-composer-box textarea {
+  display: block;
+  min-height: 66px;
+  max-height: 180px;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+}
+.herta-r3 .herta-composer-box textarea:focus-visible {
+  outline-offset: -2px;
+}
+.herta-r3 .herta-composer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 4px;
+}
+.herta-r3 .herta-composer-controls label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  min-width: 0;
+}
+.herta-r3 .herta-composer-controls button {
+  min-height: 32px;
+  padding: 4px 10px;
+}
+.herta-r3 select {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--herta-border);
+  border-radius: 6px;
+  background: var(--herta-panel);
+  color: var(--herta-text);
+  color-scheme: dark;
+  font: inherit;
+}
+.herta-r3 select option {
+  background: var(--herta-panel);
+  color: var(--herta-text);
+}
+.herta-r3 select:focus-visible {
+  outline: 2px solid var(--herta-focus);
+  outline-offset: 2px;
+}
+.herta-r3 .herta-permission-select {
+  max-width: 220px;
+  font-size: 12px;
+}
+.herta-r3 .herta-model-status {
+  min-width: 0;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-color: transparent;
+  background: transparent;
+  font-size: 12px;
+}
+.herta-r3 input[type="checkbox"],
+.herta-r3 input[type="radio"] {
+  width: 17px;
+  height: 17px;
+  min-height: 17px;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 17px;
+  accent-color: var(--herta-accent);
+}
+.herta-r3 .herta-review-panel {
+  flex: 0 0 auto;
+  min-width: 0;
+  width: calc(100% - 2 * var(--herta-content-gutter));
+  max-width: var(--herta-content-width);
+  max-height: 45vh;
+  overflow: auto;
+  margin: 8px auto;
+  padding: 12px 16px;
+  border: 1px solid var(--herta-border);
+  border-radius: 8px;
+  background: var(--herta-panel);
+}
+.herta-r3 .herta-review-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.herta-r3 .herta-review-panel h2 {
+  margin: 0;
+  font-size: 14px;
+}
+.herta-r3 .herta-sidebar > button,
+.herta-r3 .herta-sidebar .herta-history > button:first-child {
+  min-height: 32px;
+  border-color: transparent;
+  background: transparent;
+  padding: 5px 8px;
+}
+.herta-r3 .herta-history > button:first-child {
+  height: 40px;
+  max-height: 40px;
+  line-height: 20px;
+}
+.herta-r3 .herta-toolbar {
+  min-height: 44px;
+}
+@media (max-width: 900px) {
+  .herta-r3 {
+    --herta-content-gutter: 16px;
+  }
+  .herta-r3 .herta-toolbar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .herta-r3 .herta-toolbar .herta-task-title {
+    flex-basis: 50%;
+  }
+  .herta-r3 .herta-composer-controls .herta-model-status {
+    max-width: 200px;
+  }
+}
+@media (max-width: 600px) {
+  .herta-r3 {
+    --herta-content-gutter: 12px;
+  }
+  .herta-r3 .herta-composer-controls {
+    align-items: stretch;
+  }
+  .herta-r3 .herta-composer-controls label {
+    flex: 1 1 100%;
+  }
+  .herta-r3 .herta-permission-select {
+    max-width: 100%;
+  }
+}
+@media (forced-colors: active) {
+  .herta-r3 .herta-error-card,
+  .herta-r3 .herta-composer-box,
+  .herta-r3 .herta-review-panel,
+  .herta-r3 select {
+    border-color: CanvasText;
+  }
+}
+
+/* Compact application chrome; the message column keeps its shared geometry. */
+.herta-r3 .herta-toolbar {
+  padding: 6px 20px;
+  border-bottom-color: transparent;
+}
+.herta-r3 .herta-toolbar > button {
+  border-color: transparent;
+  background: transparent;
+}
+.herta-r3 .herta-sidebar > button {
+  min-height: 36px;
+  text-align: left;
+  border-radius: 7px;
+}
+.herta-r3 .herta-sidebar > .herta-settings-button {
+  border-top: 1px solid var(--herta-border);
+  border-radius: 0;
+  padding-top: 10px;
+}
+.herta-r3 .herta-session-details {
+  margin-bottom: 16px;
+}
+.herta-r3 .herta-composer > label {
+  margin-bottom: 6px;
+  color: var(--herta-muted);
+}
+.herta-r3 .herta-composer-box {
+  border-color: var(--herta-border);
+  border-radius: 16px;
+  box-shadow: 0 3px 14px #0002;
+}
+.herta-r3 .herta-transcript article {
+  border-bottom: 0;
+}
+.herta-r3 .herta-transcript .herta-user {
+  width: fit-content;
+  max-width: 90%;
+  margin-left: auto;
+  border-radius: 14px;
+  padding: 10px 16px;
+}

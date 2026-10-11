@@ -1,0 +1,13 @@
+/**
+ * Demo-only overrides, loaded AFTER reference-ux.css (demo-main.tsx import
+ * order). Website-specific presentation choices — never renderer edits.
+ */
+
+/* No ASCII boot splash on the web (user decision 2026-07-06): visitors land
+   mid-scroll on an embedded card, where the full-frame boot ritual reads as
+   a glitch rather than a hello. The overlay's timing logic still runs —
+   it just never paints; the app proceeds straight to the shell. */
+.opening-ascii {
+  /* biome-ignore lint/complexity/noImportantStyles: must beat the renderer's own .opening-ascii rules without editing reference-ux.css */
+  display: none !important;
+}

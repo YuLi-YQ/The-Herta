@@ -1,0 +1,1922 @@
+import { createHertaChat } from "./herta-chat.js";
+import { createChatFileSaver } from "./chat-file-export.js";
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
+import {
+  type AppServerConfig,
+  type ContinueInterruptedResult,
+  createSessionHost,
+  defaultDirsFor,
+  type LogQuery,
+  recordTail,
+  type Session,
+  type SessionHost,
+  type SessionMetadata,
+  type SpeechSynthesizer,
+  type SteerTextResult,
+  type WorkspaceTrustState,
+} from "@herta/app-server";
+import { errorMessage } from "@herta/core";
+import {
+  canonicalWorkspaceRoot,
+  isGitReadTimeout,
+  isSafeRefName,
+  MAX_LOG_LIMIT,
+  MAX_LOG_QUERY_CHARS,
+  validateWorkspaceRoot,
+} from "@herta/tools";
+import {
+  app,
+  type BrowserWindow,
+  dialog,
+  ipcMain,
+  net,
+  type WebContents,
+} from "electron";
+import { CMD, EVT } from "../preload/channels.js";
+import type {
+  MiniMaxRefusalState,
+  SessionSnapshot,
+} from "../renderer/ipc/bridge-types.js";
+import { slimAgentEventForRenderer } from "../shared/agent-event-wire.js";
+import { createLiveToolFeed } from "../shared/live-tool-feed.js";
+import { PRODUCT_PROFILE } from "../shared/product-profile.js";
+import type { VoiceEngine } from "./app-global-settings.js";
+import {
+  type InteractionLang,
+  type Locale,
+  osLocale,
+  pdfPictureTranscriptsEnabled,
+  readGlobalSettings,
+  resolveInitialLocale,
+  resolveInteractionLang,
+  updateGlobalSettings,
+} from "./app-global-settings.js";
+import {
+  dreamEnabled,
+  isBackendContract,
+  isBackendThinking,
+  normalizeModelChoice,
+  readAppSettings,
+} from "./app-settings.js";
+import { createAttachProgressRelay } from "./attach-progress-relay.js";
+import {
+  type AttentionPrefs,
+  DEFAULT_ATTENTION_PREFS,
+  watchAttention,
+} from "./attention.js";
+import { createElectronAttentionHost } from "./attention-electron.js";
+import { installMode } from "./install-mode.js";
+import { readMiniMaxKeyPlain, readMiniMaxPlanKeyPlain } from "./key-store.js";
+import { safeProviderFailure } from "./provider-errors.js";
+import { migrateLegacyProvider } from "./provider-migration.js";
+import {
+  acquireTurnProviders,
+  getProviderReadiness,
+  ProviderConfigurationError,
+} from "./provider-settings.js";
+import {
+  readWorkspaceBytesBounded,
+  readWorkspaceFileBounded,
+  resolveInsideWorkspace,
+} from "./read-workspace-file.js";
+import { createSessionActivation } from "./session-activation.js";
+import { createExportSaver } from "./session-export.js";
+import { createSessionLifecycleGate } from "./session-lifecycle-gate.js";
+import {
+  attentionSettingsOf,
+  registerSettingsHandlers,
+  type SettingsHooks,
+} from "./settings-ipc.js";
+import { TRAY_SESSION_ROWS } from "./tray-menu.js";
+import { createTrustedSessionIpcGuard } from "./trusted-session-ipc.js";
+import { createFallbackFetch } from "./tts/fallback-fetch.js";
+import {
+  createMiniMaxSynthesizer,
+  type MiniMaxSynthesizer,
+} from "./tts/minimax-synthesizer.js";
+import {
+  createMiniMaxVoiceService,
+  type MiniMaxVoiceService,
+} from "./tts/minimax-voice.js";
+import { createSwitchingSynthesizer } from "./tts/switching-synthesizer.js";
+import {
+  createTtsSynthesizer,
+  resolveSherpaEntry,
+  type TtsSynthesizer,
+} from "./tts/synthesizer.js";
+import {
+  resolveTtsModelRoots,
+  resolveVoiceCloneReference,
+  TTS_BUNDLE_ID,
+  TTS_EFFECT,
+  voiceModelStoreRoot,
+} from "./tts/tts-path.js";
+import {
+  TTS_ARCHIVE_BYTES,
+  TTS_ARCHIVE_SHA256,
+  TTS_ARCHIVE_URL,
+  TTS_ARCHIVE_URL_ENV,
+  TTS_BUNDLE_BYTES,
+} from "./tts/tts-release.js";
+import {
+  createVoiceModelService,
+  type VoiceModelService,
+} from "./tts/voice-model.js";
+import { resolveVoiceRoot } from "./voice-path.js";
+import { createWorkbenchManagement } from "./workbench-management.js";
+import { listWorkspaceFiles } from "./workspace-files.js";
+
+type Send = (channel: string, payload: unknown) => void;
+
+/**
+ * The history tab's query as the IPC door accepts it (ADR 0059 §6):
+ * integer paging, a branch-shaped `ref` (the same rule the reader
+ * applies, so a refused shape never reaches a spawn), a bounded `query`.
+ * Null for anything else. Exported for tests.
+ */
+export function sanitizeLogQuery(raw: unknown): LogQuery | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const skip = r.skip;
+  const limit = r.limit;
+  if (
+    typeof skip !== "number" ||
+    !Number.isInteger(skip) ||
+    skip < 0 ||
+    typeof limit !== "number" ||
+    !Number.isInteger(limit) ||
+    limit <= 0 ||
+    limit > MAX_LOG_LIMIT
+  ) {
+    return null;
+  }
+  const out: { skip: number; limit: number; ref?: string; query?: string } = {
+    skip,
+    limit,
+  };
+  if (r.ref !== undefined) {
+    if (typeof r.ref !== "string" || !isSafeRefName(r.ref)) return null;
+    out.ref = r.ref;
+  }
+  if (r.query !== undefined) {
+    if (typeof r.query !== "string") return null;
+    const q = r.query.trim();
+    if (q.length > MAX_LOG_QUERY_CHARS) return null;
+    if (q.length > 0) out.query = q;
+  }
+  return out;
+}
+
+/** Walk up from `start` to the nearest ancestor containing a `.git`
+ *  marker (file or dir) — the canonical project-root indicator. Returns
+ *  undefined if the filesystem root is reached without finding one. */
+export function findProjectRoot(start: string): string | undefined {
+  let dir = start;
+  for (;;) {
+    if (existsSync(join(dir, ".git"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) return undefined; // reached the filesystem root
+    dir = parent;
+  }
+}
+
+/** Window commands that are the user doing something outside a turn (dream
+ *  review 2026-09-22, finding 12). Each resets the dream trigger's idle
+ *  clock, and a pass already running steps aside at its next episode: a
+ *  user rewinding, attaching, searching or reading a file in the viewer is
+ *  back, however long ago they last sent a message. Turns are counted by
+ *  the host itself; reads the window makes on its own (the list refresh,
+ *  a resync, the repo watcher, settings panes loading their values) are
+ *  not the user and stay out. */
+const USER_ACTION_CHANNELS: ReadonlySet<string> = new Set([
+  CMD.answerUserInput,
+  CMD.interrupt,
+  CMD.steerText,
+  CMD.rewindLastTurn,
+  CMD.search,
+  CMD.recordSlice,
+  CMD.deleteSession,
+  CMD.renameSession,
+  CMD.saveSessionExport,
+  CMD.resolveApproval,
+  CMD.removeCommandRule,
+  CMD.setWorkspaceTrust,
+  CMD.pickWorkspace,
+  CMD.setWorkspace,
+  CMD.resetWorkspace,
+  CMD.pickAttachments,
+  CMD.attachFiles,
+  CMD.removeAttachment,
+  CMD.stageImages,
+  CMD.unstageImage,
+  CMD.readWorkspaceFile,
+  CMD.readWorkspaceBytes,
+  CMD.readWorkspaceCommit,
+  CMD.readWorkspaceDiff,
+  CMD.readWorkspaceLog,
+  CMD.readWorkspaceBranches,
+  CMD.openWorkspaceFile,
+]);
+
+export function countsAsUserActivity(channel: string): boolean {
+  // Every settings WRITE is a choice the user just made; the reads are the
+  // panes loading and are not.
+  return (
+    USER_ACTION_CHANNELS.has(channel) || channel.startsWith("settings:set")
+  );
+}
+
+/** The workspace the session serves. Resolution order:
+ *   1. HERTA_WORKSPACE_ROOT (explicit override),
+ *   2. `packagedUserDataDir` when provided — an INSTALLED app anchors its
+ *      workspace at the per-user data dir (its cwd is the install dir,
+ *      typically unwritable Program Files; transcripts/memory/dream all
+ *      live under `<workspaceRoot>/.herta`, so cwd would break first run),
+ *   3. the auto-detected project root (nearest ancestor with .git),
+ *   4. the process cwd.
+ *  Auto-detection means `pnpm dev:gui` (cwd = packages/gui) resolves to
+ *  the repo root with no env vars, so the API key + canon files load
+ *  automatically. A proper picker is deferred. */
+export function resolveWorkspaceRoot(packagedUserDataDir?: string): string {
+  const override = process.env.HERTA_WORKSPACE_ROOT;
+  // Canonical in every branch (audit S8) — this path bypasses
+  // validateWorkspaceRoot entirely, and a root reached through a symlink or a
+  // junction makes resolveSafePath reject every file inside it. On macOS that
+  // is any project under /tmp or /var, and cwd is not always a path the user
+  // chose.
+  if (override !== undefined && override.length > 0) {
+    return canonicalWorkspaceRoot(override);
+  }
+  if (packagedUserDataDir !== undefined) {
+    return canonicalWorkspaceRoot(packagedUserDataDir);
+  }
+  return canonicalWorkspaceRoot(
+    findProjectRoot(process.cwd()) ?? process.cwd(),
+  );
+}
+
+/** `resolveWorkspaceRoot` with THIS process's install mode applied — the
+ *  thin electron-aware wrapper (the pure fn stays unit-testable). */
+export function appWorkspaceRoot(): string {
+  // Explicit verification profiles own all transcripts/migration/settings;
+  // ignore workspace environment overrides even in a development executable.
+  if (process.argv.includes("--herta-verification")) {
+    return canonicalWorkspaceRoot(app.getPath("userData"));
+  }
+  return resolveWorkspaceRoot(
+    installMode().installed ? app.getPath("userData") : undefined,
+  );
+}
+
+type NavigationConfirmation = { readonly interruptActiveSessionId: string };
+
+/** One live session: switching mid-output requires confirmation tied to its ID. */
+export async function prepareSessionNavigation(
+  active: () => {
+    readonly sessionId: string;
+    readonly overlay: unknown;
+    readonly turnInFlight?: boolean;
+    interrupt(): Promise<unknown>;
+  } | null,
+  confirmation?: NavigationConfirmation,
+): Promise<boolean> {
+  const current = active();
+  if (
+    confirmation !== undefined &&
+    (current === null ||
+      typeof confirmation !== "object" ||
+      confirmation === null ||
+      confirmation.interruptActiveSessionId !== current.sessionId)
+  )
+    return false;
+  if (current === null) return true;
+  if (current.overlay !== null && current.overlay !== undefined) return false;
+  if (!current.turnInFlight) return true;
+  if (confirmation === undefined) return false;
+  await current.interrupt();
+  // Session.interrupt signals cancellation; it need not await the provider/tool
+  // unwind. Do not create another session while that turn still owns its lease.
+  const deadline = Date.now() + 5000;
+  while (current.turnInFlight && active()?.sessionId === current.sessionId) {
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return active()?.sessionId === current.sessionId && !current.turnInFlight;
+}
+
+/** How many sessions the sidebar listing returns (audit BL11). Newest-first,
+ *  so this is a recency window, not a truncation the user notices — search
+ *  still reaches every transcript on disk. */
+const SIDEBAR_LIST_LIMIT = 200;
+
+export async function buildConfig(
+  cwd: string,
+  home: string,
+  // Plaintext key from the secure store (`key-store.readDeepSeekKeyPlain`),
+  // read by the caller because the store needs Electron `app`/`safeStorage`
+  // (kept out of this pure, unit-tested fn). Null when none is stored.
+  secureKey: string | null = null,
+  // Packaged-aware voice root override (resolveVoiceRoot), injected by the
+  // caller for the same purity reason as the key: the install mode needs
+  // Electron (install-mode.ts). Absent → defaultDirsFor's dev layout
+  // (<cwd>/data/voice) stands.
+  voiceAssetsDir?: string,
+  // Dev-only DeepSeek base-URL override (chaos/staging proxy). The CALLER
+  // gates this on an installed app before passing (same credential-safety
+  // reasoning as HERTA_UPDATE_URL, audit T1.3: a packaged build honoring an
+  // env-set base URL would send the API key to an arbitrary host).
+  devBaseUrl?: string,
+  // Herta's speech synthesizer (ADR 0042), injected for the same purity
+  // reason as the key and the voice root: it forks an Electron
+  // utilityProcess. Absent → sessions run the paced text reveal, exactly as
+  // before.
+  speechSynthesizer?: SpeechSynthesizer,
+): Promise<AppServerConfig> {
+  // The GUI reads the DeepSeek key from the encrypted secure store ONLY — no
+  // env var, no legacy `deepseek-api-key.txt`. So "No key set" is honest: when
+  // the store is empty there is no key, and the first submit defers to the
+  // no-key onboarding (`needsKey`). An empty key is tolerated at boot (the app
+  // plays the canned opening with no LLM). The CLI keeps its own env/file
+  // resolution; only the GUI is secure-store-only.
+  const deepseekApiKey = secureKey?.trim() ?? "";
+  const dirs = defaultDirsFor({ workspaceRoot: cwd, homedir: home });
+  // Dream: read the persisted enable flag (Settings → Dream). Restart-to-apply —
+  // this is the whole apply path; the trigger reads config.dream at bootstrap.
+  const settings = await readAppSettings(cwd);
+  const backendThinking = settings.backend?.thinking;
+  return {
+    workspaceRoot: cwd,
+    ...dirs,
+    ...(voiceAssetsDir !== undefined ? { voiceAssetsDir } : {}),
+    ...(speechSynthesizer !== undefined
+      ? { speech: { synthesizer: speechSynthesizer } }
+      : {}),
+    dream: { enabled: dreamEnabled(settings) },
+    providers: {
+      deepseekApiKey,
+      // Model names MUST match the working CLI (packages/cli/src/app/main.ts).
+      // The DeepSeek COMPLETION endpoint (used by the narrative actor) accepts
+      // ONLY `deepseek-flash` or `deepseek-v4-pro` (doc + live probe
+      // 2026-09-10) — an off-list name returns a 400 "supported API model
+      // names are…" and the turn fails silently (no record blocks). The
+      // backend (chat mode) takes the same two; `deepseek-flash` reads
+      // images (ADR 0048 §5b).
+      //
+      // Precedence (2026-08-17): env (a dev/lab override, mirrors the CLI's
+      // knobs) > Settings → DeepSeek → 模型 (the user's choice, persisted in
+      // settings.json, restart-to-apply) > the built-in default. A legacy
+      // name in the file (`deepseek-v4-flash`, `deepseek-v4-flash-vision-exp`)
+      // folds into `deepseek-flash`; an off-enum value falls to the default.
+      //
+      // Defaults: actor Pro (owner 2026-08-17 — the V4 flash was voice-flat
+      // and fabricated on first pass, per the actor lab; DeepSeek retires V4
+      // Pro on 2026-09-14, after which the name is served by V4.1 Flash, and
+      // the actor lab has not been rerun on V4.1). Backend `deepseek-flash`:
+      // the vision flash has been the default since 2026-08-28 (owner, ADR
+      // 0048 §5a) so 板砖 can re-look at a picture without the user opting
+      // in, and V4.1 Flash is that model under its current name.
+      actorModel:
+        process.env.HERTA_ACTOR_MODEL ??
+        normalizeModelChoice(settings.models?.actor) ??
+        "deepseek-v4-pro",
+      backendModel:
+        process.env.HERTA_BACKEND_MODEL ??
+        normalizeModelChoice(settings.models?.backend) ??
+        "deepseek-flash",
+      routerModel: "deepseek-flash",
+      ...(devBaseUrl !== undefined && devBaseUrl !== ""
+        ? { baseUrl: devBaseUrl }
+        : {}),
+    },
+    // Backend reasoning effort (Settings → Coprocessor, restart-to-apply like
+    // dream above — this read at bootstrap IS the apply path). Default "high".
+    // isBackendThinking guards a hand-edited settings.json: an off-enum value
+    // falls back to the default instead of reaching the API.
+    thinking: isBackendThinking(backendThinking) ? backendThinking : "high",
+    // 板砖's tool contract (ADR 0040): env (dev/lab knob) > Settings →
+    // 差分协处理器 → 工具契约 > MINIMAL (owner default flip 2026-08-17,
+    // after the permission lab + card fixes — ~½ prompt tokens, ~⅒
+    // cache-miss, same outcomes). Session.create verifies a bash exists
+    // before honoring `minimal` and falls back to standard otherwise.
+    backendContract:
+      process.env.HERTA_BACKEND_CONTRACT === "minimal" ||
+      process.env.HERTA_BACKEND_CONTRACT === "standard"
+        ? process.env.HERTA_BACKEND_CONTRACT
+        : isBackendContract(settings.backend?.contract)
+          ? settings.backend.contract
+          : "minimal",
+  };
+}
+
+/** The `session:reset` payload for a session. Exported for testing. */
+export function snapshot(s: Session): SessionSnapshot {
+  // Long-session windowing (2026-07-12): the reset snapshot carries only the
+  // trailing RECORD_TAIL_BLOCKS window — a 10MB session no longer crosses IPC
+  // in one message or mounts thousands of renderer rows. `recordStart` is the
+  // absolute index the window begins at; older blocks page in on demand via
+  // CMD.recordSlice below.
+  const tail = recordTail(s.record);
+  return {
+    sessionId: s.sessionId,
+    workspaceRoot: s.workspaceRoot,
+    record: tail.record,
+    recordStart: tail.start,
+    overlay: s.overlay,
+    title: s.title,
+    backendWorkspace: s.backendWorkspace,
+    backendWorkspaceIsDefault: s.backendWorkspaceIsDefault,
+    topics: s.topics,
+    lang: s.lang,
+    // Whatever the repository probe has answered by now (ADR 0058); the
+    // `session:repo` stream carries the rest.
+    repo: s.repo ?? null,
+    // A window that reloads mid-turn comes back busy, with the hold window
+    // and the staged strip as they are (UX review 2026-09-22, item 7): the
+    // snapshot used to carry no turn state, so a running turn showed no
+    // Stop and no bubble, and staged pictures vanished while main still
+    // counted them.
+    ...(s.turnInFlight
+      ? { turn: { backendActive: s.backendActive ?? false } }
+      : {}),
+    ...(s.stagedImageList !== undefined && s.stagedImageList.length > 0
+      ? { stagedImages: s.stagedImageList }
+      : {}),
+    // The 继续 offer (ADR 0071 §1.4): a reloaded window's strip comes back.
+    ...(s.resumable === true ? { resumable: true } : {}),
+  };
+}
+
+/** Validate a user-supplied backend-workspace root and apply it to the
+ *  matching active session (D4: validation is deterministic harness code,
+ *  never persona). Exported for testing. */
+export async function handleSetWorkspace(
+  host: {
+    activeSession: {
+      sessionId: string;
+      setWorkspace(
+        p: string,
+      ): Promise<{ ok: true } | { ok: false; reason: "turn_in_progress" }>;
+    } | null;
+  },
+  sessionId: string,
+  path: string,
+  home: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const check = validateWorkspaceRoot(path, { home });
+  if (!check.ok) return { ok: false, message: check.message };
+  const s = host.activeSession;
+  if (s === null || s.sessionId !== sessionId) {
+    return { ok: false, message: "no matching active session" };
+  }
+  const r = await s.setWorkspace(check.resolved);
+  // Idle-only refusal (audit finding 13): the session drops workspace
+  // changes mid-turn rather than corrupting the record cursor.
+  if (!r.ok) return { ok: false, message: "a turn is in progress" };
+  return { ok: true };
+}
+
+/** Pipes a session's 8 subscriptions to `send`. Returns a stop fn. Exported for testing. */
+export function startForwarders(session: Session, send: Send): () => void {
+  let live = true;
+  // Every started iterator, so stop() can CLOSE them. The old stop only
+  // flipped `live`, which a pump checks after its NEXT event — a
+  // switched-away session that never emits again left all 8 pumps (and
+  // their subscription buffers + this `send` closure) parked in `it.next()`
+  // forever, accumulating per session switch.
+  const iterators: AsyncIterator<unknown>[] = [];
+  async function pump<T>(
+    it: AsyncIterable<T>,
+    channel: string,
+    // What crosses for one event; `null` = nothing does.
+    wire?: (value: T) => T | null,
+  ): Promise<void> {
+    const iterator = it[Symbol.asyncIterator]();
+    iterators.push(iterator);
+    while (true) {
+      const r = await iterator.next();
+      if (r.done === true || !live) break;
+      const value = wire === undefined ? r.value : wire(r.value);
+      if (value !== null) send(channel, value);
+    }
+  }
+  void pump(session.subscribeRecord(), EVT.record);
+  void pump(session.subscribeOverlay(), EVT.overlay);
+  void pump(session.subscribeSpeech(), EVT.speech);
+  // The raw stream is a trace; the renderer wants its signals only — and,
+  // folded from it, the live views of the call in flight (ADR 0073): a
+  // bounded tail per call, ten times a second at most.
+  const liveFeed = createLiveToolFeed((snapshot) => send(EVT.live, snapshot), {
+    // Pointed at mid-run (a reload, a resync): the calls before now were
+    // never seen, so none is numbered until the next run.
+    midRun: session.backendActive === true,
+  });
+  void pump(session.subscribeAgentEvents(), EVT.agent, (e) => {
+    liveFeed.push(e);
+    return slimAgentEventForRenderer(e);
+  });
+  void pump(session.subscribeTurnLifecycle(), EVT.turn, (e) => {
+    if (e.kind !== "failed") return e;
+    const failure = safeProviderFailure({ ...e.error, name: e.error.code });
+    return {
+      ...e,
+      error: {
+        code: e.error.code === "AbortError" ? "AbortError" : "ProviderError",
+        message: failure.message,
+        providerCode: failure.code,
+        ...(failure.status ? { status: failure.status } : {}),
+      },
+    };
+  });
+  void pump(session.subscribeTitle(), EVT.title);
+  void pump(session.subscribeWorkspace(), EVT.workspace);
+  void pump(session.subscribeVoice(), EVT.voice);
+  // The repository card's stream (ADR 0058); optional on the interface.
+  if (session.subscribeRepo !== undefined) {
+    void pump(session.subscribeRepo(), EVT.repo);
+  }
+  // The 继续 offer (ADR 0071 §1.4); optional on the interface.
+  if (session.subscribeResume !== undefined) {
+    void pump(session.subscribeResume(), EVT.resume);
+  }
+  return () => {
+    live = false;
+    liveFeed.close();
+    for (const it of iterators) {
+      // Resolves the parked next() with {done:true}; best-effort (a generator
+      // mid-yield settles on its own).
+      void it.return?.().catch(() => undefined);
+    }
+  };
+}
+
+/** Pick the most-recently-active session from a `listSessions()` result.
+ *  `SessionHost.listSessions()` is already sorted newest-first (by transcript
+ *  mtime; see `@herta/core` `list-sessions`), so the head is the latest — but
+ *  we re-select by `lastActivityAt` defensively so this stays correct even if
+ *  an upstream caller re-orders the array. Callers must pass a non-empty list. */
+export function pickLatest(
+  sessions: readonly SessionMetadata[],
+): SessionMetadata {
+  return sessions.reduce((latest, s) =>
+    Date.parse(s.lastActivityAt) > Date.parse(latest.lastActivityAt)
+      ? s
+      : latest,
+  );
+}
+
+/** Session ids are host-minted UUIDs the renderer only echoes back, but they
+ *  feed path joins (`<transcriptDir>/<id>.jsonl`, managed workspace dirs) on
+ *  the other side of the IPC boundary — a compromised renderer must not turn
+ *  them into a traversal (audit 2026-07-13 T1.2). Charset allowlist rather
+ *  than a strict UUID shape so any legacy transcript stem keeps opening;
+ *  every separator/drive/dot shape is rejected. Exported for testing. */
+export function isSafeSessionId(id: unknown): id is string {
+  return typeof id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(id);
+}
+
+/** IPC-boundary validation for CMD.create (audit 2026-07-13 T1.2): the
+ *  renderer only ever sends `{}`, but `backendWorkspace` roots the silent
+ *  板砖 backend and `workspaceRoot` roots the session — an unchecked
+ *  override would bypass the D4 guard CMD.setWorkspace enforces via
+ *  validateWorkspaceRoot. Returns the validated (resolved) opts, or null
+ *  when a supplied override fails validation. Exported for testing. */
+export function sanitizeCreateOpts(
+  opts: unknown,
+  home: string,
+): { workspaceRoot?: string; backendWorkspace?: string } | null {
+  if (opts === undefined || opts === null) return {};
+  if (typeof opts !== "object") return null;
+  const { workspaceRoot, backendWorkspace } = opts as {
+    workspaceRoot?: unknown;
+    backendWorkspace?: unknown;
+  };
+  const out: { workspaceRoot?: string; backendWorkspace?: string } = {};
+  if (workspaceRoot !== undefined) {
+    if (typeof workspaceRoot !== "string") return null;
+    const r = validateWorkspaceRoot(workspaceRoot, { home });
+    if (!r.ok) return null;
+    out.workspaceRoot = r.resolved;
+  }
+  if (backendWorkspace !== undefined) {
+    if (typeof backendWorkspace !== "string") return null;
+    const r = validateWorkspaceRoot(backendWorkspace, { home });
+    if (!r.ok) return null;
+    out.backendWorkspace = r.resolved;
+  }
+  return out;
+}
+
+export interface SessionService {
+  start(): Promise<void>;
+  dispose(): Promise<void>;
+  /** Tray-facing: newest-first metadata (empty before bootstrap). */
+  listSessions(): readonly SessionMetadata[];
+  /** Tray-facing: activate an existing session. Rides the same
+   *  last-click-wins activation sequence as renderer sidebar clicks, so a
+   *  tray open racing a sidebar open cannot land the UI on the loser. */
+  openSessionFromMain(sessionId: string): Promise<void>;
+  /** Tray-facing: create + activate a fresh session ("New Chat"). */
+  createSessionFromMain(): Promise<void>;
+  /** The active session's effective backend workspace — where attachments
+   *  live (ADR 0048). Null before bootstrap. Read fresh per call: the user
+   *  can change the workspace mid-session. */
+  backendWorkspace(): string | null;
+}
+
+/** The main-side hooks the Settings rows fire (see settings-ipc.ts). */
+export type SessionServiceHooks = SettingsHooks;
+
+/** Wires the SessionHost + ipcMain handlers to a single window's webContents.
+ *  Single-window assumption for Slice 4. */
+export function createSessionService(
+  wc: WebContents,
+  win: BrowserWindow,
+  hooks: SessionServiceHooks = {},
+): SessionService {
+  let host: SessionHost | null = null;
+  const lifecycle = createSessionLifecycleGate();
+  const hertaChat = createHertaChat(
+    join(app.getPath("userData"), "herta-chat.json"),
+    {isWorkbenchBusy: () => Boolean(host?.activeSession?.turnInFlight)},
+  );
+  const management = createWorkbenchManagement({
+    profile: app.getPath("userData"),
+    sessions: () =>
+      (
+        host?.listSessions({
+          workspaceRoot: null,
+          limit: SIDEBAR_LIST_LIMIT,
+        }) ?? []
+      ).map((s) => {
+        const active = host?.activeSession;
+        const path = s.backendWorkspace ?? s.workspaceRoot;
+        const testRoot = join(app.getPath("userData"), "test-projects");
+        return {
+          ...s,
+          ...(active?.sessionId === s.sessionId
+            ? {
+                backendWorkspace: active.backendWorkspace,
+                backendWorkspaceIsDefault:
+                  active.backendWorkspaceIsDefault ||
+                  active.backendWorkspace.startsWith(`${testRoot}/`) ||
+                  active.backendWorkspace.startsWith(`${testRoot}\\`),
+              }
+            : {
+                backendWorkspaceIsDefault:
+                  s.backendWorkspaceIsDefault ||
+                  path.startsWith(testRoot + "/") ||
+                  path.startsWith(testRoot + "\\"),
+              }),
+        };
+      }),
+    active: () => host?.activeSession ?? null,
+    closeActive: async () => {
+      await host?.closeActiveSession();
+    },
+    cleared: () => activation.pointNowhere(),
+  });
+  /** The Dream flag the running host was built with (the Settings pane's
+   *  restart note compares against it); undefined before bootstrap. */
+  let dreamRunning: boolean | undefined;
+  let handlersRegistered = false;
+  // Herta's synthesized voice (ADR 0042). Built once at bootstrap and shared
+  // by every session; the enable flag is cached here so `available()` — read
+  // at every speech stream's start — never touches disk, and the Settings
+  // toggle applies to the very next reply.
+  let synthesizer: TtsSynthesizer | null = null;
+  let realtimeVoiceEnabled: boolean = PRODUCT_PROFILE.voice;
+  // The model as a download (ADR 0061): built beside the synthesizer, it
+  // owns the bundle directory under userData and tells the synthesizer to
+  // re-probe when a download lands or the bundle is removed.
+  let voiceModel: VoiceModelService | null = null;
+  // The cloud voice (ADR 0062): which engine speaks (cached from settings,
+  // read at every stream's start), the MiniMax synthesizer and the clone it
+  // uses. The key itself stays in the secure store and is read per call.
+  let voiceEngine: VoiceEngine = "local";
+  let minimaxSynth: MiniMaxSynthesizer | null = null;
+  let minimaxVoice: MiniMaxVoiceService | null = null;
+  // The cloud voice's network path (ADR 0062 §1.4, amended): Chromium's
+  // proxy-aware `net.fetch` first — the same stack the DeepSeek calls use —
+  // and Node's `fetch` only when Chromium could not connect at all. On the
+  // owner's second machine Chromium reached DeepSeek but failed the TLS
+  // handshake to both MiniMax hosts; a second stack is the only lever the
+  // app has there. Called after `whenReady` only (the handlers and the
+  // services are wired inside `start`).
+  const minimaxFetch = PRODUCT_PROFILE.voice
+    ? createFallbackFetch(
+        [(url, init) => net.fetch(url, init), (url, init) => fetch(url, init)],
+        (line) => console.log(line),
+      )
+    : async () => {
+        throw new Error("此个人构建未启用语音服务。");
+      };
+  /** Either MiniMax key is enough to try for a voice: the pay-as-you-go
+   *  one clones, the plan one can adopt (ADR 0062 §1.8). */
+  const anyMiniMaxKey = (): boolean =>
+    readMiniMaxKeyPlain() !== null || readMiniMaxPlanKeyPlain() !== null;
+  // The synthesizer's refusal, blamed on the key that spoke: the plan key
+  // when set (speech prefers it), else the API key. The synthesizer forgets
+  // a refusal when its key changes, so the key in use now is the one it was
+  // answered for.
+  const minimaxRefusal = (): MiniMaxRefusalState | null => {
+    const reason = minimaxSynth?.status().refusal ?? null;
+    if (reason === null) return null;
+    return {
+      reason,
+      key: readMiniMaxPlanKeyPlain() !== null ? "plan" : "api",
+    };
+  };
+  const send: Send = (ch, payload) => {
+    if (!wc.isDestroyed()) wc.send(ch, payload);
+  };
+
+  // When the user is away from the window (ADR 0072 §1): notifications and
+  // keep-awake for the active session. Both settings and the UI language are
+  // cached here (seeded at bootstrap, kept by the Settings hooks) because the
+  // watcher reads them at every event.
+  let attentionPrefs: AttentionPrefs = DEFAULT_ATTENTION_PREFS;
+  let uiLocale: Locale = "en";
+  const refreshUiLocale = async (): Promise<void> => {
+    const s = await readGlobalSettings(app.getPath("userData"));
+    uiLocale = resolveInitialLocale(s, osLocale(process.platform, app));
+  };
+  const attentionHost = createElectronAttentionHost({
+    win,
+    prefs: () => attentionPrefs,
+    locale: () => uiLocale,
+  });
+
+  // Interaction language (slice 4): resolved FRESH here per activation (like
+  // getTheme reads per call) — stored choice, else follow the UI locale.
+  // Threaded into the host so the session builds its static prefix, openings,
+  // driver, recap, and title in this language. On CREATE this is the session's
+  // birth language and the host persists it into the header. On OPEN the host
+  // prefers the persisted header language and uses this value only as the
+  // fallback for legacy sessions written before per-session persistence — so a
+  // global EN/CN toggle changes NEW sessions without retro-flipping old ones.
+  async function currentInteractionLang(): Promise<InteractionLang> {
+    const s = await readGlobalSettings(app.getPath("userData"));
+    return resolveInteractionLang(
+      s,
+      resolveInitialLocale(s, osLocale(process.platform, app)),
+    );
+  }
+
+  // Which session the window shows, and the open / create / delete calls
+  // that change it — last click wins, and after each settles the window
+  // follows the host (session-activation.ts).
+  const activation = createSessionActivation({
+    host: () => host,
+    send,
+    // The window's forwarders, and beside them the attention watcher — which
+    // therefore always concerns the session the window shows, and stops
+    // (releasing any keep-awake hold) when the window points elsewhere.
+    startForwarders: (session, sendTo) => {
+      const stopForwarders = startForwarders(session, sendTo);
+      const stopAttention = watchAttention(session, attentionHost);
+      return () => {
+        stopForwarders();
+        stopAttention();
+      };
+    },
+    snapshot,
+    lang: currentInteractionLang,
+  });
+  const { openAndPoint, createAndPoint } = activation;
+
+  // Channels THIS service registered — dispose() removes exactly these
+  // (audit T3.7): the old sweep removed every channel in the CMD map,
+  // tearing down the update / app-version / window-control handlers that
+  // index.ts owns whenever a session service was disposed.
+  const ownedChannels: string[] = [];
+  const trustedSessionIpc = createTrustedSessionIpcGuard(wc, {
+    appFileUrl: pathToFileURL(join(app.getAppPath(), "out/renderer/index.html"))
+      .href,
+    installed: installMode().installed,
+    devRendererUrl: process.env.ELECTRON_RENDERER_URL,
+  });
+  const handle: typeof ipcMain.handle = (channel, listener) => {
+    ipcMain.handle(channel, (event, ...args) => {
+      if (!trustedSessionIpc(event))
+        throw new Error("此窗口来源无权访问任务操作。");
+      if (countsAsUserActivity(channel)) host?.noteUserActivity?.();
+      return listener(event, ...args);
+    });
+    ownedChannels.push(channel);
+  };
+
+  // Register the ipcMain handlers SYNCHRONOUSLY at construction, BEFORE any
+  // async bootstrap. They read the mutable `host` closure, so they safely
+  // no-op (returning [] / undefined) until start() sets it, then work once
+  // the session exists. Registering inside the async start() (after
+  // `await createSession`) raced the renderer's first session:list /
+  // session:submitText invokes — and if bootstrap threw, the handlers were
+  // never registered at all ("No handler registered").
+  function registerHandlers(): void {
+    if (handlersRegistered) return;
+    handlersRegistered = true;
+    handle("herta-chat:snapshot", () => hertaChat.snapshot());
+    handle("herta-chat:send", (_event, input) => hertaChat.send(input));
+    handle("herta-chat:stop", () => hertaChat.stop());
+    handle("herta-chat:manage", (_event, action) => hertaChat.manage(action));
+    const saveChatFile = createChatFileSaver({directory: app.getPath("documents"), choose: defaultPath => dialog.showSaveDialog(win, {defaultPath})});
+    handle("herta-chat:save-file", (_event, name, content) => saveChatFile(name, content));
+    handle(CMD.getProjectNavigation, () => management.navigation());
+    handle(CMD.updateProjectNavigation, (_e, input) =>
+      lifecycle.run(() => management.update(input)),
+    );
+    handle(CMD.getWorkbenchPermission, () => management.permission());
+    handle(CMD.setWorkbenchPermission, (_e, input) =>
+      management.setPermission(input),
+    );
+    handle(
+      CMD.submitText,
+      async (_e, text: string, stagedImageIds?: readonly string[]) => {
+        if (lifecycle.busy())
+          return {
+            failure: {
+              code: "service-unavailable" as const,
+              stage: "configuration" as const,
+              action: "retry" as const,
+              message: "任务正在切换或关闭，请稍后重新发送。",
+            },
+          };
+        if (
+          typeof text !== "string" ||
+          text.length > 2_000_000 ||
+          (stagedImageIds !== undefined &&
+            (!Array.isArray(stagedImageIds) ||
+              stagedImageIds.length > 64 ||
+              stagedImageIds.some(
+                (id) =>
+                  typeof id !== "string" || id.length === 0 || id.length > 256,
+              )))
+        ) {
+          throw new Error("任务输入格式无效或过大。");
+        }
+        // Length only — chat content must not land in terminal/log capture
+        // (audit 2026-07-13 T1.5; mirrors the repo's memory discipline). The
+        // staged COUNT is safe for the same reason a file count is.
+        console.log(
+          `[herta] submitText invoked (${text.length} chars${
+            stagedImageIds !== undefined && stagedImageIds.length > 0
+              ? `, ${stagedImageIds.length} image(s)`
+              : ""
+          })`,
+        );
+        const active = host?.activeSession ?? null;
+        if (active === null) {
+          console.warn("[herta] submitText ignored — no active session yet");
+          return undefined;
+        }
+        try {
+          const readiness = getProviderReadiness(active.sessionId);
+          if (!readiness.ready && readiness.issue)
+            return {
+              failure: { ...readiness.issue, stage: "configuration" as const },
+            };
+          const before = active.record.length;
+          const result = await active.submitText(
+            text,
+            stagedImageIds !== undefined && stagedImageIds.length > 0
+              ? { stagedImageIds }
+              : {},
+          );
+          if ("needsKey" in result) {
+            console.log("[herta] submitText deferred — no DeepSeek key set");
+          } else {
+            console.log(
+              `[herta] submitText turn done: ${result.turnId} (record ${before} → ${active.record.length} blocks)`,
+            );
+          }
+          return result;
+        } catch (err) {
+          // Surface turn failures in the MAIN-process terminal. Without this
+          // the rejection only reaches the renderer's voided invoke (DevTools
+          // console), so the user watching the terminal sees nothing.
+          const failure =
+            err instanceof ProviderConfigurationError && err.readiness.issue
+              ? { ...err.readiness.issue, stage: "configuration" as const }
+              : safeProviderFailure(err);
+          console.error(
+            "[herta] submitText turn failed:",
+            failure.code,
+            failure.status ?? "",
+          );
+          return { failure };
+        }
+      },
+    );
+    handle(CMD.interrupt, (_e, turnId?: string) => {
+      if (
+        turnId !== undefined &&
+        (typeof turnId !== "string" ||
+          turnId.length === 0 ||
+          turnId.length > 256)
+      )
+        return { ok: false };
+      return host?.activeSession?.interrupt({ turnId });
+    });
+    handle(CMD.getPendingUserInput, (_e, sessionId: unknown) => {
+      const active = host?.activeSession;
+      if (typeof sessionId !== "string" || active?.sessionId !== sessionId)
+        return null;
+      return active?.getPendingUserInput?.() ?? null;
+    });
+    const validRoundId = (value: unknown): value is string =>
+      typeof value === "string" &&
+      value.length > 0 &&
+      value.length <= 256 &&
+      !/[\x00-\x1f]/.test(value);
+    handle(CMD.getRoundSummaries, (_e, sessionId: unknown) => {
+      const active = host?.activeSession;
+      if (!validRoundId(sessionId) || active?.sessionId !== sessionId)
+        return [];
+      return active.getRoundSummaries?.() ?? [];
+    });
+    handle(
+      CMD.readRoundFile,
+      (_e, sessionId: unknown, roundId: unknown, fileId: unknown) => {
+        const active = host?.activeSession;
+        if (
+          !validRoundId(sessionId) ||
+          active?.sessionId !== sessionId ||
+          !validRoundId(roundId) ||
+          !validRoundId(fileId)
+        )
+          return null;
+        return active.readRoundFile?.(roundId, fileId) ?? null;
+      },
+    );
+    handle(CMD.getTaskMetrics, (_e, sessionId: unknown) => {
+      const active = host?.activeSession;
+      if (!validRoundId(sessionId) || active?.sessionId !== sessionId)
+        return null;
+      return active.getTaskMetrics?.() ?? null;
+    });
+    handle(CMD.answerUserInput, async (_e, answer: unknown) => {
+      const active = host?.activeSession;
+      if (
+        lifecycle.busy() ||
+        !active ||
+        !answer ||
+        typeof answer !== "object" ||
+        !("sessionId" in answer) ||
+        answer.sessionId !== active.sessionId
+      ) {
+        return { accepted: false };
+      }
+      return (await active.answerUserInput?.(answer)) ?? { accepted: false };
+    });
+    // A message while 板砖 works (ADR 0063). Without a session, or on a
+    // session that cannot steer, the honest answer is `queued`: the renderer
+    // keeps the text and sends it as the next turn.
+    handle(
+      CMD.steerText,
+      async (_e, text: string): Promise<SteerTextResult> =>
+        lifecycle.busy()
+          ? { queued: true }
+          : ((await host?.activeSession?.steerText?.(text)) ?? {
+              queued: true,
+            }),
+    );
+    // 继续 (ADR 0071 §1.4). No session, or one that cannot continue: there
+    // is nothing to continue, and the renderer drops its strip.
+    handle(
+      CMD.continueInterrupted,
+      async (): Promise<ContinueInterruptedResult> =>
+        lifecycle.busy()
+          ? { unavailable: true }
+          : ((await host?.activeSession?.continueInterrupted?.()) ?? {
+              unavailable: true,
+            }),
+    );
+    handle(CMD.rewindLastTurn, async (_e, sessionId?: string) => {
+      const active = host?.activeSession ?? null;
+      // Destructive call, session-bound (same pattern as setWorkspace): the
+      // renderer plays a 220ms withdraw animation before invoking, so a
+      // session switch can land in the gap — an unbound rewind then truncated
+      // the NEWLY-active session's latest turn. Reject the mismatch; the
+      // renderer un-fades its rows on the failure.
+      if (sessionId === undefined || active?.sessionId !== sessionId) {
+        return { ok: false as const, reason: "no_user_turn" as const };
+      }
+      // rewindLastTurn is optional on the Session interface (only the GUI
+      // SessionImpl implements it); a missing impl reports nothing to rewind.
+      return (
+        (await active?.rewindLastTurn?.()) ?? {
+          ok: false as const,
+          reason: "no_user_turn" as const,
+        }
+      );
+    });
+    handle(CMD.maybePlayEasterEgg, () => {
+      // Fire-and-forget GUI flourish: a successful 板砖-card lift may play the
+      // easter-egg clip. The session owns the 50% roll + per-session hourly
+      // throttle. Optional on the interface (GUI SessionImpl only).
+      host?.activeSession?.maybePlayEasterEgg?.();
+    });
+    // Bounded at the IPC boundary (audit BL11). Unbounded, every sidebar
+    // refresh ran a full synchronous listing — statSync, a 128KB read and a
+    // sidecar open PER session — on the Electron main thread, and then handed
+    // the renderer one DOM row per session ever created, with no windowing.
+    // One number bounds both the main-thread scan and the row count; the
+    // dream trigger's own internal listSessions() calls are untouched, since
+    // they genuinely need every session.
+    handle(
+      CMD.list,
+      () =>
+        host?.listSessions({
+          limit: SIDEBAR_LIST_LIMIT,
+          workspaceRoot: null,
+        }) ?? [],
+    );
+    // Transcript content search (sidebar). Bounded + best-effort in the
+    // host; the renderer debounces keystrokes. Async since 2026-09-03: the
+    // scan reads off the event loop chunk by chunk (a 50 MB transcript set
+    // used to hold this thread ~0.5 s per keystroke), and a query that
+    // extends the previous one reads only its hits.
+    handle(CMD.search, (_e, query: string) =>
+      typeof query === "string" ? (host?.searchSessions(query) ?? []) : [],
+    );
+    // Long-session windowing: page OLDER record blocks into the renderer's
+    // window. `before` is the absolute index the renderer's window currently
+    // starts at; the slice returns up to `count` blocks ending there, with
+    // the absolute index it starts at. Session-bound like every stateful
+    // command; a mismatch (switch racing the invoke) returns an empty slice
+    // the store drops by its own staleness guard anyway.
+    handle(
+      CMD.recordSlice,
+      (_e, sessionId: string, before: number, count: number) => {
+        const active = host?.activeSession ?? null;
+        if (
+          active === null ||
+          active.sessionId !== sessionId ||
+          !Number.isInteger(before) ||
+          !Number.isInteger(count) ||
+          before <= 0 ||
+          count <= 0
+        ) {
+          return { start: 0, blocks: [] };
+        }
+        const record = active.record;
+        const end = Math.min(before, record.length);
+        const start = Math.max(0, end - Math.min(count, 500));
+        return { start, blocks: record.slice(start, end) };
+      },
+    );
+    handle(CMD.open, (_e, id: string, navigation?: NavigationConfirmation) =>
+      lifecycle.run(async () => {
+        // Id shape gate BEFORE the transcript-path join in the host (audit
+        // 2026-07-13 T1.2): a traversal id must never reach readSessionFile.
+        if (!isSafeSessionId(id)) return null;
+        const current = host?.activeSession ?? null;
+        if (current?.sessionId === id) return snapshot(current);
+        if (
+          !(await prepareSessionNavigation(
+            () => host?.activeSession ?? null,
+            navigation,
+          ))
+        )
+          return null;
+        const s = await openAndPoint(id);
+        if (s === null) return null;
+        if ("openError" in s) return s;
+        return snapshot(s);
+      }),
+    );
+    handle(CMD.create, (_e, opts, navigation?: NavigationConfirmation) =>
+      lifecycle.run(async () => {
+        const checked = sanitizeCreateOpts(opts, homedir());
+        if (checked === null) return null;
+        if (
+          !(await prepareSessionNavigation(
+            () => host?.activeSession ?? null,
+            navigation,
+          ))
+        )
+          return null;
+        // SessionHost's legacy managed sandbox uses the real OS home. Explicit
+        // verification sessions instead receive a managed project inside their profile.
+        const isolated =
+          process.argv.includes("--herta-verification") &&
+          checked.backendWorkspace === undefined
+            ? {
+                ...checked,
+                backendWorkspace: join(
+                  app.getPath("userData"),
+                  "test-projects",
+                  randomUUID(),
+                ),
+              }
+            : checked;
+        const s = await createAndPoint(isolated);
+        return s !== null ? snapshot(s) : null;
+      }),
+    );
+    handle(CMD.deleteSession, (_e, id: string) =>
+      lifecycle.run(async () => {
+        // Same id gate as CMD.open — deleteSession feeds rmSync path joins.
+        if (!isSafeSessionId(id)) return { ok: false, wasActive: false };
+        const active = host?.activeSession;
+        if (active?.sessionId === id && active.turnInFlight)
+          return { ok: false, wasActive: true };
+        await management.update({ kind: "recycle-task", sessionId: id });
+        return { ok: true, wasActive: active?.sessionId === id };
+      }),
+    );
+    // Rename and export (ADR 0072 §3), from the sidebar's session menu —
+    // any session, open or not. Same id gate: both join transcript paths.
+    handle(CMD.renameSession, async (_e, id: string, title: string) => {
+      if (!isSafeSessionId(id) || typeof title !== "string") {
+        return { ok: false };
+      }
+      return (await host?.renameSession?.(id, title)) ?? { ok: false };
+    });
+    handle(CMD.readSessionForExport, async (_e, id: string) => {
+      if (!isSafeSessionId(id)) return null;
+      return (await host?.readSessionForExport?.(id)) ?? null;
+    });
+    const saveExport = createExportSaver({
+      showSaveDialog: (opts) =>
+        dialog.showSaveDialog(win, {
+          defaultPath: opts.defaultPath,
+          filters: opts.filters.map((f) => ({
+            name: f.name,
+            extensions: [...f.extensions],
+          })),
+        }),
+      documentsDir: () => app.getPath("documents"),
+    });
+    handle(CMD.saveSessionExport, (_e, name: unknown, markdown: unknown) =>
+      saveExport(name, markdown),
+    );
+    handle(CMD.resolveApproval, (_e, opts) => {
+      if (
+        !opts ||
+        typeof opts !== "object" ||
+        Array.isArray(opts) ||
+        typeof opts.requestId !== "string" ||
+        opts.requestId.length === 0 ||
+        opts.requestId.length > 512 ||
+        !["allow", "deny"].includes(opts.decision) ||
+        (opts.persistence !== undefined &&
+          !["once", "session", "always", "trust"].includes(opts.persistence))
+      ) {
+        throw new Error("审批输入格式无效。");
+      }
+      return host?.activeSession?.resolveApproval(opts);
+    });
+    // Project command allow rules (ADR 0030) — scoped to the ACTIVE session's
+    // effective workspace. No session → empty list / no-op remove.
+    handle(
+      CMD.listCommandRules,
+      async () => (await host?.activeSession?.listCommandRules?.()) ?? [],
+    );
+    handle(CMD.removeCommandRule, async (_e, display: string) => {
+      if (typeof display !== "string" || display.length === 0) return false;
+      return (await host?.activeSession?.removeCommandRule?.(display)) ?? false;
+    });
+    // Workspace trust (ADR 0064) — the ACTIVE session's effective workspace.
+    // No session → a real project that asks (the honest default).
+    const noTrust: WorkspaceTrustState = {
+      effective: "ask",
+      explicit: null,
+      isDefaultWorkspace: false,
+    };
+    handle(
+      CMD.getWorkspaceTrust,
+      async () => (await host?.activeSession?.getWorkspaceTrust?.()) ?? noTrust,
+    );
+    handle(CMD.setWorkspaceTrust, async (_e, value: unknown) => {
+      const v = value === "workspace" || value === "ask" ? value : null;
+      return (await host?.activeSession?.setWorkspaceTrust?.(v)) ?? noTrust;
+    });
+    // Record heal after a record-channel overflow drop: the session re-emits
+    // its live record as a `reset` through the record stream (FIFO with block
+    // events → race-free even mid-turn). Fire-and-forget from the renderer.
+    handle(CMD.resyncRecord, () => {
+      host?.activeSession?.resyncRecord?.();
+    });
+    // The renderer's store asks for its state once it has subscribed
+    // (session-activation.ts `resync`).
+    handle(CMD.requestSync, () => {
+      activation.resync();
+    });
+    // The repository card asks for a fresh probe on window focus (ADR
+    // 0058); the answer arrives as a `session:repo` event.
+    handle(CMD.refreshRepo, async () => {
+      await host?.activeSession?.refreshRepo?.();
+    });
+    handle(CMD.pickWorkspace, async () => {
+      const r = await dialog.showOpenDialog(win, {
+        properties: ["openDirectory"],
+      });
+      const chosen = r.filePaths[0];
+      if (r.canceled || chosen === undefined) return null;
+      const selected = validateWorkspaceRoot(chosen, {
+        home: homedir(),
+      });
+      if (!selected.ok) throw new Error(selected.message);
+      return canonicalWorkspaceRoot(selected.resolved);
+    });
+    handle(CMD.setWorkspace, (_e, sessionId: string, path: string) =>
+      lifecycle.run(() =>
+        handleSetWorkspace(
+          { activeSession: host?.activeSession ?? null },
+          sessionId,
+          path,
+          homedir(),
+        ),
+      ),
+    );
+    handle(CMD.pickAttachments, async () => {
+      const r = await dialog.showOpenDialog(win, {
+        properties: ["openFile", "multiSelections"],
+      });
+      return r.canceled || r.filePaths.length === 0 ? null : r.filePaths;
+    });
+    handle(
+      CMD.attachFiles,
+      async (_e, sessionId: string, paths: readonly string[]) => {
+        const s = host?.activeSession ?? null;
+        if (s === null || s.sessionId !== sessionId) {
+          return { ok: false as const, message: "no matching active session" };
+        }
+        if (s.attachFiles === undefined) {
+          return { ok: false as const, message: "attachments unavailable" };
+        }
+        // The pending row's hairline (2026-10-01): each file's pages and
+        // transcripts as they go, throttled per file, the last always sent.
+        const relay = createAttachProgressRelay((p) =>
+          send(EVT.attachProgress, { sessionId, ...p }),
+        );
+        let r: Awaited<ReturnType<typeof s.attachFiles>>;
+        try {
+          r = await s.attachFiles(paths, relay.push);
+        } finally {
+          relay.flush();
+        }
+        if (r.ok) return { ok: true as const };
+        // Each refusal gets its own words: "a turn is in progress" is a
+        // retry-in-a-moment, "too many files" is a do-something-different.
+        return {
+          ok: false as const,
+          message:
+            r.reason === "turn_in_progress"
+              ? "a turn is in progress"
+              : r.reason === "too_many"
+                ? "too many files at once"
+                : "no files",
+        };
+      },
+    );
+    handle(
+      CMD.stageImages,
+      async (
+        _e,
+        sessionId: string,
+        inputs: readonly {
+          readonly path?: string;
+          readonly bytes?: Uint8Array;
+          readonly name?: string;
+        }[],
+      ) => {
+        const s = host?.activeSession ?? null;
+        if (s === null || s.sessionId !== sessionId) {
+          return { ok: false as const, message: "no matching active session" };
+        }
+        if (s.stageImages === undefined) {
+          return { ok: false as const, message: "attachments unavailable" };
+        }
+        const r = await s.stageImages(inputs);
+        if (r.ok)
+          return { ok: true as const, staged: r.staged, rejected: r.rejected };
+        return {
+          ok: false as const,
+          message:
+            r.reason === "turn_in_progress"
+              ? "a turn is in progress"
+              : r.reason === "too_many_images"
+                ? "five images per message"
+                : "no files",
+        };
+      },
+    );
+    handle(CMD.unstageImage, async (_e, sessionId: string, id: string) => {
+      const s = host?.activeSession ?? null;
+      if (s === null || s.sessionId !== sessionId) return false;
+      return (await s.unstageImage?.(id)) ?? false;
+    });
+    // The file-viewer panel (ADR 0050): a bounded read jailed to the
+    // session's EFFECTIVE backend workspace — the tree the record's file
+    // names actually live in. Session-bound like every other command.
+    handle(
+      CMD.readWorkspaceFile,
+      async (_e, sessionId: string, path: string) => {
+        const s = host?.activeSession ?? null;
+        if (s === null || s.sessionId !== sessionId) {
+          return { ok: false as const, reason: "no_session" as const };
+        }
+        return readWorkspaceFileBounded(s.backendWorkspace, path);
+      },
+    );
+    // The composer's @-mention list (ADR 0072 §2): the files of the same
+    // workspace, listed asynchronously and bounded (workspace-files.ts).
+    handle(CMD.listWorkspaceFiles, async (_e, sessionId: string) => {
+      const s = host?.activeSession ?? null;
+      if (s === null || s.sessionId !== sessionId) return null;
+      return listWorkspaceFiles(s.backendWorkspace);
+    });
+    // The rich kinds' read (ADR 0054 §2): the whole file as bytes for the
+    // renderers that parse it themselves — same jail, 64 MB ceiling.
+    handle(
+      CMD.readWorkspaceBytes,
+      async (_e, sessionId: string, path: string) => {
+        const s = host?.activeSession ?? null;
+        if (s === null || s.sessionId !== sessionId) {
+          return { ok: false as const, reason: "no_session" as const };
+        }
+        return readWorkspaceBytesBounded(s.backendWorkspace, path);
+      },
+    );
+    // The viewer's commit tab (ADR 0059): one commit of the session's
+    // repository, read by the session against its effective workspace.
+    // The id is checked here too — a hex commit id and nothing else ever
+    // reaches a git argv (the session's reader checks again).
+    handle(
+      CMD.readWorkspaceCommit,
+      async (_e, sessionId: string, ref: string) => {
+        const s = host?.activeSession ?? null;
+        if (s === null || s.sessionId !== sessionId) {
+          return { ok: false as const, reason: "no_session" as const };
+        }
+        if (typeof ref !== "string" || !/^[0-9a-f]{4,64}$/.test(ref)) {
+          return { ok: false as const, reason: "not_found" as const };
+        }
+        const commit = (await s.describeCommit?.(ref)) ?? null;
+        if (isGitReadTimeout(commit)) {
+          return { ok: false as const, reason: "timeout" as const };
+        }
+        return commit === null
+          ? { ok: false as const, reason: "not_found" as const }
+          : { ok: true as const, commit };
+      },
+    );
+    // The viewer's diff tab (ADR 0059 §5): one path's working-tree change
+    // against HEAD. The SAME jail as the file reads decides the path —
+    // the session's reader diffs an untracked file against /dev/null, so
+    // an outside-resolving name must never reach it. A tracked file
+    // deleted from the tree has no inode and still has a diff: `missing`
+    // passes its in-workspace spelling through.
+    handle(
+      CMD.readWorkspaceDiff,
+      async (_e, sessionId: string, path: string) => {
+        const s = host?.activeSession ?? null;
+        if (s === null || s.sessionId !== sessionId) {
+          return { ok: false as const, reason: "no_session" as const };
+        }
+        const r = await resolveInsideWorkspace(s.backendWorkspace, path);
+        if (r.kind === "outside") {
+          return { ok: false as const, reason: "outside_workspace" as const };
+        }
+        const relative = r.kind === "ok" ? r.relative : r.relative;
+        if (relative === undefined || relative.length === 0) {
+          return { ok: false as const, reason: "not_found" as const };
+        }
+        const diff = (await s.describeWorkingDiff?.(relative)) ?? null;
+        if (isGitReadTimeout(diff)) {
+          return { ok: false as const, reason: "timeout" as const };
+        }
+        return diff === null
+          ? { ok: false as const, reason: "not_found" as const }
+          : { ok: true as const, diff };
+      },
+    );
+    // The viewer's log tab (ADR 0059 §6): a page of a ref's history,
+    // optionally filtered. Every field is checked at the door — paging
+    // numbers are integers, the ref has a branch's shape (the reader
+    // checks again and hands git `--end-of-options`), the query is a
+    // bounded string — and the reader bounds the limit again.
+    handle(
+      CMD.readWorkspaceLog,
+      async (_e, sessionId: string, raw: unknown) => {
+        const s = host?.activeSession ?? null;
+        if (s === null || s.sessionId !== sessionId) {
+          return { ok: false as const, reason: "no_session" as const };
+        }
+        const opts = sanitizeLogQuery(raw);
+        if (opts === null) {
+          return { ok: false as const, reason: "not_found" as const };
+        }
+        const page = (await s.describeLog?.(opts)) ?? null;
+        if (isGitReadTimeout(page)) {
+          return { ok: false as const, reason: "timeout" as const };
+        }
+        return page === null
+          ? { ok: false as const, reason: "not_found" as const }
+          : { ok: true as const, page };
+      },
+    );
+    // The history tab's read-only branch picker (ADR 0059 §6).
+    handle(CMD.readWorkspaceBranches, async (_e, sessionId: string) => {
+      const s = host?.activeSession ?? null;
+      if (s === null || s.sessionId !== sessionId) {
+        return { ok: false as const, reason: "no_session" as const };
+      }
+      const branches = (await s.describeBranches?.()) ?? null;
+      if (isGitReadTimeout(branches)) {
+        return { ok: false as const, reason: "timeout" as const };
+      }
+      return branches === null
+        ? { ok: false as const, reason: "not_found" as const }
+        : { ok: true as const, branches };
+    });
+    // OS file associations can execute scripts, executables and shortcuts.
+    // R1 offers in-app preview only; an audited external editor is future work.
+    handle(CMD.openWorkspaceFile, async () => {
+      throw new Error("本轮仅支持应用内只读查看文件，请使用文件预览。");
+    });
+    handle(
+      CMD.removeAttachment,
+      async (_e, sessionId: string, path: string) => {
+        const s = host?.activeSession ?? null;
+        if (s === null || s.sessionId !== sessionId) {
+          return { ok: false as const, message: "no matching active session" };
+        }
+        if (s.removeAttachment === undefined) {
+          return { ok: false as const, message: "attachments unavailable" };
+        }
+        const r = await s.removeAttachment(path);
+        if (r.ok) return { ok: true as const };
+        return {
+          ok: false as const,
+          message:
+            r.reason === "turn_in_progress"
+              ? "a turn is in progress"
+              : r.reason === "in_use"
+                ? "file in use"
+                : "attachment not found",
+        };
+      },
+    );
+    handle(CMD.resetWorkspace, (_e, sessionId: string) =>
+      lifecycle.run(async () => {
+        const s = host?.activeSession ?? null;
+        if (s === null || s.sessionId !== sessionId) {
+          return { ok: false as const, message: "no matching active session" };
+        }
+        const r = await s.resetWorkspace();
+        if (!r.ok) {
+          return { ok: false as const, message: "a turn is in progress" };
+        }
+        return { ok: true as const };
+      }),
+    );
+    // Settings → every row (settings-ipc.ts). Registered HERE, inside the
+    // synchronous registration, for the same reason as every handler above;
+    // the voice rows read and write this service's own flags through the
+    // getters and setters below.
+    registerSettingsHandlers({
+      handle,
+      hooks: {
+        ...hooks,
+        onAttentionChanged: (prefs) => {
+          attentionPrefs = prefs;
+          hooks.onAttentionChanged?.(prefs);
+        },
+        onLocaleChanged: () => {
+          void refreshUiLocale();
+          hooks.onLocaleChanged?.();
+        },
+      },
+      host: () => host,
+      workspaceRoot: appWorkspaceRoot,
+      dreamRunning: () => dreamRunning,
+      voice: {
+        get synthesizer() {
+          return synthesizer;
+        },
+        get voiceModel() {
+          return voiceModel;
+        },
+        get minimaxVoice() {
+          return minimaxVoice;
+        },
+        get engine() {
+          return voiceEngine;
+        },
+        set engine(next) {
+          voiceEngine = next;
+        },
+        get realtimeEnabled() {
+          return realtimeVoiceEnabled;
+        },
+        set realtimeEnabled(next) {
+          realtimeVoiceEnabled = next;
+        },
+        minimaxFetch,
+        anyMiniMaxKey,
+        minimaxRefusal,
+        stopSpeech: () => {
+          synthesizer?.stopWorker();
+          minimaxSynth?.cancelAll();
+        },
+      },
+    });
+  }
+  registerHandlers();
+
+  async function start(): Promise<void> {
+    // Re-entrant: did-finish-load can fire again on renderer reload. If we're
+    // already bootstrapped, just re-sync the renderer with the active session
+    // (re-point forwarders + re-send reset).
+    if (host !== null) {
+      const active = host.activeSession;
+      // Re-sync the reloaded renderer: re-point at the open session if any, else
+      // restore the connect screen (the user reloaded while still disconnected).
+      if (active !== null) activation.pointAt(active);
+      else activation.pointNowhere();
+      return;
+    }
+    // Wrap the WHOLE bootstrap: a missing key (buildConfig) OR a failed
+    // createSessionHost/openSession must surface as the error panel via
+    // session:reset, not a silent unhandled rejection that leaves the
+    // renderer stuck on an empty workbench.
+    try {
+      const workspaceRoot = appWorkspaceRoot();
+      const userDataPath = app.getPath("userData");
+      // Local, idempotent migration only; no service request or source deletion.
+      await migrateLegacyProvider({ workspaceRoot });
+      const startupSettings = await readGlobalSettings(userDataPath);
+      attentionPrefs = attentionSettingsOf(startupSettings);
+      uiLocale = resolveInitialLocale(
+        startupSettings,
+        osLocale(process.platform, app),
+      );
+      let speech: SpeechSynthesizer | undefined;
+      if (PRODUCT_PROFILE.voice) {
+        // Herta's synthesized voice (ADR 0042). Constructed here — before the
+        // host, so every session it creates carries it — but the utility
+        // process starts LAZILY on the first sentence, so an install that
+        // never speaks never pays the model load. The enable flag is seeded
+        // from the persisted setting; the Settings handler keeps it current.
+        realtimeVoiceEnabled = startupSettings.realtimeVoice ?? true;
+        synthesizer = createTtsSynthesizer({
+          // The downloaded copy first, the dev workspace's second (ADR 0061);
+          // a packaged app has only the first.
+          modelRoots: resolveTtsModelRoots({
+            userDataPath,
+            isPackaged: installMode().installed,
+            workspaceRoot,
+          }),
+          // electron.vite.config.ts emits the worker beside the main bundle;
+          // it is a plain .cjs on purpose — a native addon cannot be bundled.
+          workerPath: join(__dirname, "tts-worker.cjs"),
+          sherpaPath: resolveSherpaEntry({
+            isPackaged: installMode().installed,
+            resourcesPath: installMode().resourcesPath,
+            startDir: __dirname,
+          }),
+          enabled: () => realtimeVoiceEnabled,
+          // Not on this thread at launch: the probe stats every file the
+          // bundle's manifest lists (~50 ms, ADR 0068 §14).
+          probeInBackground: true,
+        });
+        {
+          // The model download (ADR 0061). The archive's location is pinned
+          // with its hash; a dev run may point it at a local server for the
+          // lab — NEVER a packaged build (the T1.3 rule the update feed and
+          // the DeepSeek base URL already follow).
+          const override = installMode().installed
+            ? undefined
+            : process.env[TTS_ARCHIVE_URL_ENV];
+          const synth = synthesizer;
+          voiceModel = createVoiceModelService({
+            root: voiceModelStoreRoot(userDataPath),
+            bundleId: TTS_BUNDLE_ID,
+            archive: {
+              url:
+                override !== undefined && override !== ""
+                  ? override
+                  : TTS_ARCHIVE_URL,
+              sha256: TTS_ARCHIVE_SHA256,
+              bytes: TTS_ARCHIVE_BYTES,
+              unpackedBytes: TTS_BUNDLE_BYTES,
+            },
+            // Electron's client: proxy-aware, and the session's certificate
+            // policy applies. The signal aborts the transfer on cancel.
+            fetch: (url, init) => net.fetch(url, { signal: init.signal }),
+            onChange: (state) => send(EVT.voiceModel, state),
+            // The worker holds the bundle's files open; stop it before the
+            // files go (it forks afresh on the next request if a bundle is
+            // still there).
+            beforeRemove: () => synth.stopWorker(),
+            afterChange: () => {
+              synth.refreshBundle();
+            },
+          });
+        }
+        // The cloud voice (ADR 0062) beside the local one, both behind one
+        // switching synthesizer the app-server sees. The engine and the clone
+        // record come from settings; the key from the secure store, per call.
+        voiceEngine = startupSettings.voiceEngine ?? "local";
+        const referencePath = resolveVoiceCloneReference({
+          isPackaged: installMode().installed,
+          resourcesPath: installMode().resourcesPath,
+          workspaceRoot,
+        });
+        const fetchLike = minimaxFetch;
+        minimaxVoice = createMiniMaxVoiceService({
+          fetch: fetchLike,
+          key: readMiniMaxKeyPlain,
+          planKey: readMiniMaxPlanKeyPlain,
+          readReference: async () => {
+            try {
+              return new Uint8Array(await readFile(referencePath));
+            } catch {
+              return null;
+            }
+          },
+          initial: startupSettings.minimaxVoice ?? null,
+          save: async (record) => {
+            await updateGlobalSettings(userDataPath, (s) => ({
+              ...s,
+              minimaxVoice: record ?? undefined,
+            }));
+          },
+          onChange: (state) => send(EVT.voiceMinimax, state),
+        });
+        const voiceService = minimaxVoice;
+        // An install that chose the cloud and has a key but no clone yet (a
+        // reset, a settings file from before the clone existed): make it at
+        // start, unasked — the user never operates the clone.
+        if (
+          voiceEngine === "minimax" &&
+          anyMiniMaxKey() &&
+          voiceService.voice() === null
+        ) {
+          void voiceService.prepare();
+        }
+        minimaxSynth = createMiniMaxSynthesizer({
+          fetch: fetchLike,
+          // Speech goes through the plan when there is one (§1.8), else it is
+          // billed to the pay-as-you-go key.
+          key: () => readMiniMaxPlanKeyPlain() ?? readMiniMaxKeyPlain(),
+          voice: () => voiceService.voice(),
+          enabled: () => realtimeVoiceEnabled && voiceEngine === "minimax",
+          applyEffect: loadCommChannelEffect(),
+          onVoiceMissing: (id) => voiceService.markMissing(id),
+          onUsed: () => voiceService.stampUsed(),
+          onRefusal: () => send(EVT.voiceMinimaxSpeech, minimaxRefusal()),
+        });
+        speech = createSwitchingSynthesizer({
+          engine: () => voiceEngine,
+          local: synthesizer,
+          minimax: minimaxSynth,
+        });
+      }
+      const config = await buildConfig(
+        workspaceRoot,
+        process.argv.includes("--herta-verification")
+          ? join(userDataPath, "test-home")
+          : homedir(),
+        null,
+        // Packaged builds read the bundled clips; dev reads the workspace.
+        PRODUCT_PROFILE.voice
+          ? resolveVoiceRoot({
+              isPackaged: installMode().installed,
+              resourcesPath: installMode().resourcesPath,
+              workspaceRoot,
+            })
+          : undefined,
+        // Dev-only chaos/staging feed: NEVER honored in a packaged build
+        // (T1.3 pattern — an env-settable base URL in production would
+        // redirect the API key to an arbitrary host).
+        installMode().installed
+          ? undefined
+          : process.env.HERTA_DEEPSEEK_BASE_URL,
+        speech,
+      );
+      dreamRunning = config.dream?.enabled === true;
+      host = createSessionHost({
+        ...config,
+        // Personal desktop never enters the legacy completion/sidecar path.
+        dream: { enabled: false },
+        // Portable named tools do not require a bash installation or legacy training.
+        // The original CLI/minimal preference is retained in its own configuration.
+        backendContract: "standard",
+        neutralProviders: {
+          resolveTurn: async (sessionId, turnId) =>
+            acquireTurnProviders(sessionId, turnId),
+        },
+        getPermissionMode: (sessionId, backendWorkspace) =>
+          management.permissionFor(sessionId, backendWorkspace),
+        permissionProtectedPaths: [
+          ...(process.argv.includes("--herta-verification")
+            ? [
+                ".herta",
+                "provider-credentials",
+                "provider-settings.json",
+                "project-navigation.json",
+                "settings.json",
+                "deepseek-key.enc",
+                "deepseek-key.txt",
+                "Local Storage",
+                "Network",
+              ].map((name) => join(userDataPath, name))
+            : [userDataPath]),
+          join(
+            process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
+            "TheHerta-TestAccess",
+          ),
+        ],
+        // Per-install, beside the settings: each model call's token counts
+        // as the API states them, cache hits included — numbers only. The
+        // path needs Electron's `app`, so it is set here, not in the pure
+        // `buildConfig`.
+        usageLogPath: join(userDataPath, "usage.jsonl"),
+      });
+      // The PDF-picture switch (2026-10-01) before any session can attach;
+      // Settings mirrors later changes to the host live.
+      host.setPdfPictureTranscription(
+        pdfPictureTranscriptsEnabled(startupSettings),
+      );
+      // Launch lands on the connect screen (接入黑塔空间站) rather than
+      // auto-resuming the latest session: the user explicitly opens one from the
+      // sidebar or starts a new one from the connect button (user 2026-06-20).
+      // The host IS created so listSessions() still populates the sidebar — we
+      // just don't open a session yet, so the renderer shows the disconnected
+      // (no-session) state. `pickLatest` is retained (exported, tested) for a
+      // future "resume last" affordance.
+      console.log("[herta] launch: connect screen (no auto-resume)");
+      send(EVT.reset, { noSession: true });
+      // Commands a 板砖 run left running when the app last exited are ended
+      // now, each only if it is still that process (ADR 0071 §1.6). The index
+      // it reads is empty unless a run was cut off, so this costs a file read;
+      // the process query it may spawn runs off this thread.
+      void host.reapOrphanedProcesses();
+    } catch (err) {
+      console.error("[herta] session bootstrap failed:", err);
+      host = null;
+      send(EVT.reset, {
+        error: errorMessage(err),
+      });
+    }
+  }
+
+  async function dispose(): Promise<void> {
+    activation.release();
+    await hertaChat.dispose();
+    if (handlersRegistered) {
+      // Exactly the channels registered above — never the whole CMD map,
+      // which also names the update / app-version / window-control channels
+      // index.ts owns (audit T3.7: disposing a session service used to tear
+      // those down with it).
+      for (const c of ownedChannels) ipcMain.removeHandler(c);
+      ownedChannels.length = 0;
+      handlersRegistered = false;
+    }
+    await host?.closeActiveSession();
+    host?.dispose();
+    host = null;
+    // The voice worker is a CHILD PROCESS: left running it would outlive the
+    // window and hold ~200 MB of loaded model. Disposed after the sessions,
+    // so a turn still unwinding can finish its last synthesis request
+    // (which resolves null once the worker is gone — the reveal types it).
+    // A download in flight dies with the window (its partial file is
+    // discarded by the downloader itself); the service is rebuilt with the
+    // synthesizer on the next start.
+    voiceModel?.cancel();
+    voiceModel = null;
+    minimaxSynth?.dispose();
+    minimaxSynth = null;
+    minimaxVoice = null;
+    synthesizer?.dispose();
+    synthesizer = null;
+  }
+
+  /**
+   * The station-terminal treatment for the cloud voice, from the vendored
+   * `.cjs` emitted beside the main bundle (the worker requires the same file
+   * the same way). Absent — a dev tree before a build — the cloud voice
+   * plays dry rather than not at all.
+   */
+  function loadCommChannelEffect():
+    | ((samples: Float32Array, sampleRate: number) => Float32Array)
+    | undefined {
+    try {
+      const mod = createRequire(__filename)(
+        join(__dirname, "comm-channel-effect.cjs"),
+      ) as {
+        applyCommChannel: (
+          samples: Float32Array,
+          sampleRate: number,
+          options: { preset: string },
+        ) => Float32Array;
+      };
+      return (samples, sampleRate) =>
+        mod.applyCommChannel(samples, sampleRate, { preset: TTS_EFFECT });
+    } catch (err) {
+      console.warn(
+        `[herta-minimax] comm-channel effect unavailable, playing dry: ${String(err)}`,
+      );
+      return undefined;
+    }
+  }
+
+  return {
+    start,
+    dispose,
+    // Bounded like the sidebar's listing above (audit BL11): the tray shows
+    // at most TRAY_SESSION_ROWS sessions, and an unbounded listing ran a stat,
+    // a 128KB read and a sidecar open PER session ever created, on this
+    // thread, on every right-click (perf audit 2026-09-20). Twice the rows:
+    // the host orders by transcript mtime and the menu re-sorts by
+    // lastActivityAt, so a little slack keeps the two orders from disagreeing
+    // about who is fifteenth.
+    listSessions: () =>
+      host?.listSessions({ limit: TRAY_SESSION_ROWS * 2 }) ?? [],
+    // Tray-initiated navigation carries the SAME guards the renderer's
+    // sidebar/top bar enforce (audit 2026-07-10): pre-guard-less, a tray
+    // click on the already-open session tore down a running turn (re-open →
+    // close → interrupt → double-fired orphan regeneration), and a tray
+    // switch/new-chat over a pending approval silently auto-denied the gate
+    // via the close-path abort.
+    openSessionFromMain: (id: string): Promise<void> =>
+      lifecycle.run(async () => {
+        const block = mainNavigationBlock(host?.activeSession ?? null, id);
+        if (block === "turn-in-flight") {
+          // Refuse the switch (it would interrupt the running reply) but front
+          // the window AND arm the renderer's two-step confirm on the target
+          // session (user 2026-07-13: a silent refusal read as a dead tray) —
+          // the amber badge explains why nothing switched, and a follow-up
+          // click in the sidebar confirms for real.
+          win.show();
+          win.focus();
+          win.webContents.send(EVT.navBlocked, { target: id });
+          return;
+        }
+        if (block !== null) return;
+        await openAndPoint(id);
+      }),
+    createSessionFromMain: (): Promise<void> =>
+      lifecycle.run(async () => {
+        const block = mainNavigationBlock(host?.activeSession ?? null);
+        if (block === "turn-in-flight") {
+          win.show();
+          win.focus();
+          win.webContents.send(EVT.navBlocked, { target: null });
+          return;
+        }
+        if (block !== null) return;
+        await createAndPoint({});
+      }),
+    backendWorkspace: (): string | null =>
+      host?.activeSession?.backendWorkspace ?? null,
+  };
+}
+
+/**
+ * Guard for MAIN-initiated navigation (the tray menu): mirrors the renderer's
+ * guards — `SessionItem.open` refuses `isActive || gatePending` and arms a
+ * two-step confirm mid-turn, the top-bar new-chat disables on `gatePending`
+ * and arms mid-turn — which the tray path bypassed entirely (audit
+ * 2026-07-10; turn-in-flight added 2026-07-12). Returns the block reason, or
+ * null when navigation may proceed. Exported for testing.
+ */
+export function mainNavigationBlock(
+  active: {
+    sessionId: string;
+    overlay: unknown;
+    turnInFlight?: boolean;
+  } | null,
+  targetId?: string,
+): "gate-pending" | "already-active" | "turn-in-flight" | null {
+  if (active === null) return null;
+  // A pending approval gate suppresses ALL navigation: switching or creating
+  // closes the active session, whose abort resolves the un-answered request
+  // as a silent "deny".
+  if (active.overlay !== null && active.overlay !== undefined) {
+    return "gate-pending";
+  }
+  // Re-opening the active session is never useful and actively harmful
+  // mid-turn (teardown + re-point + orphan regeneration).
+  if (targetId !== undefined && targetId === active.sessionId) {
+    return "already-active";
+  }
+  // Navigating away mid-turn closes the active session, which INTERRUPTS
+  // Herta's reply (and any running 板砖 task). The sidebar/top-bar get a
+  // two-step confirm; a tray menu can't, so it refuses — the caller fronts
+  // the window instead, where the user sees the running turn and decides.
+  if (active.turnInFlight === true) {
+    return "turn-in-flight";
+  }
+  return null;
+}

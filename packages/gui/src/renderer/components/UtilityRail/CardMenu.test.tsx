@@ -1,0 +1,227 @@
+import {
+  fireEvent,
+  screen,
+  waitForElementToBeRemoved,
+} from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { renderWithLocale } from "../../i18n/test-util.js";
+import { CardMenu } from "./CardMenu.js";
+
+describe("CardMenu", () => {
+  it("renders the ⋯ button and hides the tooltip by default", () => {
+    renderWithLocale(<CardMenu cardKind="device" />);
+    expect(screen.getByLabelText("device card info")).toBeInTheDocument();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("toggles the tooltip on click", async () => {
+    renderWithLocale(<CardMenu cardKind="device" />);
+    const btn = screen.getByLabelText("device card info");
+    fireEvent.click(btn);
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    expect(screen.getByText(/differential coprocessor/)).toBeInTheDocument();
+    fireEvent.click(btn);
+    // The menu stays mounted briefly for its exit animation, then unmounts.
+    await waitForElementToBeRemoved(() => screen.queryByRole("tooltip"));
+  });
+
+  it("device card menu shows the current workspace + set/reset actions", () => {
+    const onSet = vi.fn();
+    const onReset = vi.fn();
+    renderWithLocale(
+      <CardMenu
+        cardKind="device"
+        activeWorkspace="/home/u/project"
+        isDefault={false}
+        onSetWorkspace={onSet}
+        onResetWorkspace={onReset}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("device card info"));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByText("/home/u/project")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Set workspace/ }));
+    expect(onSet).toHaveBeenCalledTimes(1);
+  });
+
+  it("reset is disabled when the workspace is the default", () => {
+    renderWithLocale(
+      <CardMenu
+        cardKind="device"
+        activeWorkspace="/d"
+        isDefault={true}
+        onSetWorkspace={vi.fn()}
+        onResetWorkspace={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("device card info"));
+    expect(
+      screen.getByRole("button", { name: /Reset to default/ }),
+    ).toBeDisabled();
+  });
+
+  it("device card WITHOUT workspace handlers still shows the static tooltip", () => {
+    renderWithLocale(<CardMenu cardKind="device" />);
+    fireEvent.click(screen.getByLabelText("device card info"));
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("device card menu shows a default hint when the workspace is the default", () => {
+    renderWithLocale(
+      <CardMenu
+        cardKind="device"
+        activeWorkspace="/managed/default"
+        isDefault={true}
+        onSetWorkspace={vi.fn()}
+        onResetWorkspace={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("device card info"));
+    expect(screen.getByText(/· default/)).toBeInTheDocument();
+  });
+
+  it("keeps the menu open after invoking Set workspace (so errors stay visible)", () => {
+    renderWithLocale(
+      <CardMenu
+        cardKind="device"
+        activeWorkspace="/p"
+        isDefault={false}
+        onSetWorkspace={vi.fn()}
+        onResetWorkspace={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("device card info"));
+    fireEvent.click(screen.getByRole("button", { name: /Set workspace/ }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
+
+  it("renders the validation error as an alert when errorText is set", () => {
+    renderWithLocale(
+      <CardMenu
+        cardKind="device"
+        activeWorkspace="/p"
+        isDefault={false}
+        onSetWorkspace={vi.fn()}
+        onResetWorkspace={vi.fn()}
+        errorText="nope"
+      />,
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("device card info"));
+    expect(screen.getByRole("alert")).toHaveTextContent("nope");
+  });
+
+  it("closes the menu on an outside mousedown", async () => {
+    renderWithLocale(
+      <CardMenu
+        cardKind="device"
+        activeWorkspace="/p"
+        isDefault={false}
+        onSetWorkspace={vi.fn()}
+        onResetWorkspace={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("device card info"));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.mouseDown(document.body);
+    await waitForElementToBeRemoved(() => screen.queryByRole("menu"));
+  });
+
+  it("closes the menu on Escape", async () => {
+    renderWithLocale(
+      <CardMenu
+        cardKind="device"
+        activeWorkspace="/p"
+        isDefault={false}
+        onSetWorkspace={vi.fn()}
+        onResetWorkspace={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("device card info"));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitForElementToBeRemoved(() => screen.queryByRole("menu"));
+  });
+
+  it("keeps the menu open on a mousedown inside it", () => {
+    renderWithLocale(
+      <CardMenu
+        cardKind="device"
+        activeWorkspace="/p"
+        isDefault={false}
+        onSetWorkspace={vi.fn()}
+        onResetWorkspace={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("device card info"));
+    fireEvent.mouseDown(screen.getByRole("menu"));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
+
+  // ── Project command rules (ADR 0030) ──────────────────────────────────────
+  // PRESENTATIONAL ONLY. Every case here renders CardMenu with NO
+  // HertaBridgeProvider on purpose: a first cut fetched rules from the bridge
+  // inside this component and broke all 11 tests above (CI 2026-08-04). The
+  // data belongs to DeviceCard; these props are the seam.
+  const rulesProps = {
+    cardKind: "device" as const,
+    activeWorkspace: "/p",
+    isDefault: false,
+    onSetWorkspace: vi.fn(),
+    onResetWorkspace: vi.fn(),
+  };
+
+  it("renders the rules section from props, with no bridge in scope", () => {
+    renderWithLocale(
+      <CardMenu {...rulesProps} rules={["node src/index.mjs:*"]} />,
+    );
+    fireEvent.click(screen.getByLabelText("device card info"));
+    expect(screen.getByText("Remembered commands")).toBeInTheDocument();
+    expect(screen.getByText("node src/index.mjs:*")).toBeInTheDocument();
+  });
+
+  it("shows the empty note for an empty rule list", () => {
+    renderWithLocale(<CardMenu {...rulesProps} rules={[]} />);
+    fireEvent.click(screen.getByLabelText("device card info"));
+    expect(screen.getByText("No commands remembered")).toBeInTheDocument();
+  });
+
+  it("omits the section entirely when rules are undefined (no rule surface)", () => {
+    renderWithLocale(<CardMenu {...rulesProps} />);
+    fireEvent.click(screen.getByLabelText("device card info"));
+    // The menu is a portal at the body (2026-09-17): assert document-wide.
+    expect(document.querySelector(".card-menu-rules")).toBeNull();
+    // The workspace half is unaffected by the rules gate.
+    expect(screen.getByRole("button", { name: /Set workspace/ })).toBeTruthy();
+  });
+
+  it("✕ delegates removal to the parent", () => {
+    const onRemoveRule = vi.fn();
+    renderWithLocale(
+      <CardMenu
+        {...rulesProps}
+        rules={["node a.js:*"]}
+        onRemoveRule={onRemoveRule}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText("device card info"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove rule node a.js:*" }),
+    );
+    expect(onRemoveRule).toHaveBeenCalledWith("node a.js:*");
+  });
+
+  it("fires onOpen on each OPEN edge only (the parent's refresh trigger)", () => {
+    const onOpen = vi.fn();
+    renderWithLocale(<CardMenu {...rulesProps} rules={[]} onOpen={onOpen} />);
+    const btn = screen.getByLabelText("device card info");
+    expect(onOpen).toHaveBeenCalledTimes(0); // closed at mount → no fetch
+    fireEvent.click(btn);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    fireEvent.click(btn); // close — not an open edge
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    fireEvent.click(btn); // reopen → refresh
+    expect(onOpen).toHaveBeenCalledTimes(2);
+  });
+});

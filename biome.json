@@ -1,0 +1,71 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.4.14/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/out",
+      "!packages/gui/release",
+      "!packages/gui/release-personal",
+      "!packages/gui/release-round-2",
+      "!packages/gui/release-round-3",
+      "!packages/gui/release-round-4",
+      "!packages/gui/release-round-5",
+      "!**/.runtime",
+      "!**/.baseline",
+      "!**/.verification",
+      "!docs/reports/evidence",
+      "!**/src/renderer/upstream-assets",
+      "!packages/gui/tts-runtime",
+      "!packages/gui/src/main/tts/comm-channel-effect.cjs",
+      "!**/node_modules",
+      "!**/reference_cc_codes",
+      "!**/reference_cc_hermes",
+      "!**/reference_UX_design",
+      "!**/src/renderer/reference",
+      "!**/src/renderer/assets/openings",
+      "!**/src/renderer/public",
+      "!**/src/renderer/styles/reference-ux.css",
+      "!**/.herta",
+      "!**/.claude",
+      "!**/coverage",
+      "!**/*.tsbuildinfo",
+      "!**/prompt-assets.generated.ts",
+      "!data",
+      "!trailer-materials"
+    ]
+  },
+  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2 },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "correctness": {
+        "useExhaustiveDependencies": {
+          "level": "error",
+          "options": {
+            "hooks": [
+              {
+                "name": "useConversationScroll",
+                "stableResult": true
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "overrides": [
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off"
+          }
+        }
+      }
+    }
+  ]
+}

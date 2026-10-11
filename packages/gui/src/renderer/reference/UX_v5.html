@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Codex Reference Voice UX</title>
+<style>
+:root{
+  --ink:#111417;
+  --muted:#6f7782;
+  --hairline:rgba(17,20,23,.08);
+  --hairline-strong:rgba(17,20,23,.12);
+  --shell:rgba(250,252,253,.88);
+  --panel:rgba(255,255,255,.72);
+  --panel-solid:#fbfcfd;
+  --soft-gray:rgba(232,235,238,.62);
+  --message:#f3f4f5;
+  --speech-card-bg:rgba(255,255,255,.78);
+  --speech-border:rgba(17,20,23,.08);
+  --speech-shadow:rgba(34,45,57,.10);
+  --speech-ring:rgba(17,20,23,.25);
+  --speech-wave-main:rgba(17,20,23,.48);
+  --speech-wave-soft:rgba(17,20,23,.28);
+  --speech-menu:rgba(17,20,23,.42);
+  --agent-ring-opacity:.98;
+  --agent-breathe-duration:2.8s;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  min-height:100vh;
+  display:grid;
+  place-items:center;
+  color:var(--ink);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  background:
+    radial-gradient(circle at 18% 35%,rgba(192,246,215,.95) 0 10%,transparent 28%),
+    radial-gradient(circle at 58% 2%,rgba(205,248,210,.9) 0 8%,transparent 26%),
+    radial-gradient(circle at 82% 18%,rgba(165,240,250,.95) 0 13%,transparent 33%),
+    radial-gradient(circle at 38% 18%,rgba(38,158,236,.78) 0 22%,transparent 48%),
+    linear-gradient(135deg,#25b7ee 0%,#8fece7 46%,#14a5e2 100%);
+  overflow:hidden;
+}
+body:before{
+  content:"";
+  position:fixed;
+  inset:-16%;
+  background:
+    radial-gradient(circle at 12% 78%,rgba(220,255,224,.75),transparent 22%),
+    radial-gradient(circle at 66% 88%,rgba(6,104,195,.42),transparent 27%),
+    radial-gradient(circle at 50% 40%,rgba(255,255,255,.2),transparent 38%);
+  filter:blur(34px);
+  opacity:.9;
+  pointer-events:none;
+}
+.app{
+  position:relative;
+  z-index:1;
+  width:min(1520px,calc(100vw - 120px));
+  height:min(880px,calc(100vh - 105px));
+  min-height:730px;
+  display:grid;
+  grid-template-columns:276px 1fr;
+  overflow:hidden;
+  border-radius:9px;
+  background:var(--shell);
+  border:1px solid rgba(255,255,255,.76);
+  box-shadow:0 34px 94px rgba(16,49,77,.22);
+  backdrop-filter:blur(25px) saturate(145%);
+}
+.sidebar{
+  padding:26px 18px;
+  background:linear-gradient(180deg,rgba(244,248,250,.82),rgba(246,250,252,.56));
+  border-right:1px solid rgba(20,30,40,.055);
+}
+.side-top,.side-brand,.input-icons,.nav-row,.project-row,.profile-row{display:flex;align-items:center}
+.side-top{justify-content:space-between;margin-bottom:58px}
+.side-tools{display:flex;gap:20px}
+.icon{width:22px;height:22px;color:#283139;opacity:.78}
+.side-brand{gap:12px;margin-bottom:24px;font-size:15px}
+.spark{width:19px;height:19px;border:1px solid rgba(0,0,0,.16);border-radius:999px;display:grid;place-items:center;font-size:11px;color:#323b44;background:rgba(255,255,255,.45)}
+.section{margin:24px 0 0}.section-title{margin:0 0 10px;font-size:12px;color:#717a84}.chat-item{height:34px;display:flex;align-items:center;padding:0 12px;border-radius:8px;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chat-item.active{background:rgba(35,44,55,.065)}
+.main-shell{padding:30px 32px 26px;background:linear-gradient(135deg,rgba(255,255,255,.72),rgba(246,251,253,.76));position:relative;overflow:hidden}
+.workspace{
+  height:100%;
+  display:grid;
+  grid-template-rows:58px 1fr;
+  border-radius:19px;
+  background:rgba(255,255,255,.58);
+  border:1px solid rgba(17,20,23,.075);
+  box-shadow:0 20px 60px rgba(32,45,58,.08),inset 0 1px 0 rgba(255,255,255,.82);
+  overflow:hidden;
+  backdrop-filter:blur(18px) saturate(140%);
+}
+.workspace-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 30px;
+  border-bottom:1px solid rgba(17,20,23,.075);
+  background:rgba(255,255,255,.58);
+}
+.workspace-title{display:flex;align-items:center;gap:10px;font-size:19px;font-weight:650;letter-spacing:-.02em}.chev{font-size:16px;color:#4d5660;transform:translateY(-1px)}
+.header-actions{display:flex;gap:13px;color:#2b3440;opacity:.7}.window-dot{width:8px;height:8px;border-radius:50%;background:currentColor;opacity:.22}
+.workspace-body{
+  min-height:0;
+  display:grid;
+  grid-template-columns:minmax(560px,1fr) 338px;
+  gap:24px;
+  padding:22px 24px 46px 28px;
+}
+.chat-column{position:relative;min-width:0;padding:0 6px 0 8px;display:grid;grid-template-rows:1fr auto;gap:18px}.conversation{position:relative;min-height:0;padding:4px 10px 0 0;overflow:visible}.avatar-glow{width:45px;height:45px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.58);border:1px solid rgba(17,20,23,.07);box-shadow:0 5px 18px rgba(32,45,58,.06);color:#111417;font-size:18px}.avatar-glow::before{content:"♡";transform:translateY(-1px)}
+.user-turn{display:flex;justify-content:flex-end;gap:14px;margin:0 0 26px}.user-bubble{max-width:430px;padding:15px 18px 13px;border-radius:18px;background:rgba(236,238,240,.76);box-shadow:inset 0 1px 0 rgba(255,255,255,.62);font-size:15px;line-height:1.42}.time{display:block;margin-top:7px;font-size:12px;color:#7a838e;text-align:right}.user-avatar{width:42px;height:42px;border-radius:999px;display:grid;place-items:center;background:rgba(255,255,255,.52);border:1px solid rgba(17,20,23,.06);color:#111417;align-self:center}.assistant-turn{display:grid;grid-template-columns:50px minmax(280px,440px);gap:18px;margin:22px 0 34px 34px}.assistant-card{padding:20px 24px 16px;border-radius:18px;border:1px solid rgba(17,20,23,.105);background:rgba(255,255,255,.64);box-shadow:0 12px 32px rgba(32,45,58,.045),inset 0 1px 0 rgba(255,255,255,.72);font-size:16px;line-height:1.62}.assistant-card p{margin:0 0 6px}.assistant-card .time{text-align:left;margin-top:10px}.second-user{margin-top:8px;margin-right:0}.second-assistant{margin-top:14px;margin-left:34px}
+.status-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:14px;width:78%;margin:6px auto 26px;color:#717984;font-size:15px;letter-spacing:.16em}.status-row:before,.status-row:after{content:"";height:1px;background:rgba(17,20,23,.11)}.status-core{display:flex;gap:12px;align-items:center;white-space:nowrap}.transfer-icon{width:24px;height:24px;object-fit:contain;opacity:.68;filter:grayscale(1) brightness(.82);letter-spacing:0}.transfer-text{letter-spacing:.16em}
+.composer{height:78px;margin-bottom:0;border-radius:18px;border:1px solid rgba(17,20,23,.08);background:rgba(255,255,255,.62);box-shadow:0 16px 38px rgba(32,45,58,.07),inset 0 1px 0 rgba(255,255,255,.78);padding:0 18px 0 22px;display:flex;align-items:center;justify-content:space-between}.placeholder{font-size:16px;color:#8b90a0}.send{width:42px;height:42px;border:0;border-radius:50%;display:grid;place-items:center;background:rgba(154,160,181,.55);color:white;font-size:22px;line-height:1;cursor:default}
+.utility-rail{display:flex;flex-direction:column;gap:20px;min-width:0}.speech-card,.device-card{position:relative;border-radius:18px;background:var(--speech-card-bg);border:1px solid var(--speech-border);box-shadow:0 18px 48px var(--speech-shadow),inset 0 1px 0 rgba(255,255,255,.82);backdrop-filter:blur(18px) saturate(140%);overflow:hidden}.speech-card{height:330px}.device-card{height:330px;display:grid;place-items:center}.speech-card:before,.device-card:before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.72),rgba(252,253,255,.44));pointer-events:none}.speech-menu{position:absolute;top:18px;right:20px;display:flex;gap:4px;color:var(--speech-menu);z-index:2}.speech-menu i{width:3px;height:3px;border-radius:50%;background:currentColor;opacity:.9}.speech-visual{position:absolute;inset:48px 26px 30px;display:grid;place-items:center}.ring{position:relative;width:220px;height:220px;border-radius:50%;display:grid;place-items:center}.ring:before{content:"";position:absolute;inset:0;border-radius:50%;border:2px dotted var(--speech-ring)}.waveform{position:relative;z-index:2;height:105px;display:flex;align-items:center;justify-content:center;gap:8px}.waveform span{display:block;width:3px;border-radius:999px;background:linear-gradient(180deg,var(--speech-wave-soft),var(--speech-wave-main));transform-origin:center;animation:wave 1.8s ease-in-out infinite}.waveform span:nth-child(1){height:18px;animation-delay:-.10s;opacity:.52}.waveform span:nth-child(2){height:32px;animation-delay:-.25s;opacity:.58}.waveform span:nth-child(3){height:23px;animation-delay:-.40s;opacity:.55}.waveform span:nth-child(4){height:55px;animation-delay:-.55s;opacity:.70}.waveform span:nth-child(5){height:28px;animation-delay:-.70s;opacity:.60}.waveform span:nth-child(6){height:38px;animation-delay:-.85s;opacity:.68}.waveform span:nth-child(7){height:24px;animation-delay:-1.00s;opacity:.56}.waveform span:nth-child(8){height:47px;animation-delay:-1.15s;opacity:.70}.waveform span:nth-child(9){height:73px;animation-delay:-1.30s;opacity:.84}.waveform span:nth-child(10){height:96px;animation-delay:-1.45s;opacity:.96}.waveform span:nth-child(11){height:66px;animation-delay:-1.60s;opacity:.86}.waveform span:nth-child(12){height:43px;animation-delay:-1.75s;opacity:.70}.waveform span:nth-child(13){height:30px;animation-delay:-1.90s;opacity:.60}.waveform span:nth-child(14){height:52px;animation-delay:-2.05s;opacity:.72}.waveform span:nth-child(15){height:35px;animation-delay:-2.20s;opacity:.64}.waveform span:nth-child(16){height:25px;animation-delay:-2.35s;opacity:.56}.waveform span:nth-child(17){height:18px;animation-delay:-2.50s;opacity:.50}@keyframes wave{0%,100%{transform:scaleY(.68);opacity:.62}42%{transform:scaleY(1.12);opacity:.96}68%{transform:scaleY(.84);opacity:.76}}
+.agent-preview{position:relative;width:216px;height:270px;z-index:2}.agent-layer{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;user-select:none;pointer-events:none}.agent-shadow{z-index:1;opacity:.85}.agent-device-img{z-index:2}.agent-spill{position:absolute;z-index:3;left:44.56%;top:33.17%;width:41.9%;height:37.1%;transform:translate(-50%,-45%);opacity:.68;pointer-events:none;mix-blend-mode:screen;filter:blur(5px);background:radial-gradient(ellipse 20% 20% at 50% 38%,rgba(230,255,255,.64) 0%,rgba(126,236,255,.48) 42%,rgba(85,156,255,.20) 70%,rgba(85,156,255,0) 100%),radial-gradient(ellipse 42% 42% at 50% 38%,rgba(98,156,255,.54) 0%,rgba(72,133,255,.38) 38%,rgba(80,140,255,.18) 66%,rgba(80,140,255,0) 86%),radial-gradient(ellipse 54% 62% at 50% 44%,rgba(125,190,255,.34) 0%,rgba(95,150,255,.22) 46%,rgba(95,150,255,.08) 72%,rgba(95,150,255,0) 90%);animation:spillBreathe var(--agent-breathe-duration) ease-in-out infinite}.agent-ring{position:absolute;z-index:4;left:44.56%;top:33.17%;width:8.91%;height:7.49%;transform:translate(-50%,-50%);opacity:var(--agent-ring-opacity);animation:ringBreathe var(--agent-breathe-duration) ease-in-out infinite}.agent-ring svg{width:100%;height:100%;display:block;overflow:visible}@keyframes ringBreathe{0%,100%{opacity:.93;transform:translate(-50%,-50%) scale(.997);filter:brightness(.98) saturate(1.03)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.012);filter:brightness(1.10) saturate(1.12)}}@keyframes spillBreathe{0%,100%{opacity:.50;transform:translate(-50%,-45%) scale(.992)}50%{opacity:.66;transform:translate(-50%,-45%) scale(1.012)}}.disclaimer{height:34px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#69717a;border-top:1px solid rgba(17,20,23,.045);background:rgba(250,252,253,.56)}
+@media(max-width:1200px){.app{width:calc(100vw - 36px);height:calc(100vh - 36px);grid-template-columns:230px 1fr}.workspace-body{grid-template-columns:1fr 300px;gap:18px;padding:18px}.assistant-turn{margin-left:0}.status-row{width:90%}.speech-card,.device-card{height:300px}.ring{width:195px;height:195px}.composer{height:104px}}
+@media(max-width:900px){.utility-rail{display:none}.workspace-body{grid-template-columns:1fr}.app{grid-template-columns:210px 1fr}.main-shell{padding:18px}.workspace-title{font-size:17px}}
+@media(prefers-reduced-motion:reduce){.waveform span{animation:none}}
+</style>
+</head>
+<body>
+<main class="app" aria-label="Codex-inspired console with right-side speech visual">
+  <aside class="sidebar">
+    <div class="side-top">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="M9 5v14"/></svg>
+      <div class="side-tools">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+      </div>
+    </div>
+    <div class="section"><p class="section-title">Today</p><div class="chat-item active">Friendly professional...</div><div class="chat-item">Brainstorming Bl...</div></div>
+    <div class="section"><p class="section-title">Yesterday</p><div class="chat-item">Cover letter crafting</div><div class="chat-item">Brainstorming blog pro...</div><div class="chat-item">Creative writing prom...</div></div>
+    <div class="section"><p class="section-title">Previous 7 Days</p><div class="chat-item">Building Your Personal</div><div class="chat-item">Ideating Marketing Ca...</div><div class="chat-item">Designing a Compellin...</div></div>
+  </aside>
+
+  <section class="main-shell">
+    <div class="workspace">
+      <header class="workspace-header">
+        <div class="workspace-title">Friendly professional... <span class="chev">⌄</span></div>
+      </header>
+
+      <div class="workspace-body">
+        <section class="chat-column">
+          <div class="conversation">
+            <div class="user-turn">
+              <div class="user-bubble">Can you analyze the latest discovery from the outer rim?<span class="time">10:24 AM</span></div>
+              <div class="user-avatar">♡</div>
+            </div>
+
+            <div class="assistant-turn">
+              <div class="avatar-glow"></div>
+              <div class="assistant-card">
+                <p>Certainly, Herta Prime.</p>
+                <p>The readings indicate unusual quantum fluctuations consistent with a localized spacetime anomaly.</p>
+                <span class="time">10:24 AM</span>
+              </div>
+            </div>
+
+            <div class="user-turn second-user">
+              <div class="user-bubble">What are the potential implications?<span class="time">10:25 AM</span></div>
+              <div class="user-avatar">♡</div>
+            </div>
+
+            <div class="status-row"><div class="status-core"><img class="transfer-icon" src="HertaSpaceStationIcon_transparent.png" alt="" /><span class="transfer-text">消息正在穿越银河</span><img class="transfer-icon" src="EarthIcon_transparent.png" alt="" /></div></div>
+          </div>
+
+          <div>
+            <div class="composer">
+              <div class="placeholder">Message Herta...</div>
+              <button class="send" aria-label="Send message">↑</button>
+            </div>
+          </div>
+        </section>
+
+        <aside class="utility-rail">
+          <section class="speech-card" aria-label="Animated speech visual">
+            <div class="speech-menu" aria-hidden="true"><i></i><i></i><i></i></div>
+            <div class="speech-visual">
+              <div class="ring">
+                <div class="waveform" aria-hidden="true">
+                  <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                  <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="device-card" aria-label="Agent ring preview card">
+            <div class="speech-menu" aria-hidden="true"><i></i><i></i><i></i></div>
+            <div class="agent-preview" aria-hidden="true">
+              <img class="agent-layer agent-shadow" src="agent_shadow_transparent.png" alt="" />
+              <img class="agent-layer agent-device-img" src="agent_device_transparent.png" alt="Agent device" />
+              <div class="agent-spill"></div>
+              <div class="agent-ring">
+                  <svg viewBox="0 0 100 105" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                      <radialGradient id="blueGlassFill" cx="50%" cy="46%" r="58%">
+                        <stop offset="0%" stop-color="#4E77FF" stop-opacity="0.62" />
+                        <stop offset="46%" stop-color="#4F82FF" stop-opacity="0.42" />
+                        <stop offset="72%" stop-color="#48BAFF" stop-opacity="0.16" />
+                        <stop offset="100%" stop-color="#48BAFF" stop-opacity="0" />
+                      </radialGradient>
+                      <radialGradient id="ringFaceTint" cx="50%" cy="50%" r="52%">
+                        <stop offset="0%" stop-color="#6D8FFF" stop-opacity="0.22" />
+                        <stop offset="66%" stop-color="#4F8DFF" stop-opacity="0.10" />
+                        <stop offset="100%" stop-color="#4F8DFF" stop-opacity="0" />
+                      </radialGradient>
+                      <filter id="softBlueDiskGlow" x="-100%" y="-100%" width="300%" height="300%" color-interpolation-filters="sRGB">
+                        <feGaussianBlur stdDeviation="5.2" result="blur" />
+                        <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.16 0 0 0 0 0.43 0 0 0 0 1 0 0 0 0.78 0" result="blueBlur" />
+                        <feMerge><feMergeNode in="blueBlur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                      </filter>
+                      <filter id="hotInnerRingGlow" x="-120%" y="-120%" width="340%" height="340%" color-interpolation-filters="sRGB">
+                        <feGaussianBlur stdDeviation="2.2" result="tight" />
+                        <feGaussianBlur stdDeviation="6.0" result="wide" />
+                        <feColorMatrix in="wide" type="matrix" values="0 0 0 0 0.20 0 0 0 0 0.74 0 0 0 0 1 0 0 0 0.82 0" result="cyanWide" />
+                        <feColorMatrix in="tight" type="matrix" values="0 0 0 0 0.72 0 0 0 0 1 0 0 0 0 1 0 0 0 0.96 0" result="whiteTight" />
+                        <feMerge><feMergeNode in="cyanWide" /><feMergeNode in="whiteTight" /><feMergeNode in="SourceGraphic" /></feMerge>
+                      </filter>
+                    </defs>
+                    <ellipse cx="50" cy="52.5" rx="43.8" ry="46.5" fill="url(#blueGlassFill)" filter="url(#softBlueDiskGlow)" opacity="0.94" />
+                    <ellipse cx="50" cy="52.5" rx="33.0" ry="35.0" fill="url(#ringFaceTint)" opacity="0.86" />
+                    <ellipse cx="50" cy="52.5" rx="45.2" ry="48.2" fill="none" stroke="#4D86FF" stroke-width="5.8" opacity="0.42" />
+                    <ellipse cx="50" cy="52.5" rx="43.2" ry="46.2" fill="none" stroke="#70D8FF" stroke-width="2.2" opacity="0.55" />
+                    <ellipse cx="50" cy="52.5" rx="31.5" ry="33.6" fill="none" stroke="#62E5FF" stroke-width="8.0" opacity="0.82" filter="url(#hotInnerRingGlow)" />
+                    <ellipse cx="50" cy="52.5" rx="31.5" ry="33.6" fill="none" stroke="#F4FFFF" stroke-width="4.4" opacity="0.98" />
+                    <ellipse cx="50" cy="52.5" rx="31.5" ry="33.6" fill="none" stroke="#B9FFFF" stroke-width="1.4" opacity="1" />
+                  </svg>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
+
+    </div>
+  </section>
+</main>
+</body>
+</html>

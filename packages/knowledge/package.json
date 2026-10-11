@@ -1,0 +1,33 @@
+{
+  "name": "@herta/knowledge",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./dist/index.js",
+    "./dream-prompt": "./dist/dream-prompt.js"
+  },
+  "bin": {
+    "herta-knowledge": "./dist/cli/herta-knowledge-bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@herta/core": "workspace:*",
+    "@herta/herta": "workspace:*",
+    "better-sqlite3": "^11.5.0",
+    "linkedom": "^0.18.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "vitest": "^3.2.6"
+  }
+}

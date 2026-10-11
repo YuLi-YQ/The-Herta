@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Herta — the self that uses the agent</title>
+    <meta
+      name="description"
+      content="一个把编码代理交给黑塔本人使用的桌面应用：共享终端记录、板砖差分协处理器、她自己的声音、入梦记忆。The demo on this page runs the app's actual renderer."
+    />
+    <!-- Shared links previewed blank and a fetch returned the single word
+         "Herta" (audit BL25). og:url and og:image must be absolute for
+         crawlers, and they point at the canonical domain regardless of which
+         Pages host serves this copy. -->
+    <!-- The station mark, not the app icon, which the page already shows. It
+         needs the solid tile: the source is hairline strokes on TRANSPARENCY,
+         i.e. dark-on-dark against a dark tab strip — measured invisible. The
+         tile carries its own ground, so the browser theme stops mattering. -->
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Herta" />
+    <meta property="og:title" content="Herta — the self that uses the agent" />
+    <meta
+      property="og:description"
+      content="A desktop coding agent that Herta uses herself: one shared terminal record, the 板砖 diff coprocessor, her own voice, and memory that settles through dreaming. The demo on the page runs the app's actual renderer."
+    />
+    <meta property="og:url" content="https://www.herta-ai.com/" />
+    <!-- JPEG, and 1200 wide rather than the poster's native 2880: this file was
+         a byte-identical copy of the UNCOMPRESSED demo-poster.png (613 KB), so
+         it missed the 2026-08-03 encode pass. It costs no page load — only
+         crawlers fetch og:image — but several platforms skip a preview image
+         over a few hundred KB, and an oversized card means NO card. Not WebP:
+         crawler support for it is inconsistent, and not palette PNG, which was
+         measured to render this image's blue @板砖 chip grey. -->
+    <meta property="og:image" content="https://www.herta-ai.com/og.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="750" />
+    <meta
+      property="og:image:alt"
+      content="The Herta desktop app mid-conversation, with the coprocessor panel open."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Herta — the self that uses the agent" />
+    <meta
+      name="twitter:description"
+      content="A desktop coding agent that Herta uses herself. The demo on the page runs the app's actual renderer."
+    />
+    <meta name="twitter:image" content="https://www.herta-ai.com/og.jpg" />
+  </head>
+  <body>
+    <!-- Pre-hydration theme stamp: dark-OS visitors must not get a light
+         flash while the bundle loads. Mirrors Site.tsx's detectTheme —
+         saved choice wins, else the OS preference. -->
+    <script>
+      (() => {
+        var saved = null;
+        try {
+          saved = localStorage.getItem("herta-site-theme");
+        } catch {
+          /* storage unavailable — follow the OS below */
+        }
+        var dark =
+          saved === "dark" ||
+          (saved !== "light" &&
+            matchMedia("(prefers-color-scheme: dark)").matches);
+        if (dark) document.documentElement.dataset.theme = "dark";
+      })();
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

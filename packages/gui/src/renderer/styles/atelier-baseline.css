@@ -1,0 +1,198 @@
+/* R1: small palette and asset substitutions; the upstream desktop layout stays. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #f0ecf5;
+  --ink-2: #e2d9ec;
+  --ink-3: #e8e0f0;
+  --ink-strong: #f0ecf5;
+  --muted: #beb3c9;
+  --muted-deep: #beb3c9;
+  --muted-2: #a396b0;
+  --muted-3: #a396b0;
+  --muted-4: #a396b0;
+  --muted-strong: #beb3c9;
+  --muted-slate: #beb3c9;
+  --shell: #121016;
+  --panel: #1e1925;
+  --panel-solid: #1e1925;
+  --app-bg: #121016;
+  --app-bg-bloom: none;
+  --sidebar-bg: #17131d;
+  --speech-card-bg: #1e1925;
+  --speech-border: #3e3449;
+  --speech-shadow: transparent;
+  --accent: #c0a0ee;
+  --accent-blue: #c0a0ee;
+  --accent-deep: #ddc7ff;
+  --banzhuan-led: #c0a0ee;
+  --ink-inverse: #21132f;
+  --surface-pop: #292132;
+  --composer-bg: #292132;
+  --bubble-user: #292132;
+  --bubble-herta: #1e1925;
+  --bubble-border: #3e3449;
+  --card-solid: #1e1925;
+  --nav-bg: #17131d;
+  --pill-bg: #292132;
+  --pill-bg-strong: #33293e;
+  --strip-bg: #17131d;
+  --soft-gray: #292132;
+  --track: #7b6b8a;
+  --input-border: #7b6b8a;
+  --input-border-focus: #ddc7ff;
+  --focus-ring: #ddc7ff;
+  --hairline: #3e3449;
+  --hairline-strong: #7b6b8a;
+  --wc-ink: #f0ecf5;
+  --mention-ink: #c0a0ee;
+}
+
+body {
+  font-family:
+    "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+}
+
+body::before,
+body::after {
+  content: none;
+}
+
+.atelier-topbar-brand {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  padding-right: 12px;
+}
+
+.atelier-connect-heading {
+  position: absolute;
+  bottom: calc(50% + 58px);
+  left: 24px;
+  right: 24px;
+  text-align: center;
+}
+
+.atelier-connect-heading img {
+  width: 68px;
+  height: 68px;
+}
+
+.atelier-connect-heading h1 {
+  margin: 12px 0 8px;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.atelier-connect-heading p,
+.atelier-connect-note {
+  font-size: 13px;
+  line-height: 22px;
+  color: var(--muted);
+}
+
+.atelier-connect-note {
+  position: absolute;
+  top: calc(50% + 42px);
+  width: min(440px, calc(100% - 48px));
+  margin: 0;
+  text-align: center;
+}
+
+.connect-station-label {
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  animation: none;
+}
+
+.atelier-device-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 20px 24px;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.atelier-device-card::before {
+  content: none;
+}
+
+.atelier-device-mark {
+  width: 100px;
+  height: 100px;
+  margin-bottom: 8px;
+}
+
+.atelier-device-title,
+.atelier-device-state,
+.atelier-device-path {
+  margin: 0;
+  text-align: center;
+}
+
+.atelier-device-title {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.atelier-device-state,
+.atelier-device-path {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.atelier-device-path {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.atelier-transfer-icon {
+  filter: none;
+}
+
+.atelier-baseline-details {
+  font-size: 14px;
+  line-height: 23px;
+  color: var(--muted);
+}
+
+.atelier-baseline-details p {
+  margin: 0 0 16px;
+}
+
+.atelier-legacy-note {
+  font-size: 12px;
+  line-height: 20px;
+  padding: 10px 12px;
+  border-left: 2px solid #cbb17a;
+  background: var(--wash-1);
+  color: var(--muted);
+  margin: 0 0 16px;
+}
+
+.file-viewer__preview-scope {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+  max-width: 150px;
+  text-align: right;
+}
+
+@media (max-width: 960px) {
+  .atelier-topbar-brand {
+    font-size: 11px;
+  }
+}
+
+@media (max-height: 600px) {
+  .atelier-connect-heading {
+    bottom: calc(50% + 42px);
+  }
+  .atelier-connect-heading img {
+    width: 42px;
+    height: 42px;
+  }
+}

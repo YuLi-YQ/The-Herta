@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Herta</title>
+    <style>
+      /* Cold-start splash. The body's cyan gradient ships in the CSS bundle and
+         paints the moment it loads — a beat BEFORE React mounts the opening
+         overlay (.opening-ascii, an opaque near-white layer at z-index 50). That
+         gap flashed cyan. This static near-white layer paints from the very first
+         frame (it's inline in <head>, ahead of the bundle), sits above the body +
+         the booting app but BELOW the opening overlay, and is removed by App once
+         React has painted — so the cyan becomes the frosted .app backdrop instead
+         of a flash. Color matches the window backgroundColor (#eef6f9). */
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        background: #121016;
+        z-index: 40;
+      }
+      :root[data-theme="light"] #boot-splash { background: #fafafa; }
+      :root[data-theme="dark"] #boot-splash {
+        background: #121016;
+      }
+    </style>
+    <script>
+      /* Early theme stamp (night mode, 2026-07-13): the persisted preference
+         lives behind an async IPC round-trip, which lands AFTER first paint —
+         a dark-theme launch flashed the light boot splash and the opening
+         canvas read the wrong theme. The controller mirrors its RESOLVED
+         theme to localStorage on every apply; this reads the hint and stamps
+         <html data-theme> before anything paints. initTheme() re-applies the
+         authoritative value moments later (a stale hint self-corrects).
+         NO hint (very first launch, 2026-07-14): the default preference is
+         "system", so resolve prefers-color-scheme directly — a dark-OS first
+         launch must not flash the light splash. */
+      var hint = null;
+      try {
+        hint = localStorage.getItem("herta-theme-resolved");
+        if (
+          hint === "dark" || hint === null ||
+          (hint === null &&
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches)
+        ) {
+          document.documentElement.dataset.theme = "dark";
+        } else { document.documentElement.dataset.theme = "light"; }
+      } catch (_e) {}
+    </script>
+  </head>
+  <body>
+    <div id="boot-splash"></div>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

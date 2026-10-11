@@ -1,0 +1,83 @@
+<svg viewBox="0 0 1160 560" xmlns="http://www.w3.org/2000/svg" font-family="Inter, ui-sans-serif, system-ui, 'Segoe UI', 'Microsoft YaHei', sans-serif">
+  <style>
+    .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, "Microsoft YaHei", monospace; }
+    .flow { stroke-dasharray: 7 6; animation: march 1.6s linear infinite; }
+    @keyframes march { to { stroke-dashoffset: -26; } }
+    .led { animation: pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      .flow, .led { animation: none; }
+    }
+  </style>
+  <defs>
+    <marker id="tb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4d86ff"/>
+    </marker>
+  </defs>
+
+  <!-- the shared record -->
+  <rect x="380" y="40" width="400" height="470" rx="18" fill="#ffffff" fill-opacity="0.88" stroke="rgba(17,20,23,.09)"/>
+  <text x="404" y="74" class="mono" font-size="11.5" letter-spacing="1.6" fill="#6f7782">终端记录 · THE SHARED WORLD</text>
+  <line x1="404" y1="88" x2="756" y2="88" stroke="rgba(17,20,23,.08)"/>
+
+  <rect x="400" y="106" width="360" height="36" rx="10" fill="#14171b"/>
+  <text x="414" y="129" class="mono" font-size="13" fill="#f3f4f5">（开拓者 说）解析器好像又崩了……</text>
+
+  <rect x="400" y="156" width="360" height="36" rx="10" fill="#ffffff" stroke="rgba(17,20,23,.10)"/>
+  <text x="414" y="179" class="mono" font-size="13" fill="#111417">（我 说）又？<tspan fill="#1f4fae" font-weight="600">@板砖</tspan>，跑复现。（/我 说）</text>
+
+  <text x="414" y="226" class="mono" font-size="13" fill="#3b4350"><tspan fill="#6f7782" font-weight="600">→ 系统</tspan>  Reading parser.ts</text>
+  <text x="414" y="256" class="mono" font-size="13" fill="#3b4350"><tspan fill="#1f4fae" font-weight="600">→ 差分协处理器</tspan>  实验：vitest</text>
+
+  <rect x="400" y="274" width="360" height="56" rx="8" fill="#f6f8f7" stroke="rgba(17,20,23,.06)"/>
+  <text x="414" y="296" class="mono" font-size="12.5" fill="#b4453a">- cursor = cursor</text>
+  <text x="414" y="318" class="mono" font-size="12.5" fill="#1f7a3d">+ this.cursor.reset(line)</text>
+
+  <text x="414" y="360" class="mono" font-size="13" fill="#3b4350"><tspan fill="#1f4fae" font-weight="600">→ 差分协处理器</tspan>  12 passed <tspan fill="#1f7a3d" font-weight="600">✓</tspan></text>
+
+  <rect x="400" y="380" width="360" height="56" rx="10" fill="#ffffff" stroke="rgba(17,20,23,.10)"/>
+  <text x="414" y="403" class="mono" font-size="13" fill="#111417">（我 说）修好了。针对性全绿——</text>
+  <text x="414" y="425" class="mono" font-size="13" fill="#111417">全量我可没打包票。（/我 说）</text>
+
+  <text x="414" y="478" font-size="11.5" font-style="italic" fill="#6f7782">谁都看这一份 — same record, different overlays</text>
+
+  <!-- the user -->
+  <rect x="70" y="110" width="230" height="88" rx="16" fill="#14171b"/>
+  <text x="94" y="148" font-size="16" font-weight="600" fill="#ffffff">开拓者</text>
+  <text x="94" y="172" font-size="12" fill="#aab2bf">writes · reads · approves</text>
+  <path class="flow" d="M 300 132 C 340 130, 344 124, 376 124" fill="none" stroke="#4d86ff" stroke-width="1.8" marker-end="url(#tb)"/>
+  <circle cx="338" cy="112" r="10" fill="#4d86ff"/><text x="338" y="116" text-anchor="middle" class="mono" font-size="11" font-weight="650" fill="#fff">1</text>
+
+  <!-- herta -->
+  <rect x="850" y="80" width="240" height="104" rx="16" fill="#ffffff" fill-opacity="0.9" stroke="rgba(17,20,23,.09)"/>
+  <text x="874" y="116" font-size="15.5" font-weight="600" fill="#111417">黑塔 · Herta</text>
+  <text x="874" y="140" font-size="11.5" fill="#6f7782">narrative actor — the self</text>
+  <text x="874" y="160" class="mono" font-size="10.5" fill="#6f7782">completion mode · no tools</text>
+  <path class="flow" d="M 846 150 C 830 154, 818 158, 806 164 L 784 172" fill="none" stroke="#4d86ff" stroke-width="1.8" marker-end="url(#tb)"/>
+  <circle cx="820" cy="184" r="10" fill="#4d86ff"/><text x="820" y="188" text-anchor="middle" class="mono" font-size="11" font-weight="650" fill="#fff">2</text>
+  <path class="flow" d="M 970 188 C 975 280, 940 360, 880 392 L 786 408" fill="none" stroke="#4d86ff" stroke-width="1.8" marker-end="url(#tb)"/>
+  <circle cx="932" cy="330" r="10" fill="#4d86ff"/><text x="932" y="334" text-anchor="middle" class="mono" font-size="11" font-weight="650" fill="#fff">5</text>
+
+  <!-- coprocessor -->
+  <rect x="850" y="360" width="240" height="130" rx="16" fill="#ffffff" fill-opacity="0.9" stroke="rgba(17,20,23,.09)"/>
+  <circle class="led" cx="874" cy="390" r="5" fill="#4d86ff"/>
+  <text x="890" y="395" font-size="14" font-weight="600" fill="#111417">差分协处理器</text>
+  <text x="874" y="420" font-size="11" fill="#6f7782">silent coding backend · 她叫它「板砖」</text>
+  <g class="mono" font-size="10.5" fill="#1f4fae">
+    <rect x="874" y="434" width="44" height="21" rx="10.5" fill="#eef3fb"/><text x="896" y="449" text-anchor="middle">read</text>
+    <rect x="924" y="434" width="44" height="21" rx="10.5" fill="#eef3fb"/><text x="946" y="449" text-anchor="middle">edit</text>
+    <rect x="974" y="434" width="44" height="21" rx="10.5" fill="#eef3fb"/><text x="996" y="449" text-anchor="middle">run</text>
+    <rect x="1024" y="434" width="44" height="21" rx="10.5" fill="#eef3fb"/><text x="1046" y="449" text-anchor="middle">test</text>
+  </g>
+  <text x="874" y="478" font-size="10" font-style="italic" fill="#6f7782">never speaks to you · never plays her</text>
+  <path class="flow" d="M 784 196 C 830 220, 856 300, 890 356" fill="none" stroke="#4d86ff" stroke-width="1.6" marker-end="url(#tb)"/>
+  <circle cx="846" cy="272" r="10" fill="#4d86ff"/><text x="846" y="276" text-anchor="middle" class="mono" font-size="11" font-weight="650" fill="#fff">3</text>
+  <path class="flow" d="M 846 430 C 832 420, 820 408, 810 396 L 784 360" fill="none" stroke="#4d86ff" stroke-width="1.8" marker-end="url(#tb)"/>
+  <circle cx="818" cy="352" r="10" fill="#4d86ff"/><text x="818" y="356" text-anchor="middle" class="mono" font-size="11" font-weight="650" fill="#fff">4</text>
+
+  <!-- path A note -->
+  <rect x="70" y="420" width="250" height="90" rx="14" fill="#ffffff" fill-opacity="0.7" stroke="rgba(17,20,23,.09)"/>
+  <text x="92" y="450" font-size="12.5" font-weight="600" fill="#111417">Path A · 闲聊、直答</text>
+  <text x="92" y="474" font-size="11" fill="#3b4350">台词里没有 @板砖 —— 一次补完，</text>
+  <text x="92" y="492" font-size="11" fill="#3b4350">回合结束，协处理器保持休眠。</text>
+</svg>

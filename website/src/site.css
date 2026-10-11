@@ -1,0 +1,1045 @@
+/**
+ * Landing-page styles. The demo app lives in its OWN iframe viewport
+ * (demo.html + demo-main.tsx) — this page never loads the app stylesheet.
+ * The body wallpaper below is copied verbatim from reference-ux.css
+ * (body + body:before) so the site and the product remain one visual world.
+ */
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(
+      circle at 18% 35%,
+      rgba(192, 246, 215, 0.95) 0 10%,
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 58% 2%,
+      rgba(205, 248, 210, 0.9) 0 8%,
+      transparent 26%
+    ),
+    radial-gradient(
+      circle at 82% 18%,
+      rgba(165, 240, 250, 0.95) 0 13%,
+      transparent 33%
+    ),
+    radial-gradient(
+      circle at 38% 18%,
+      rgba(38, 158, 236, 0.78) 0 22%,
+      transparent 48%
+    ),
+    linear-gradient(135deg, #25b7ee 0%, #8fece7 46%, #14a5e2 100%);
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: -16%;
+  background:
+    radial-gradient(
+      circle at 12% 78%,
+      rgba(220, 255, 224, 0.75),
+      transparent 22%
+    ),
+    radial-gradient(circle at 66% 88%, rgba(6, 104, 195, 0.42), transparent 27%),
+    radial-gradient(
+      circle at 50% 40%,
+      rgba(255, 255, 255, 0.2),
+      transparent 38%
+    );
+  filter: blur(34px);
+  opacity: 0.9;
+  pointer-events: none;
+}
+html {
+  scroll-behavior: smooth;
+}
+
+/* ── shared tokens ─────────────────────────────────────────────────── */
+/* Light values here; the dark block at the end of this file overrides them
+   with the APP's dark palette (reference-ux.css :root[data-theme="dark"]) —
+   same "one visual world" rule as the wallpaper. */
+.site {
+  --site-ink: #111417;
+  /* Contrast (audit BL25). Measured in the live page: the footer, the hero
+     eyebrow and the try-hint sit BARE on the cyan wallpaper — nav links and
+     the download card's fine print are on opaque glass and were always fine.
+     Over the gradient's darkest stop (#14a5e2) the old #59616e computed
+     2.24:1, below even the 3:1 non-text floor. #2f333a is 4.54:1, the
+     lightest this can be and still clear AA; a saturated cyan background
+     simply has no room for a lighter "muted" tier. */
+  --site-muted: #2f333a;
+  --site-hairline: rgba(17, 20, 23, 0.09);
+  --site-glass: rgba(255, 255, 255, 0.62);
+  --site-body-ink: #2f3944; /* paragraph/body copy over the wallpaper */
+  --site-body-ink-2: #3b4350; /* secondary copy (theory text, footer links) */
+  --site-body-ink-strong: #1f2b38; /* emphasized copy (impl lines) */
+  --site-nav-bg: rgba(250, 252, 253, 0.66);
+  --site-pill-bg: rgba(255, 255, 255, 0.55);
+  --site-pill-border: rgba(17, 20, 23, 0.12);
+  --site-chip-bg: #14171b; /* solid "ink chip" CTAs (GitHub, download) */
+  --site-chip-ink: #fff;
+  --site-chip-hover: #283139;
+  --site-tile-bg: rgba(255, 255, 255, 0.78);
+  --site-tile-border: rgba(17, 20, 23, 0.09);
+  --site-frame-border: rgba(255, 255, 255, 0.55); /* demo frame / poster */
+  --site-accent: #4d86ff; /* wordmark dot, flip arrows */
+  --site-accent-deep: #1f4fae; /* 板砖 ink, impl labels, research links */
+  --site-accent-wash: rgba(77, 134, 255, 0.1);
+  --site-shadow-soft: rgba(32, 45, 58, 0.08); /* glass cards */
+  --site-shadow-tile: rgba(32, 45, 58, 0.12);
+  --site-shadow-chip: rgba(32, 45, 58, 0.22);
+  --site-shadow-frame: rgba(16, 60, 90, 0.28); /* demo frame */
+  --site-shadow-poster: rgba(16, 60, 90, 0.26);
+  --site-shadow-card: rgba(16, 30, 50, 0.35); /* download card */
+  --site-hairline-soft: rgba(17, 20, 23, 0.06);
+  --site-strike: rgba(139, 148, 160, 0.55);
+  /* 1.10:1 at #8b94a0 — the worst on the page, and 21px normal weight is not
+     "large text", so it needs the full 4.5. It lands near --site-muted, which
+     is fine: on a flip line the strike-through is what says "rejected", and
+     it still reads lighter than the #111417 "yes" side. */
+  --site-flip-no: #2f3236;
+  --site-max: 1160px;
+  color: var(--site-ink);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    "Microsoft YaHei", sans-serif;
+  position: relative;
+  z-index: 1; /* above body:before haze */
+}
+.site-inner {
+  max-width: var(--site-max);
+  margin: 0 auto;
+  padding: 0 28px;
+}
+/* Line ends (2026-09-24, owner: the mobile page). Chinese breaks between any
+   two characters, so a paragraph could close on a lone 「用。」 or 「作。」 on a
+   phone. `pretty` keeps body copy from ending on a stray glyph; the short,
+   centred lines — headings, leads, captions, the download card — are
+   `balance`d instead. Both are progressive: an engine without them wraps as
+   it always did. */
+.site p,
+.site figcaption {
+  text-wrap: pretty;
+}
+.site h1,
+.site h2,
+.site h3,
+.site .section-lead,
+.site .sub,
+.site .try-hint,
+.site .demo-poster figcaption,
+.site .download-card p,
+.site .site-footer p {
+  text-wrap: balance;
+}
+
+/* ── nav ───────────────────────────────────────────────────────────── */
+.site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  backdrop-filter: blur(18px) saturate(140%);
+  background: var(--site-nav-bg);
+  border-bottom: 1px solid var(--site-hairline);
+}
+.site-nav .site-inner {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  height: 56px;
+}
+/* The trailer's end-card lockup, nav-sized (owner 2026-08-03): thin
+   letterspaced HERTA over a small wide-tracked 黑塔. text-indent mirrors
+   each line's letter-spacing so the trailing tracking space doesn't skew
+   the centering — same trick as the trailer card. */
+.site-wordmark {
+  display: flex;
+  align-items: center;
+  margin-right: auto;
+  text-decoration: none;
+  color: var(--site-ink);
+  white-space: nowrap;
+}
+.wordmark-lockup {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.wordmark-en {
+  font-size: 13.5px;
+  font-weight: 300;
+  letter-spacing: 0.34em;
+  text-indent: 0.34em;
+  line-height: 1;
+}
+.wordmark-cn {
+  font-size: 8px;
+  font-weight: 300;
+  letter-spacing: 0.6em;
+  text-indent: 0.6em;
+  line-height: 1;
+  color: var(--site-muted);
+}
+.site-nav a.nav-link {
+  font-size: 13.5px;
+  color: var(--site-muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.site-nav a.nav-link:hover {
+  color: var(--site-ink);
+}
+.site-nav .nav-lang {
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--site-muted);
+  background: var(--site-pill-bg);
+  border: 1px solid var(--site-pill-border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.site-nav .nav-lang:hover {
+  color: var(--site-ink);
+}
+/* Theme toggle: an icon button, not a text pill — square it up and center
+   the SVG (which replaced the ☀/☾ glyphs). */
+.site-nav .nav-theme {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  line-height: 0;
+}
+/* Inline button icons (download arrow, sun/moon) inherit text color via
+   `currentColor` and never shrink in a flex row. */
+.btn-icon {
+  flex: none;
+}
+.site-nav a.nav-gh {
+  font-size: 13px;
+  color: var(--site-chip-ink);
+  background: var(--site-chip-bg);
+  text-decoration: none;
+  padding: 7px 16px;
+  border-radius: 999px;
+}
+.site-nav a.nav-gh:hover {
+  background: var(--site-chip-hover);
+}
+/* Narrow screens: section links go away (the page is one scroll anyway) —
+   wordmark, language toggle, and GitHub stay. CJK labels must never wrap
+   into vertical character stacks. The whole row needs 957px in EN and 763px
+   in zh (measured 2026-09-24, fonts loaded); the links used to hide only
+   below 720px, so a 768px tablet in EN wrapped them and pushed GitHub off
+   the page. Each language drops them before its row runs out of room. */
+@media (max-width: 1000px) {
+  :root:lang(en) .site-nav a.nav-link {
+    display: none;
+  }
+}
+@media (max-width: 800px) {
+  .site-nav a.nav-link {
+    display: none;
+  }
+}
+@media (max-width: 720px) {
+  .site-nav .site-inner {
+    gap: 12px;
+  }
+  .site-nav a.nav-gh,
+  .site-nav .nav-lang {
+    white-space: nowrap;
+  }
+}
+
+/* ── hero ──────────────────────────────────────────────────────────── */
+.hero {
+  padding: 72px 0 30px;
+  text-align: center;
+}
+.hero .eyebrow {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--site-muted);
+  margin: 0 0 16px;
+}
+.hero h1 {
+  font-size: clamp(30px, 4.6vw, 52px);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.18;
+  margin: 0 0 16px;
+  text-wrap: balance;
+}
+.hero .sub {
+  font-size: 16.5px;
+  line-height: 1.65;
+  color: var(--site-body-ink);
+  max-width: 64ch;
+  margin: 0 auto 26px;
+}
+.cta-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+.cta-row a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 12px 26px;
+  font-size: 14.5px;
+  transition: transform 0.15s ease;
+}
+.cta-row a:hover {
+  transform: translateY(-1px);
+}
+.cta-row .cta-dl {
+  background: var(--site-chip-bg);
+  color: var(--site-chip-ink);
+  box-shadow: 0 14px 34px var(--site-shadow-chip);
+}
+.cta-row .cta-gh {
+  background: var(--site-glass);
+  color: var(--site-body-ink);
+  border: 1px solid var(--site-pill-border);
+}
+.hero .try-hint {
+  font-size: 13px;
+  color: var(--site-muted);
+  margin: 0 0 34px;
+}
+
+/* ── the live demo frame ───────────────────────────────────────────── */
+/* The app's minimum window is 1440×900 (BrowserWindow minWidth/minHeight),
+   so the iframe renders at exactly that and is visually SCALED to the
+   page column — the app keeps its designed viewport, visitors keep a
+   fitted card. Wrapper height is set inline from the measured scale. */
+.demo-outer {
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+.demo-fit {
+  position: relative;
+  overflow: hidden;
+  /* Never wider than the app's native 1440: the iframe scales DOWN only
+     (upscaling blurs text), so a wider wrapper would leave a bare strip
+     on the right — the exact bug of the first live deploy. */
+  max-width: 1440px;
+  margin: 0 auto;
+  border-radius: 22px;
+  border: 1px solid var(--site-frame-border);
+  box-shadow: 0 40px 90px var(--site-shadow-frame);
+}
+.demo-iframe {
+  display: block;
+  width: 1440px;
+  height: 900px;
+  border: 0;
+  transform-origin: top left;
+}
+/* Narrow screens get a static poster instead of the live renderer (the app
+   at 0.27× is unusable and heavy) — same frame styling as .demo-fit. */
+.demo-poster {
+  margin: 0 auto;
+  max-width: 1440px;
+}
+.demo-poster img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 16px;
+  border: 1px solid var(--site-frame-border);
+  box-shadow: 0 24px 56px var(--site-shadow-poster);
+}
+.demo-poster figcaption {
+  margin-top: 10px;
+  font-size: 12.5px;
+  text-align: center;
+  color: var(--site-muted);
+}
+
+/* ── sections ──────────────────────────────────────────────────────── */
+.section {
+  padding: 84px 0 10px;
+}
+.section .kicker {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--site-muted);
+  margin: 0 0 10px;
+  text-align: center;
+}
+.section h2 {
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 0 0 40px;
+  text-align: center;
+  text-wrap: balance;
+}
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+.feature-card {
+  background: var(--site-glass);
+  border: 1px solid var(--site-hairline);
+  border-radius: 18px;
+  padding: 24px 24px 22px;
+  box-shadow: 0 18px 42px var(--site-shadow-soft);
+  backdrop-filter: blur(14px);
+}
+.feature-card h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 650;
+}
+.feature-card h3 .en {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--site-muted);
+}
+.feature-card p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--site-body-ink);
+}
+
+/* ── download ──────────────────────────────────────────────────────── */
+.download-card {
+  background: #14171b; /* deliberately theme-INVARIANT: the card is the app's
+                          dark-shell vignette in both themes; dark mode only
+                          adds a hairline (see the dark block) so it separates
+                          from a dark wallpaper. */
+  color: #e8ecef;
+  border: 1px solid transparent;
+  border-radius: 24px;
+  padding: 52px 40px;
+  text-align: center;
+  box-shadow: 0 30px 70px var(--site-shadow-card);
+}
+.download-card h2 {
+  color: #fff;
+  margin-bottom: 14px;
+}
+.download-card p {
+  color: #aab2bf;
+  font-size: 14.5px;
+  /* Wide enough that the zh line (with Linux added on release day) holds one
+     line on a desktop; below that, balanced lines (the text-wrap rule at the
+     top) rather than a lone 「用。」. 56ch wrapped it (owner, 2026-09-24). */
+  max-width: 66ch;
+  margin: 0 auto 28px;
+  line-height: 1.7;
+}
+.download-card .cta-row .cta-dl {
+  background: #fff;
+  color: #14171b;
+}
+.download-card .cta-row .cta-gh {
+  background: transparent;
+  color: #cdd3d9;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.download-card .fine {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  color: #7a838e;
+  margin-top: 22px;
+  /* One line on desktop. The p rule above caps at 56ch, but ch resolves
+     against THIS 11px monospace (~370px) — the fine print wrapped no matter
+     how short the text got. Let it span the card; narrow viewports still
+     wrap at the container edge. */
+  max-width: none;
+}
+
+/* ── scroll-reveal ─────────────────────────────────────────────────── */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.55s ease,
+    transform 0.55s cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+.reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  /* The nav anchors animate the whole page past the reader; for someone with
+     a vestibular disorder that is the one motion on this site that actually
+     hurts, and it was the one not gated (audit BL25). */
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* ── the icon tile (rounded-corner app icon, user 2026-07-06) ───────── */
+.icon-tile {
+  display: inline-grid;
+  place-items: center;
+  background: var(--site-tile-bg);
+  border: 1px solid var(--site-tile-border);
+  box-shadow: 0 8px 22px var(--site-shadow-tile);
+  overflow: hidden;
+}
+.icon-tile img {
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+}
+.icon-tile--nav {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  margin-right: 9px;
+  vertical-align: -6px;
+}
+.icon-tile--hero {
+  width: 84px;
+  height: 84px;
+  border-radius: 20px;
+  margin-bottom: 20px;
+  animation: tileFloat 4.2s ease-in-out infinite;
+}
+.icon-tile--footer {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  margin-bottom: 12px;
+}
+@keyframes tileFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .icon-tile--hero {
+    animation: none;
+  }
+}
+
+/* ── hero english subline + section leads ──────────────────────────── */
+.hero-en {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 13.5px;
+  letter-spacing: 0.04em;
+  color: var(--site-muted);
+  margin: 0 0 18px;
+}
+.section-lead {
+  font-size: 14.5px;
+  line-height: 1.8;
+  color: var(--site-body-ink);
+  max-width: 72ch;
+  margin: 0 auto 36px;
+  text-align: center;
+}
+
+/* ── the role-play flips — three one-glance contrasts ──────────────── */
+.flip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  align-items: center;
+  margin: 0 auto 44px;
+}
+.flip {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  font-size: clamp(16px, 2.2vw, 21px);
+}
+.flip-no {
+  color: var(--site-flip-no);
+  text-decoration: line-through;
+  text-decoration-color: var(--site-strike);
+  text-decoration-thickness: 1px;
+}
+.flip-arrow {
+  color: var(--site-accent);
+  font-weight: 650;
+}
+.flip-yes {
+  color: var(--site-ink);
+  font-weight: 650;
+}
+@media (max-width: 600px) {
+  .flip {
+    flex-direction: column;
+    gap: 2px;
+    text-align: center;
+    align-items: center;
+  }
+}
+
+/* ── diagrams ──────────────────────────────────────────────────────── */
+.diagram {
+  margin: 0;
+  padding: 18px;
+  border: 1px solid var(--site-hairline);
+  border-radius: 20px;
+  background: var(--site-glass);
+  box-shadow: 0 18px 42px var(--site-shadow-soft);
+  backdrop-filter: blur(14px);
+  overflow-x: auto;
+}
+.diagram img {
+  display: block;
+  min-width: 880px;
+  width: 100%;
+  height: auto;
+}
+/* The 880-px floor above keeps the diagrams' labels legible, so below it the
+   frame scrolls sideways — which a phone gives no sign of (2026-09-24). The
+   hint shows only where the frame is narrower than its diagram. */
+.diagram-hint {
+  display: none;
+}
+@media (max-width: 960px) {
+  .diagram-hint {
+    display: block;
+    margin: 10px 0 0;
+    font-size: 12px;
+    text-align: center;
+    color: var(--site-muted); /* already the AA floor here — never fade it */
+  }
+}
+
+/* ── mechanism blocks ──────────────────────────────────────────────── */
+.mech-block {
+  margin-bottom: 64px;
+}
+.mech-block:last-child {
+  margin-bottom: 0;
+}
+.mech-title {
+  font-size: 20px;
+  font-weight: 650;
+  margin: 0 0 10px;
+}
+/* biome-ignore lint/style/noDescendingSpecificity: .mech-title and .feature-card h3 never share an element; source order follows page order */
+.mech-title .en {
+  color: var(--site-muted);
+  font-weight: 500;
+  font-size: 14px;
+}
+.mech-caption {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--site-body-ink);
+  max-width: 74ch;
+  margin: 0 0 20px;
+}
+.banzhuan-ink {
+  color: var(--site-accent-deep);
+}
+
+.feature-grid--two {
+  /* The four technical notes as 2 × 2. `auto-fit` with a 340-px floor fitted
+     THREE across the 1160-px page and left the fourth alone on its own row
+     (2026-09-24). */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 720px) {
+  .feature-grid--two {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── the desk — the visible features, with pictures (2026-09-10) ──────
+   Three glass cards like the feature cards, each led by a picture: the
+   device's day (four renders of the real scene, crossfading), the
+   repository card beside its commit tab (the app itself), and the composer
+   while she speaks. The pictures are WebP twins chosen per theme (and per
+   language for the one with words) — never the 3D scene or its assets. */
+.desk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.desk-card {
+  background: var(--site-glass);
+  border: 1px solid var(--site-hairline);
+  border-radius: 18px;
+  padding: 16px 16px 22px;
+  box-shadow: 0 18px 42px var(--site-shadow-soft);
+  backdrop-filter: blur(14px);
+}
+.desk-card h3 {
+  margin: 0 0 10px;
+  padding: 0 8px;
+  font-size: 16px;
+  font-weight: 650;
+}
+.desk-card h3 .en {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--site-muted);
+}
+.desk-card p {
+  margin: 0;
+  padding: 0 8px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--site-body-ink);
+}
+.desk-card__pic {
+  margin: 0 0 16px;
+  border-radius: 14px;
+  overflow: hidden;
+}
+.desk-card__pic img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* The repository card and the commit tab side by side; on a phone the
+   tab goes under the card. Both are app screenshots at 2×. */
+.desk-card__pic--two {
+  display: grid;
+  grid-template-columns: 1fr 1.28fr;
+  gap: 8px;
+  border-radius: 0;
+  overflow: visible;
+}
+.desk-card__pic--two img {
+  border-radius: 12px;
+  border: 1px solid var(--site-hairline);
+}
+@media (max-width: 420px) {
+  .desk-card__pic--two {
+    grid-template-columns: 1fr;
+  }
+}
+/* The device's day: four pictures stacked, each visible a quarter of a
+   20 s loop with a 1.5 s crossfade; the hour label rides the same clock.
+   Negative delays (set inline) start every layer mid-cycle, so the loop
+   is continuous from the first frame. */
+.device-cycle {
+  position: relative;
+  aspect-ratio: 676 / 660;
+  background: transparent;
+}
+.device-cycle img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  animation: deviceCycle 20s linear infinite;
+}
+/* The hour label: one pill at the picture's foot, its four words stacked
+   in place and crossfading on the pictures' clock. The pill is dark on
+   every picture — the noon room is white, the night room black — and the
+   figcaption needs a width of its own, or its absolutely placed spans
+   shrink to nothing and a CJK word wraps character by character. */
+.device-cycle figcaption {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  width: 96px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(17, 20, 23, 0.55);
+  backdrop-filter: blur(6px);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+}
+.device-cycle figcaption span {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  white-space: nowrap;
+  text-indent: 0.12em;
+  opacity: 0;
+  animation: deviceCycle 20s linear infinite;
+}
+@keyframes deviceCycle {
+  0%,
+  17.5% {
+    opacity: 1;
+  }
+  25%,
+  92.5% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .device-cycle img,
+  .device-cycle figcaption span {
+    animation: none;
+  }
+  .device-cycle img:first-child,
+  .device-cycle figcaption span:first-child {
+    opacity: 1;
+  }
+}
+
+/* ── scholarship → mechanism pairings ──────────────────────────────── */
+.scholar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 16px;
+}
+.scholar-card {
+  background: var(--site-glass);
+  border: 1px solid var(--site-hairline);
+  border-radius: 18px;
+  padding: 26px 28px 24px;
+  box-shadow: 0 18px 42px var(--site-shadow-soft);
+  backdrop-filter: blur(14px);
+}
+.scholar-card--wide {
+  grid-column: 1 / -1;
+}
+.scholar-card h3 {
+  margin: 0 0 12px;
+  font-size: 16.5px;
+  font-weight: 650;
+}
+.scholar-card h3 .en {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--site-muted);
+}
+.scholar-theory {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--site-body-ink-2);
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--site-hairline-soft);
+}
+.scholar-impl {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--site-body-ink-strong);
+}
+.impl-label {
+  display: inline-block;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--site-accent-deep);
+  background: var(--site-accent-wash);
+  border-radius: 999px;
+  padding: 2px 10px;
+  margin-right: 8px;
+  vertical-align: 1px;
+}
+@media (max-width: 880px) {
+  .scholar-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.research-more {
+  margin: 28px auto 0;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--site-body-ink-2);
+}
+.research-more a {
+  color: var(--site-accent-deep);
+  font-weight: 600;
+  margin: 0 4px;
+}
+
+/* ── footer ────────────────────────────────────────────────────────── */
+.site-footer {
+  padding: 56px 0 48px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--site-muted);
+}
+.site-footer a {
+  color: var(--site-body-ink-2);
+}
+.site-footer__note {
+  display: inline-block;
+}
+.site-footer__fan {
+  margin: 10px auto 0;
+  max-width: 640px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  opacity: 0.9;
+}
+
+/* ── skip the demo (audit BL25) ─────────────────────────────────────── */
+/* Off-screen until it takes focus, then a normal-looking pill in the flow
+   above the demo. Not `display: none` / `visibility: hidden` — either would
+   take it out of the tab order, which is the one thing it exists for. */
+.skip-demo {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.skip-demo:focus,
+.skip-demo:focus-visible {
+  position: static;
+  display: inline-block;
+  width: auto;
+  height: auto;
+  margin: 0 0 14px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--site-chip-bg);
+  color: var(--site-chip-ink);
+  font-size: 13px;
+  text-decoration: none;
+  outline: 2px solid var(--site-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .hero {
+    padding-top: 48px;
+  }
+  /* The eyebrow is a one-line element by design. At 375px the phrase
+     measures 326px against a 319px slot and wraps; trimming the tracking
+     buys ~13px and keeps it on one line. Measured in the live page
+     (2026-08-04) — re-measure if the wording changes again. */
+  .hero .eyebrow {
+    letter-spacing: 0.13em;
+  }
+  .cta-row {
+    flex-wrap: wrap;
+  }
+}
+
+/* ── dark mode ─────────────────────────────────────────────────────────
+   Stamped as <html data-theme="dark"> by Site.tsx (follow-OS default, nav
+   toggle persisted — the same mechanism as the language toggle). The
+   wallpaper is the APP's dark wallpaper copied verbatim from
+   reference-ux.css :root[data-theme="dark"] --app-bg / --app-bg-bloom, and
+   the token values below reuse the app's dark palette — the site and the
+   product remain one visual world in both themes. The embedded demo follows
+   via ?theme= (demo-main.tsx). */
+:root[data-theme="dark"] body {
+  background:
+    radial-gradient(
+      circle at 18% 35%,
+      rgba(22, 78, 66, 0.5) 0 10%,
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 58% 2%,
+      rgba(26, 84, 74, 0.4) 0 8%,
+      transparent 26%
+    ),
+    radial-gradient(
+      circle at 82% 18%,
+      rgba(18, 66, 104, 0.55) 0 13%,
+      transparent 33%
+    ),
+    radial-gradient(
+      circle at 38% 18%,
+      rgba(14, 54, 102, 0.6) 0 22%,
+      transparent 48%
+    ),
+    linear-gradient(135deg, #0a1a2a 0%, #0d2233 46%, #081524 100%);
+}
+:root[data-theme="dark"] body::before {
+  background:
+    radial-gradient(
+      circle at 12% 78%,
+      rgba(36, 110, 100, 0.25),
+      transparent 22%
+    ),
+    radial-gradient(circle at 66% 88%, rgba(10, 60, 130, 0.35), transparent 27%),
+    radial-gradient(
+      circle at 50% 40%,
+      rgba(120, 160, 200, 0.08),
+      transparent 38%
+    );
+}
+:root[data-theme="dark"] .site {
+  --site-ink: #e6ebf1;
+  --site-muted: #7e8894;
+  --site-hairline: rgba(226, 236, 246, 0.09);
+  --site-glass: rgba(18, 24, 31, 0.62);
+  --site-body-ink: #cdd6df;
+  --site-body-ink-2: #a7b1bd;
+  --site-body-ink-strong: #d5dce3;
+  --site-nav-bg: rgba(18, 23, 30, 0.9);
+  --site-pill-bg: rgba(30, 37, 46, 0.94);
+  --site-pill-border: rgba(226, 236, 246, 0.14);
+  /* Ink chips invert: light pills on the dark wallpaper (the app's
+     btn-ink flip), so the CTAs keep their weight. */
+  --site-chip-bg: #e6ebf1;
+  --site-chip-ink: #10141a;
+  --site-chip-hover: #f2f6fa;
+  /* The icon tile stays LIGHT in dark mode (user 2026-07-16): the app icon
+     is transparent-background art whose dark details vanish on a dark tile —
+     a white tile reads like the icon on a taskbar. */
+  --site-tile-bg: rgba(255, 255, 255, 0.92);
+  --site-tile-border: rgba(226, 236, 246, 0.2);
+  --site-frame-border: rgba(226, 236, 246, 0.12);
+  --site-accent: #6b9dff;
+  --site-accent-deep: #9db9ff;
+  --site-accent-wash: rgba(107, 157, 255, 0.14);
+  --site-shadow-soft: rgba(0, 0, 0, 0.32);
+  --site-shadow-tile: rgba(0, 0, 0, 0.4);
+  --site-shadow-chip: rgba(0, 0, 0, 0.45);
+  --site-shadow-frame: rgba(0, 0, 0, 0.55);
+  --site-shadow-poster: rgba(0, 0, 0, 0.5);
+  --site-shadow-card: rgba(0, 0, 0, 0.55);
+  --site-hairline-soft: rgba(226, 236, 246, 0.06);
+  --site-strike: rgba(139, 148, 160, 0.45);
+  /* 3.94:1 over the dark wallpaper's lightest stop — dark theme's --site-muted
+     already passed at 4.51, this one did not. */
+  --site-flip-no: #7f8893;
+}
+/* The download card is the app's dark shell in BOTH themes — in dark it just
+   needs a hairline to separate from the wallpaper, and its inner CTAs keep
+   their in-card light-on-dark design (they already match the inverted chips). */
+:root[data-theme="dark"] .download-card {
+  border-color: rgba(226, 236, 246, 0.1);
+}
+/* The diagram SVGs are light-baked "paper sheets" (their card fills live
+   inside the assets) — deliberate in dark mode, like printed schematics on a
+   dark desk; just take the glare off. */
+:root[data-theme="dark"] .diagram img {
+  filter: brightness(0.94);
+}

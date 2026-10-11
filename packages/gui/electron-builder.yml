@@ -1,0 +1,312 @@
+appId: com.personacli.herta
+productName: Herta
+# Windows VERSIONINFO's LegalCopyright, shown in the installer and in the
+# executable's Details tab (audit S12). Absent, electron-builder defaults it to
+# a bare "Copyright © 2026 PersonaCLI" over a payload that is substantially
+# third-party — the one string a user inspecting the binary sees, asserting
+# ownership we do not have.
+copyright: >-
+  Copyright © 2026 PersonaCLI. Herta is a character from Honkai: Star Rail,
+  © HoYoverse. Unofficial fan project, not endorsed by HoYoverse.
+
+directories:
+  buildResources: build
+  output: release
+
+# The app payload is just the compiled output plus runtime resources: main and
+# preload bundle their entire dependency graph (see electron.vite.config.ts).
+# The ONE production dependency, sherpa-onnx-node (ADR 0042), is a native
+# runtime that ships as a plain directory copy under extraResources (below),
+# never through the archive: without the exclusion electron-builder packed
+# its JS wrapper into app.asar, where the synthesizer's walk-up found it on a
+# build whose runtime had NOT been staged (the mac workflow, until
+# 2026-09-10) and reported the voice runtime present with no addon behind it.
+files:
+  - out/**
+  # The build-time module manifest electron.vite.config.ts writes for the
+  # third-party notices generator — build metadata, not app payload.
+  - "!out/bundle-manifest.json"
+  - resources/**
+  - "!node_modules/**"
+# The window icon is read from disk at runtime via the `?asset` import
+# (out/main resolves ../../resources/herta-icon.png); keep it as a real file
+# rather than an asar entry, per the electron-vite packaging convention.
+asarUnpack:
+  - resources/**
+
+# Nothing native is REBUILT: better-sqlite3 is tree-shaken out of the bundle,
+# and the one native runtime that ships (tts-runtime, below) is a prebuilt
+# Node-API addon loaded by a utility process — Node-API is ABI-stable across
+# Electron's Node, so it needs no rebuild against Electron's headers.
+npmRebuild: false
+
+# Ship only the Chromium UI locales the app can actually speak (size audit
+# 2026-07-16: locales/ was 46.6 MB unpacked — every Chromium language — for
+# an app whose own locale system is zh/en). These are Chromium-internal
+# strings (native context menus, a11y); an OS locale outside this list falls
+# back to en-US. zh-TW kept so traditional-Chinese Windows gets Chinese
+# Chromium chrome. The app's OWN i18n (LocaleProvider catalogs) is unaffected.
+electronLanguages:
+  - en-US
+  - zh-CN
+  - zh-TW
+
+# Voice clips live at the repo root (data/voice — gitignored local assets,
+# copied at package time, NOT downloaded by users) and land in
+# <install>/resources/voice; the main process finds them via resolveVoiceRoot
+# (src/main/voice-path.ts). Only the Opus transcodes ship (2026-07-16 cutover,
+# scripts/transcode-voice.mjs): the .wav source masters sit in the same tree
+# and would add ~17 MB of PCM the app no longer reads.
+extraResources:
+  - from: ../../data/voice
+    to: voice
+    filter:
+      - "**/*.opus"
+  # The recording the MiniMax clone is made from (ADR 0062): the game's
+  # archive lines merged into one 24 kHz WAV (~8 MB), read by the main
+  # process when the user asks for the cloud voice. Its own tree, not under
+  # voice/: the clip payload check treats a .wav there as an untranscoded
+  # master.
+  - from: ../../data/voice-clone
+    to: voice-clone
+    filter:
+      - "herta-reference.wav"
+  # The licence text ships with the binary (audit BL26). `files:` above is
+  # app-dir relative, so the root LICENSE can never be picked up there — and
+  # it is the file that carries both the MIT grant AND the scope note saying
+  # which parts of the payload are NOT ours to license.
+  - from: ../../LICENSE
+    to: LICENSE
+  # …and the notices for everything third-party compiled INTO the bundles
+  # (BL26's other half, closed 2026-08-16). Generated from the bundle manifest
+  # by scripts/third-party-notices.mjs; every dist script and CI runs its
+  # --check right after electron-vite build, so a new dependency cannot ship
+  # without its notice. Apache-2.0 (pdfjs-dist) made this mandatory rather
+  # than tidy: it requires the license text itself to accompany the code.
+  - from: ../../THIRD-PARTY-NOTICES.md
+    to: THIRD-PARTY-NOTICES.md
+  # ── Herta's real-time voice (ADR 0042 / ADR 0061) ─────────────────────────
+  # ONLY the native synthesis runtime (~23 MB/arch) ships here. The Kokoro
+  # model bundle (~116 MB) is NOT in the installer — the owner's call on its
+  # size (2026-09-08): the user downloads it from Settings → Voice, and the
+  # app verifies it against the hash pinned in src/main/tts/tts-release.ts
+  # before a byte is extracted. `scripts/check-tts-payload.mjs` fails the
+  # build if a model entry ever creeps back in here.
+  #
+  # The runtime is a NATIVE addon, which cannot be bundled into out/main (the
+  # packaging invariant CI greps for) and must not sit behind the asar
+  # boundary — the addon finds its own platform library through a SIBLING
+  # path, so both packages need to be real directories next to each other.
+  # `scripts/stage-tts.mjs` produces exactly that layout;
+  # `src/main/tts/synthesizer.ts` resolves <resources>/tts-runtime/.
+  #
+  # Optional by design: absent, the synthesizer reports unavailable and every
+  # reply types at the read-along pace, exactly as before the voice existed.
+  - from: tts-runtime
+    to: tts-runtime
+
+# Auto-update feed (2026-07-10): the PUBLIC Herta repo's GitHub Releases.
+# electron-builder embeds this as app-update.yml in the packaged app (what
+# electron-updater reads at runtime) and emits release/latest.yml at build
+# time — latest.yml MUST be uploaded to each release alongside the .exe and
+# .blockmap, and the package.json version MUST be bumped per release, or no
+# client ever updates (electron-updater keys on semver). Against the still-
+# private repo the update check 404s and stays silent by design; it goes
+# live the day the repo flips public. `--publish never` stays the local
+# build behavior (we upload assets manually).
+publish:
+  provider: github
+  owner: PersonaCLI
+  repo: Herta
+
+win:
+  target:
+    - nsis
+  # A real multi-resolution .ico (16–256px), committed alongside the .png
+  # source. electron-builder uses it directly and SKIPS the WASM png→ico
+  # converter, which OOM'd (`WebAssembly.Memory(): could not allocate memory`)
+  # during the Electron-43 packaging verification (audit 2026-07-13 T3.2).
+  # Regenerate from build/icon.png with scripts/make-icon-ico.ps1 if the
+  # source art changes.
+  icon: build/icon.ico
+  # ── Code signing (audit 2026-07-13 T3.2 — see docs/adr/0012) ──────────────
+  # OWNER DECISION 2026-08-06: Windows ships UNSIGNED. Not an oversight, not a
+  # "before release" item any more — do not re-open it without asking. macOS
+  # IS signed and notarized (see `mac:` above); the platforms diverge on
+  # purpose, because the Apple membership was bought and a Windows OV/EV
+  # certificate was judged not worth its price.
+  #
+  # What that costs, stated plainly so nobody rediscovers it as a bug:
+  #   - SmartScreen warns on every fresh download until the installer builds
+  #     its own reputation, which is slow and resets on each new signing
+  #     identity. This is the visible cost, and it lands on the PRIMARY
+  #     platform — the site's main CTA is "Download for Windows".
+  #   - electron-updater performs NO signature verification. The update
+  #     channel's only integrity is the release sha512 over HTTPS, so a
+  #     GitHub account compromise ships silently.
+  # Auto-update itself still WORKS unsigned — but only while `publisherName`
+  # below stays unset. Setting it without a matching certificate is the one
+  # change that would break updates for every existing install.
+  #
+  # If a certificate is ever bought, the build is already wired so signing
+  # activates from credentials alone — no yml surgery on release day:
+  #
+  #   Path A — PFX/OV certificate: set CSC_LINK (base64 or file path) +
+  #     CSC_KEY_PASSWORD in the release environment. electron-builder signs
+  #     automatically when they are present; nothing to change here.
+  #   Path B — Azure Trusted Signing (~$10/mo, Microsoft-managed certs):
+  #     uncomment and fill azureSignOptions, and provide AZURE_TENANT_ID /
+  #     AZURE_CLIENT_ID / AZURE_CLIENT_SECRET in the release environment.
+  #   azureSignOptions:
+  #     endpoint: https://eus.codesigning.azure.net
+  #     codeSigningAccountName: <account>
+  #     certificateProfileName: <profile>
+  #
+  # WHEN SIGNING LANDS, also set `publisherName` below to the certificate's
+  # EXACT subject CN — electron-updater verifies each downloaded installer's
+  # Authenticode subject against it at runtime (this is what closes the
+  # account-compromise hole). Wrong or missing CN = updates rejected or
+  # unverified. Do not guess it now; it comes from the cert.
+  # publisherName: <certificate subject CN>
+  #
+  # Explicit today's-posture marker: local/dev builds (`pnpm dist`) may be
+  # unsigned. `pnpm dist:release` passes -c.win.forceCodeSigning=true AND
+  # gates on the credentials first (scripts/check-signing-env.mjs).
+  #
+  # That gate is the load-bearing part (audit 2026-08-05, S6): this comment
+  # used to say "the RELEASE pipeline must flip this to true" while no such
+  # pipeline existed — the only packaging path was `pnpm dist`, with no
+  # assertion anywhere. electron-builder does not fail on missing or
+  # malformed credentials; it logs a line, exits 0, and hands back an
+  # unsigned installer that looks exactly like a signed one. Shipping that
+  # while `publisherName` below is set is the worst case: electron-updater
+  # verifies each download's Authenticode subject against it and rejects the
+  # mismatch, so every existing install stops updating and the fix cannot be
+  # delivered by the updater.
+  forceCodeSigning: false
+
+mac:
+  # Added 2026-08-04 (owner asked for a macOS build; no Mac hardware here, so
+  # this is built and screenshotted on a macos-latest runner — see
+  # .github/workflows/mac-build.yml).
+  #
+  # Nothing native ships (see npmRebuild above), so both architectures come
+  # from the same JS bundle — no per-arch rebuild, no ABI concerns.
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip # electron-updater's mac feed reads zip, not dmg
+      arch: [arm64, x64]
+  # electron-builder generates the .icns from build/icon.png (1024x1024).
+  icon: build/icon.png
+  category: public.app-category.developer-tools
+  # The top-level list names Chromium's .pak locales (Windows/Linux: `zh-CN`).
+  # On macOS the same filter runs over `.lproj` folders, which Chromium names
+  # with UNDERSCORES — `zh_CN.lproj`, `zh_TW.lproj`, `en.lproj` — and the
+  # filter compares lowercased names exactly (`zh-cn` ≠ `zh_cn`), so every
+  # Chinese folder was deleted and only `en.lproj` survived through its
+  # prefix rule. macOS then offered the app English only: app.getLocale()
+  # answered `en` on a Chinese Mac, and the first launch came up in English
+  # UI AND English interaction language (platform review 2026-09-23; CI never
+  # showed it — its runners are English). mac-build.yml asserts the folder
+  # reached every .app.
+  electronLanguages:
+    - en
+    - zh_CN
+    - zh_TW
+  # ── Signing (audit 2026-08-05, S6) ───────────────────────────────────────
+  # `identity: null` WAS set here while there was no Apple membership. It is
+  # removed, and must not come back: electron-builder short-circuits on it
+  # BEFORE reading the credentials (macPackager.js:296 returns at
+  # `qualifier === null`, while CSC_LINK is only consulted on the next line),
+  # so with it present a correctly-configured certificate is silently ignored
+  # and the build comes out unsigned having exited 0.
+  #
+  # With it gone the behaviour is credential-driven, which is what we want:
+  #   - no credentials (dev machine, CI without secrets) → electron-builder
+  #     skips signing and ad-hoc signs arm64, which macOS requires to run at
+  #     all on Apple Silicon. Same output as before.
+  #   - CSC_LINK + CSC_KEY_PASSWORD present → signed, no yml change needed.
+  #
+  # hardenedRuntime and notarize stay OFF here on purpose: both are only
+  # meaningful once signing is real, and hardened runtime on an unsigned build
+  # buys nothing. `pnpm dist:release:mac` turns both on via -c overrides, and
+  # gates on the credentials first (scripts/check-signing-env.mjs) — because
+  # electron-builder does NOT fail when they are missing.
+  #
+  # Unsigned consequences a release note MUST carry, until a signed build
+  # ships: Gatekeeper blocks first launch (System Settings → Privacy &
+  # Security → "Open Anyway"), and macOS AUTO-UPDATE DOES NOT WORK, because
+  # Squirrel.Mac verifies the signature of the downloaded app.
+  hardenedRuntime: false
+  # Same dash convention as the Windows artifact — electron-updater's
+  # latest-mac.yml references these names literally.
+  artifactName: Herta-${version}-${arch}.${ext}
+
+dmg:
+  artifactName: Herta-${version}-${arch}.${ext}
+
+# The AppImage runtime (platform review 2026-09-23). Unset, electron-builder
+# 26 builds the LEGACY type-2 AppImage, whose runtime links libfuse.so.2 —
+# which Ubuntu 22.04 and later no longer install. Double-click, and nothing
+# happens; from a terminal, "AppImages require FUSE to run". 1.0.3 is the
+# static runtime (no libfuse2). electron-builder marks it beta; the Linux
+# workflow launches the built AppImage on a stock runner to prove it.
+# Both runtimes share one AppRun, which adds --no-sandbox only when
+# `unshare -Ur true` fails (Ubuntu 24.04's AppArmor default) — so the
+# Chromium sandbox stays ON wherever user namespaces are allowed.
+toolsets:
+  appimage: "1.0.3"
+
+# Linux targets (added for community builds). No signing — Linux has no
+# SmartScreen/Gatekeeper equivalent. AppImage is the primary format (no
+# install, works on any distro); deb covers Debian/Ubuntu. The icon.png
+# source is the same 1024x1024 the macOS build uses; electron-builder
+# generates the PNG size set Linux expects from it.
+#
+# TTS runtime: stage-tts.mjs without --win/--mac auto-detects the host
+# platform, so a Linux build machine stages sherpa-onnx-linux-<arch>
+# automatically. Cross-arch (e.g. building arm64 on x64) needs the
+# matching npm package fetched into the cache — the script handles that.
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    # deb is ready to enable the day a maintainer email exists: fpm requires
+    # package.json "homepage" AND an author email (or linux.maintainer), and
+    # neither is this repo's to invent — the copyright block above is exactly
+    # about not asserting things that are not true. To enable: add the
+    # maintainer line below + homepage in package.json, uncomment, done.
+    # - target: deb
+    #   arch: [x64]
+  # maintainer: Herta <email@example.com>
+  category: Development
+  icon: build/icon.png
+  # NO version in the Linux file name (platform review 2026-09-23), unlike
+  # Windows and macOS. electron-updater's AppImage install keeps the running
+  # file's path only when that name carries no `x.y.z`; with one, every update
+  # writes a NEW file beside it and deletes the old — and every launcher,
+  # dock pin and AppImageLauncher entry pointing at the old path breaks.
+  artifactName: Herta-${arch}.${ext}
+  # The package name is scoped (@herta/gui), and electron-builder derives the
+  # Linux executable name from it — "@hertagui", which the AppImage builder
+  # rejects ('characters that cannot be safely used in file paths'). Windows
+  # and macOS never hit this: those targets name the executable after
+  # productName. Pin the conventional lowercase binary name here.
+  executableName: herta
+  # Window association (electron-builder's own warning): the .desktop file's
+  # StartupWMClass must match the WM_CLASS Electron sets (the app name,
+  # "Herta"), or desktop environments will not group the running window with
+  # its launcher entry.
+  syncDesktopName: true
+
+nsis:
+  # Pinned to the dash form electron-updater's latest.yml references. The
+  # default (`Herta Setup <ver>.exe`, spaces) forces a manual rename at upload
+  # time; forget it once and GitHub serves `Herta.Setup...exe` while the feed
+  # asks for `Herta-Setup-...exe` — the updater 404s silently.
+  artifactName: Herta-Setup-${version}.${ext}
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: Herta

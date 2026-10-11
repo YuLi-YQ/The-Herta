@@ -1,0 +1,6 @@
+data: {"id":"x","choices":[{"index":0,"delta":{"role":"assistant","content":"This"}}]}
+
+data: {"id":"x","choices":[{"index":0,"delta":{},"finish_reason":"content_filter"}]}
+
+data: [DONE]
+

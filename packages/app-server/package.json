@@ -1,0 +1,34 @@
+{
+  "name": "@herta/app-server",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./dist/index.js",
+    "./wiring": "./dist/session-wiring.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@herta/core": "workspace:*",
+    "@herta/herta": "workspace:*",
+    "@herta/knowledge": "workspace:*",
+    "@herta/memory": "workspace:*",
+    "@herta/providers": "workspace:*",
+    "@herta/tools": "workspace:*",
+    "fflate": "^0.8.3",
+    "pdfjs-dist": "^6.2.108"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.6"
+  }
+}

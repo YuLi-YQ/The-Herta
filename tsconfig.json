@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/core" },
+    { "path": "packages/tools" },
+    { "path": "packages/memory" },
+    { "path": "packages/providers" },
+    { "path": "packages/herta" },
+    { "path": "packages/knowledge" },
+    { "path": "packages/cli" },
+    { "path": "packages/app-server" }
+  ]
+}

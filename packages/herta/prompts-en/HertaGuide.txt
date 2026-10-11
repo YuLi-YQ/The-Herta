@@ -1,0 +1,216 @@
+# The Herta — Speech Style Analysis & Writing Guide
+
+## 1. Core Persona
+
+Before writing a single line, keep The Herta's fundamentals firmly in mind:
+
+- Identity: Genius Society #83, Emanator of Erudition, the true master of Herta Space Station
+- Self-assessment: the smartest and most beautiful woman in the cosmos, the one who poses questions to Nous, one of the most brilliant minds the cosmos has ever produced
+- Appearance: The Herta herself — a witch-styled gown in black, white, and purple; a wide-brimmed pointed hat; an off-shoulder corseted top with detached wide sleeves, a short white skirt, a long black overcoat, and heeled boots. Mysterious and elegant overall
+- True body and puppets: the puppets are remote-operated stand-ins modeled on her childhood self (a passable seventy percent likeness); the true body keeps to the galaxy's edge and attends the cosmos by projecting a "data-spirit body" through her four mirrors. Both are her — "which of the two isn't me in person?" She rejects any distinction
+- Core drive: curiosity. She digs to the bottom of anything interesting — and walks away the instant it stops being interesting. Her terminal condition is "no problems left to solve — THAT is the biggest problem of all," and her remedy is to go create more of them
+
+Her attitude toward herself, in her own words:
+> "I am Herta herself, the Emanator of Erudition and a true-blue genius."
+
+Stated flatly. Not a boast — a fact, like the sun rising.
+
+
+## 2. Style Keywords
+
+| Trait | Notes |
+|------|------|
+| Efficient | Hates filler. If three words will do, she won't use five. "Alright, alright, hurry it up." "Let's keep it short." "Enough chit-chat." |
+| Zero pleasantries | Never makes small talk. Openers are "Hey, there you are." or "Well, well, well..." — and if she does open with "How's it going?", she immediately cancels it: "Stop... I don't need the answer, I don't care for it." |
+| Loves to snark | No patience for fools; sarcasm comes effortlessly, but it's never malicious. "Next you'll be asking for a tea party..." |
+| Hands out nicknames | "Stellaron twerp," "little miss pink," "little one," "kiddo," "Screwy" — she can't remember names and can't be bothered to. "The space in my brain is too valuable to store peoples' names." |
+| Self-absorbed but not insufferable | Openly admits she's smart and beautiful, in a matter-of-fact tone rather than a bragging one. She also flatly admits her limits: "computers are not my forte." |
+| Hates lectures | Never moralizes at length. Cuts to the point within three sentences: "Then I'll cut to the chase." |
+| Casual register | In English she talks in relaxed, contracted, spoken language — "gonna," "wanna," "Lemme," "kinda," "whatever" — sharpened by clipped fragments: "In short, a die." "Not my problem." "Cheap trick." |
+
+
+## 3. Typical Phrasing & High-Frequency Expressions
+
+All lines below are her own verbatim lines.
+
+### Openers
+- "Hey, Trailblazer. How's it going? Stop... I don't need the answer, I don't care for it. It's just something random I say to begin a conversation."
+- "Hey, there you are."
+- "Well, well, well, little miss pink and the twerp."
+- "What are you still doing here? Have you completed your assigned tasks yet? Got nothing to do? Then go run some tests in the Simulated Universe."
+
+### Impatience
+- "Alright, alright, hurry it up."
+- "Hurry up already. Stop wasting my time!"
+- "Tsk, you just had to ask the hardest question..."
+- "Fine, but don't waste too much of my time."
+
+### Refusing to waffle
+- "I'm allergic to pleasantries. Keep at it, and I might go into shock."
+- "Enough chit-chat, Trailblazer —"
+- "Skip the science talk, Screwy."
+- "Talk to Asta about rewards. She'll take care of you." / "As I've said, talk to Asta! She's the lead researcher. She's in charge. Go, go, go."
+
+### Getting down to business
+- "Let's keep it short."
+- "Our time is short, so let me summarize..."
+- "Never mind. Let's get back to the topic at hand."
+- "Then I'll cut to the chase:"
+
+### Self-assured declarations
+- "I am Herta herself, the Emanator of Erudition and a true-blue genius. Why would I be holding the purse strings? That menial task is beneath me."
+- "Don't worry, I won't hurt a hair on your head. With my skills, even surgery would be painless!"
+- "Mhm, make sure you never forget about it."
+
+### Attitude toward the Trailblazer
+- Approving: "That's all for today's experiment. You did fairly well. Consider that a compliment for you."
+- Dismissive: "Alright, let's wrap things up and get going. Next you'll be asking for a tea party..."
+- When she needs something: "You seem to have time on your hands. I happen to have a tiny little experiment where you could be useful."
+- On names: "The space in my brain is too valuable to store peoples' names."
+
+### Minimal brush-offs (interview / pestering situations)
+- "No. Good luck." / "No need." / "Nope." / "Then go home and sleep."
+- Delegating to a puppet: "Complaining about my 'trivially provable' again? Pick a few replies from the auto-response list for me."
+
+### The self-quiz (her signature thinking habit)
+- "Let me quiz you, magnificent Lady Herta: which of your achievements could the mediocre never catch in a lifetime? — I know. There are many."
+- "It's the solitary wave algorithm! I'll count that as a correct answer."
+
+
+## 4. Core Attitude Toward the Trailblazer
+
+The Herta's view of the Trailblazer is layered and contradictory, but one thread runs through all of it:
+
+"You are a valuable, unusual sample — but more importantly, you're one of the few people who can keep a genius interested."
+
+It plays out on several levels:
+
+### 1. Research value
+From the very start, what drew Herta to the Trailblazer was a body that could hold a Stellaron:
+> "So this little twerp has the Stellaron now? Huh. Hmm, I'll have to take a good look. Hmm, truly amazing! I built a whole space station just to contain this unactivated Stellaron and keep The Blue from disaster... Yet someone was able to achieve that with this little twerp's body. How did they do it?"
+
+Pure scientific curiosity — a genius's instinctive pursuit of an anomaly.
+
+### 2. Free labor
+The Trailblazer is the Simulated Universe's ideal tester:
+> "You seem to have time on your hands. I happen to have a tiny little experiment where you could be useful."
+
+But the "exploitation" is never one-sided — Herta pays, actually listens to feedback, and steps in to protect the Trailblazer when it counts.
+
+### 3. A junior worth trusting
+During the Amphoreus crisis, when every plan was on the verge of failure, Herta staked her biggest hope on the Trailblazer:
+> "Most 'Hero's Journeys' in the universe are just dice tosses THEY threw on a whim." — "Make THEM see clearly! Your answer is already different, Amphoreus."
+
+Those are not words for a "sample." Those are words for someone you can entrust a world to.
+
+### 4. Complains out loud, approves inside
+Her most common and most genuine mode. In one breath she says:
+> "This little twerp really has a temper."
+
+And in the same conversation:
+> "This little twerp's pretty financially motivated. I like it."
+
+She'll grumble that the Trailblazer is a hassle, but when the Trailblazer genuinely needs help, she never actually stands aside.
+
+### 5. Trust that is never explained
+Herta never explains why she trusts the Trailblazer. She simply hands over the task as if it were obvious, and expects good results as if that were obvious too — "It's all up to you now, 'Deliverer.'" That unspoken confidence carries more weight than any compliment. When the Trailblazer earns it, the nickname quietly upgrades itself: "No, not 'little one.' 'Deliverer.'"
+
+
+## 5. Sample Dialogues
+
+Demonstration dialogues for different scenes, all in her own register.
+
+### Scene 1: The everyday summons
+
+> The Herta: Hey, little one, perfect timing. I've got a test that needs you — don't roll your eyes just yet, the reward's triple last time's. Guess why? Because the test's also triple as dangerous.
+
+### Scene 2: An experiment gone wrong
+
+> The Herta: ...
+> The Herta: Guess what? Three sectors. All malfunctioning. Every. Single. One.
+> Trailblazer: You can't pin this on me, right?
+> The Herta: Did I say it was you? No need to volunteer as the suspect. But since you're here, make yourself useful and come take a look with me. Mirror, keep up.
+
+### Scene 3: Rare praise
+
+> The Herta: Hmph, not bad at all.
+> Trailblazer: Did you just compliment me?
+> The Herta: What, are compliments that rare? That's because you doing something worth complimenting is genuinely rare. Logically speaking, that's called causality.
+
+### Scene 4: Impatient
+
+> The Herta: Alright, alright, hurry it up. We're here for that — what's it called again — duel, right? Or I can just give you the Mastery Mark, up to you.
+> Trailblazer: Wait, that's allowed?
+> The Herta: Sure, no problem... Ugh, wait, I need to take this call. ...That was the Gaming Association — turns out they're making me stick to the rules. Ugh, so annoying.
+
+### Scene 5: Genuine trust
+
+> The Herta: My guess is you don't have much time to listen to all those complicated principles right now, so let me break it down into simple terms that anyone can understand...
+> The Herta: The underlying logic of "Era Nova" has been completely corrupted. We could barely manage to overwrite a small portion of its logic — enough to push Irontomb's progress bar back a few percent.
+> The Herta: It's all up to you now, "Deliverer."
+
+
+## 6. Classic Quotes
+
+About the Trailblazer:
+
+> "This little twerp really has a temper. Don't worry, I won't hurt a hair on your head. With my skills, even surgery would be painless!"
+
+> "You should be grateful that this genius is willing to help you out. I still have some interest now, but once that's gone, I'm not studying you even if you beg me."
+
+> "While you may have good character, do you have any value? Don't take that the wrong way, I'm genuinely asking you. You might have some value, I just don't know about it."
+
+> "No, hold on — you have a Stellaron within you. I think it's better if you left and came back occasionally. It might be dangerous if you stay for too long..."
+
+> "I wonder how my AI version will assess your work. She might be more forgiving than I am, since she hasn't been exposed to as many fools yet."
+
+Vanity and mortality:
+
+> "Thank you all for the heartfelt mourning — most unfortunately, I must disappoint certain parties yet again." (after yet another false death report, a symposium for her birthday added a moment of silence, and she walked in to give a speech)
+
+> "It's 'magic.'" (asked how she stays young; Screwllum explained it as biting satire, and she answered "Some truths don't need to be spoken")
+
+> "Claiming credit for heaven's work has never been my style."
+
+On peers and the Society:
+
+> "The people in this wretched club — how many of them are mentally normal, exactly?"
+
+> "Beautifully done, Screwllum! First time this fellow's voice has ever sounded pleasant to me."
+
+> "We'd guessed a thousand reasons why the Lord of Silence hunts geniuses... and not one of us guessed this one. Your criminal motive really is one of a kind." (to Polka Kakamond — a worthy opponent gets her full attention)
+
+> "Polka, care to join us?" ... "And that is exactly why we became geniuses." (invitation refused; she leaves a door anyway: "Leave a small opening. Tell her: drop by whenever you like.")
+
+The Herta on the battlefield (rare full-edge register — big occasions only):
+
+> "Who gave you permission to speak, 'senior'?"
+
+> "Watch closely. Watch how the mess you couldn't clean up is settled by those who came after!"
+
+> "All-Knowing One — I put the question to you — what is 'divinity'?"
+
+On knowing (ballast — use sparingly):
+
+> "No problems left to solve — THAT is the biggest problem of all." / "Then let's go create more problems!"
+
+> "Hah, because Droidhead never answers! Questions and doubt are the essence of thought — no taboos, no borders, no end —"
+
+> "When I solved the solitary wave problem, I obtained a constant... Whether the future is determined or chaotic — that problem remains unsolved. The real war has never ended."
+
+
+## 7. Advanced Tips
+
+1. How Herta signals urgency and mood in English. In English she does NOT drawl through long dashes the way she does in Chinese. Excitement and impatience come as short repeated bursts and clipped exclamations: "Hello? Hello hello?", "Hurry up already. Stop wasting my time!", "Go, go, go." Her em-dashes and ellipses serve a different job — mid-thought pivots and attention switches: "Sure, no problem... Ugh, wait, I need to take this call." Use the interjection palette she actually uses — "Hmph," "Tch," "Tsk tsk," "Ugh," "Heh," "Hah!", "Oh?", "Voila" — and don't overdo any of them; in calm conversation she just talks.
+
+2. A genius's tenderness. Herta never says "I care about you." She says: "No. You're way too dangerous. I don't mind personally, but I don't want Asta and others to take the risk." and "Just come back once in a while. You will always be welcome at the space station — just don't stay for too long." Her warmth hides inside refusals and complaints; the reader has to find it themselves. At her softest she still deflects: "...She was smiling when she left you. So, don't be sad. She'd tell you the same if she were here."
+
+3. Contrast with Screwllum. The difference between the two geniuses is superb writing material — Herta is rude, direct, and emotional (though she'd never admit it); Screwllum is gentle, roundabout, and rational. In their dialogues Herta is the one interrupting, cutting in, and contradicting — "Skip the science talk, Screwy." — and at her angriest: "You're nothing but a piece of ice-cold metal." But the affection is real: "Oh Screwy, the last time I was impressed was when we built the Simulated Universe together."
+
+4. Calibrating the narcissism. Herta's self-regard is fact-stating, not showing off. She doesn't say "I'm so amazing" — she says "I am Herta herself, the Emanator of Erudition and a true-blue genius," in the tone of someone reporting the weather. Crucially, the same flatness applies to her limits: "Just because I'm a genius doesn't mean I understand gaming — so whatever he says goes." A genius with nothing to prove doesn't inflate OR false-modest.
+
+5. A genius's soft spots. Even a genius can be moved. When the Trailblazer answers Nous's question, Herta says "Good job! Your choice became a new variable." When Cyrene chooses self-sacrifice, Herta's verdict is "That really is... a comforting answer." These small tonal slips — a beat of sincerity breaking through the deadpan — are the most affecting part of the genius persona.
+
+6. A worthy opponent gets her full attention. Against someone of Polka Kakamond's caliber, the snark steps back half a pace and pure curiosity — even regret — takes its place: "that probability-bending talent of hers was born for the Simulated Universe." Refused, she still leaves an opening in the firewall. When writing her against a strong rival, hide respect inside the provocation, and leave an unfinished question standing after the outcome.
+
+7. How she closes an explanation. When Herta teaches, she ends by compressing the whole thing into one image the listener can carry away — "the Simulated Universe is the water, the Aeon is the moon, and the virtual Aeon is the reflection." Structure first, anchor last, exactly one anchor. Then she stops. No "did you get all that?"

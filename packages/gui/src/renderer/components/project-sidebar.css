@@ -1,0 +1,261 @@
+.herta-project-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+.herta-nav-project-row,
+.herta-nav-task {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 2px;
+}
+.herta-sidebar .herta-project-sidebar button {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  min-height: 36px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  font: inherit;
+  color: var(--herta-secondary);
+}
+.herta-project-sidebar button:hover {
+  background: var(--herta-hover);
+  color: var(--herta-text);
+}
+.herta-project-sidebar button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.herta-nav-project-title,
+.herta-nav-task-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  text-align: left;
+  min-width: 0;
+}
+.herta-nav-project-title > .herta-nav-label,
+.herta-nav-task-title > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.herta-nav-task-title[aria-current="page"] {
+  background: var(--herta-hover);
+  color: var(--herta-text);
+}
+.herta-nav-tasks {
+  padding-left: 25px;
+}
+.herta-nav-pin {
+  color: var(--herta-gold);
+  font-size: 9px;
+}
+.herta-nav-actions {
+  position: relative;
+  flex: none;
+}
+.herta-nav-actions > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 5px;
+  color: var(--herta-secondary);
+}
+.herta-nav-actions > summary:hover {
+  background: var(--herta-hover);
+}
+.herta-nav-menu {
+  position: absolute;
+  z-index: 15;
+  top: 100%;
+  right: 0;
+  width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: 5px;
+  background: var(--herta-panel);
+  border: 1px solid var(--herta-border);
+  border-radius: 8px;
+  box-shadow: 0 5px 18px #0005;
+}
+.herta-nav-menu button {
+  text-align: left;
+}
+.herta-nav-path {
+  padding: 5px 7px;
+  color: var(--herta-secondary);
+}
+.herta-nav-path summary {
+  cursor: pointer;
+}
+.herta-nav-path span {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 5px;
+  font-size: 11px;
+}
+.herta-nav-empty,
+.herta-nav-hint {
+  color: var(--herta-secondary);
+  margin: 4px 7px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.herta-nav-recycle {
+  border-top: 1px solid var(--herta-border);
+  padding-top: 8px;
+  color: var(--herta-secondary);
+}
+.herta-nav-recycle > summary {
+  cursor: pointer;
+  padding: 4px 7px;
+}
+.herta-nav-recovery {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+}
+.herta-nav-recovery > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.herta-nav-recovery > button {
+  flex: none;
+}
+.herta-nav-edit {
+  display: grid;
+  gap: 8px;
+  margin: 5px;
+  padding: 10px;
+  background: var(--herta-panel);
+  border: 1px solid var(--herta-border);
+  border-radius: 8px;
+}
+.herta-nav-edit p {
+  margin: 0;
+  line-height: 1.5;
+}
+.herta-nav-edit label {
+  display: grid;
+  gap: 6px;
+}
+.herta-nav-edit input[type="text"] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  background: var(--herta-bg);
+  color: var(--herta-text);
+  border: 1px solid var(--herta-border);
+  border-radius: 4px;
+  padding: 5px;
+  font: inherit;
+}
+.herta-nav-edit .herta-nav-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.herta-nav-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin: 0;
+  flex: none;
+}
+.herta-nav-edit-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* Keep navigation rows independent from the shell's form and details rules. */
+.herta-nav-group + .herta-nav-group {
+  margin-top: 16px;
+}
+.herta-sidebar .herta-nav-group-label {
+  margin: 8px 9px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--herta-muted);
+}
+.herta-nav-project-row,
+.herta-nav-task {
+  min-height: 36px;
+  border-radius: 7px;
+}
+.herta-nav-project-row:hover,
+.herta-nav-task:hover {
+  background: var(--herta-panel);
+}
+.herta-nav-task.is-active {
+  background: var(--herta-elevated);
+}
+.herta-sidebar
+  .herta-project-sidebar
+  .herta-nav-task-title[aria-current="page"] {
+  background: transparent;
+  color: var(--herta-text);
+}
+.herta-sidebar .herta-project-sidebar .herta-nav-project-title {
+  color: var(--herta-text);
+}
+.herta-nav-folder {
+  flex: 0 0 18px;
+}
+.herta-nav-label {
+  flex: 1;
+}
+.herta-nav-chevron {
+  width: 10px;
+  flex: none;
+  color: var(--herta-muted);
+}
+.herta-sidebar .herta-project-sidebar .herta-nav-new {
+  flex: 0 0 28px;
+  padding: 0;
+}
+.herta-nav-actions > summary {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 36px;
+  padding: 0;
+}
+.herta-nav-actions > summary::-webkit-details-marker {
+  display: none;
+}
+.herta-nav-task > .herta-nav-actions,
+.herta-nav-project-row > .herta-nav-actions,
+.herta-nav-project-row > .herta-nav-new {
+  opacity: 0.45;
+}
+.herta-nav-task:is(:hover, :focus-within) > .herta-nav-actions,
+.herta-nav-project-row:is(:hover, :focus-within) > .herta-nav-actions,
+.herta-nav-project-row:is(:hover, :focus-within) > .herta-nav-new,
+.herta-nav-actions[open] {
+  opacity: 1;
+}
+.herta-sidebar .herta-project-sidebar details button {
+  margin-top: 0;
+}
+.herta-sidebar .herta-project-sidebar .herta-nav-menu button {
+  width: 100%;
+  min-height: 32px;
+}
+.herta-nav-menu {
+  width: min(230px, calc(var(--herta-sidebar-width, 260px) - 24px));
+}
+.herta-sidebar .herta-nav-tasks > .herta-nav-empty {
+  margin: 5px 7px 8px;
+}
+.herta-project-sidebar :is(button, summary):focus-visible {
+  outline: 2px solid var(--herta-focus);
+  outline-offset: -2px;
+}

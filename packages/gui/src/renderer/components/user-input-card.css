@@ -1,0 +1,85 @@
+.herta-question-card {
+  width: calc(100% - 48px);
+  max-width: 880px;
+  box-sizing: border-box;
+  margin: 8px auto;
+  padding: 16px;
+  border: 1px solid var(--herta-border);
+  border-radius: 12px;
+  background: var(--herta-panel);
+  max-height: 52vh;
+  overflow-y: auto;
+}
+.herta-question-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.herta-question-card header span {
+  font-size: 12px;
+  color: var(--herta-secondary);
+}
+.herta-question-card fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0 0 16px;
+  min-width: 0;
+}
+.herta-question-card legend {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.herta-r3 .herta-question-option {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.herta-question-option:hover {
+  background: var(--herta-hover);
+}
+.herta-r3 .herta-question-option input {
+  width: 17px;
+  height: 17px;
+  min-height: 17px;
+  flex: 0 0 17px;
+  padding: 0;
+  margin: 3px 0 0;
+  accent-color: var(--herta-accent);
+}
+.herta-question-option small {
+  display: block;
+  color: var(--herta-secondary);
+}
+.herta-question-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.herta-question-text textarea {
+  min-height: 64px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid var(--herta-border);
+  border-radius: 8px;
+  background: var(--herta-bg);
+  color: var(--herta-text);
+  font: inherit;
+}
+.herta-question-card footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.herta-question-card footer button:first-child {
+  border-color: var(--herta-accent);
+}
+.herta-question-card [role="alert"] {
+  color: var(--herta-error);
+}

@@ -1,0 +1,10 @@
+data: {"id":"x","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"thinking..."}}]}
+
+data: {"id":"x","choices":[{"index":0,"delta":{"reasoning_content":" more"}}]}
+
+data: {"id":"x","choices":[{"index":0,"delta":{"content":"Answer."}}]}
+
+data: {"id":"x","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: [DONE]
+

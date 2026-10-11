@@ -1,0 +1,28 @@
+﻿packages:
+  - "packages/*"
+  - "website"
+
+# pnpm 10+ blocks dependency build scripts by default and (v11) ignores the
+# package.json "pnpm" field entirely — without this allow-list, a plain-pnpm
+# install skips electron's postinstall, the binary never downloads, and
+# `electron-vite dev` dies with "Error: Electron uninstall". The corepack-
+# pinned pnpm 9.15 ignores these keys (it runs build scripts by default).
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+  - better-sqlite3
+
+# Home of the setting pnpm 11 reports as ignored in package.json
+# ("pnpm.peerDependencyRules" — kept there too for pnpm 9).
+peerDependencyRules:
+  ignoreMissing:
+    - electron-builder-squirrel-windows
+
+# ADR 0038: pdfjs-dist lists @napi-rs/canvas as an optional NATIVE dependency
+# for rendering. Text extraction never uses it, the packaged app ships no
+# node_modules so it could never load it — and its presence in dev only would
+# have hidden that pdfjs needs a DOMMatrix stub (works on every dev machine,
+# throws in every installed copy). "-" removes it from the graph. Duplicated in
+# package.json's pnpm.overrides for pnpm 9, which ignores this file's key.
+overrides:
+  "@napi-rs/canvas": "-"

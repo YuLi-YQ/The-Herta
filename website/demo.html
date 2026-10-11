@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Herta — live demo</title>
+    <style>
+      /* Cold-start splash — same trick as the app's index.html: paints before
+         the CSS bundle so the cyan gradient never flashes. App removes it. */
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        background: #eef6f9;
+        z-index: 40;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="boot-splash"></div>
+    <div id="root"></div>
+    <script type="module" src="/src/demo-main.tsx"></script>
+  </body>
+</html>
