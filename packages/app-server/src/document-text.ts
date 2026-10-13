@@ -539,7 +539,11 @@ function extractDocxText(bytes: Uint8Array): ExtractedDocument {
   let xml: string;
   try {
     const parts = unzipSync(bytes, {
-      filter: (file) => file.name === DOCX_MAIN_PART,
+      filter: (file) => {
+        if (file.name !== DOCX_MAIN_PART) return false;
+        if (file.originalSize > 8 * 1024 * 1024) throw new Error("Word XML exceeds extraction limit");
+        return true;
+      },
     });
     const main = parts[DOCX_MAIN_PART];
     // A zip without the Word main part is some other OOXML (or any zip) that

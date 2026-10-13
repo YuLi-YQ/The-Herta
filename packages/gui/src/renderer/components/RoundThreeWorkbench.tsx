@@ -1,5 +1,6 @@
 import { HertaChat } from "./HertaChat.js";
 import welcomePortrait from "../assets/great-herta-welcome-v1.png";
+import { WorkbenchSearch } from "./WebSearch.js";
 import { ComposerModelPicker } from "./ComposerModelPicker.js";
 import type {
   RoundFileContent,
@@ -1583,6 +1584,7 @@ export function RoundThreeWorkbench(): JSX.Element {
                       <option value="full-access">完全访问</option>
                     </select>
                   </label>
+                  <WorkbenchSearch readiness={readiness} sessionId={session.sessionId} busy={busy} refresh={refreshWorkbench} />
                   <details className="herta-composer-options">
                     <summary title="权限应用范围">···</summary>
                     <label>

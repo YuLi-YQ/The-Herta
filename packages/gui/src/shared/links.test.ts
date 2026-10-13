@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isAllowedExternalUrl, NETDISK_URL } from "./links.js";
+import { isAllowedExternalUrl, isPublicWebUrl, NETDISK_URL } from "./links.js";
+
+it('permits explicit public web links without application protocols or private hosts', () => {
+  expect(isPublicWebUrl('https://www.python.org/doc/')).toBe(true);
+  for (const url of ['file:///C:/x.exe','javascript:alert(1)','https://secret@python.org','http://127.0.0.1','http://[::1]','http://x.local','https://example.com:9999']) expect(isPublicWebUrl(url)).toBe(false);
+});
 
 describe("isAllowedExternalUrl", () => {
   it("admits https links to the allowlisted hosts and nothing else", () => {

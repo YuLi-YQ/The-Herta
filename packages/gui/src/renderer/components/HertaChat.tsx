@@ -1,4 +1,7 @@
+import { webSearchSupport } from "@herta/providers/web-search";
+import { SearchToggle, SearchResults } from "./WebSearch.js";
 import { reasoningChoices } from "@herta/providers/reasoning";
+import { imageSupport, imageDataURL } from "@herta/providers/images";
 import { useEffect, useRef, useState } from "react";
 import {
   chatContextStart,
@@ -71,6 +74,11 @@ export function HertaChat({
   const [state, setState] = useState<HertaChatSnapshot>(empty);
   const activeRef = useRef<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [webSearch, setWebSearch] = useState(false);
+  useEffect(() => { setWebSearch(!!state.activeId && localStorage.getItem(`the-herta.chat-search.${state.activeId}`) === "true"); }, [state.activeId]);
+  const [importing, setImporting] = useState(false);
+  const importGeneration = useRef(0);
+  useEffect(() => { importGeneration.current++; }, [state.activeId]);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   useEffect(() => setAttachments([]), [state.activeId]);
   const [budget, setBudget] = useState<number>(defaultChatOutputBudget);
@@ -81,6 +89,8 @@ export function HertaChat({
       modelId: string;
       label: string;
       efforts: readonly string[];
+      search: boolean;
+      images: boolean;
     }[]
   >([]);
   const [defaultModel, setDefaultModel] = useState("");
@@ -156,6 +166,8 @@ export function HertaChat({
               modelId: m.id,
               label: `${p.name} · ${m.id}`,
               efforts: reasoningChoices(p, m.id),
+              search: webSearchSupport(p, m.id),
+              images: imageSupport(p, m.id),
             })),
         );
         setModels(options);
@@ -239,13 +251,14 @@ export function HertaChat({
   const send = async () => {
     const model = models.find((m) => m.key === selected),
       chatId = state.activeId;
-    if (!draft.trim() || !model || busy || !bridge.sendHertaChat || !chatId)
+    if (importing || !draft.trim() || !model || busy || !bridge.sendHertaChat || !chatId)
       return;
     const submitted = draft;
     setSending(true);
     setError(null);
     try {
       const result = await bridge.sendHertaChat({
+        ...(webSearch && model.search ? { webSearch: true } : {}),
         chatId,
         text: submitted,
         ...(attachments.length ? { attachments } : {}),
@@ -463,10 +476,12 @@ export function HertaChat({
                   <MessageTime at={m.at} />
                   {m.attachments?.map((attachment, n) => (
                     <details key={n} className="herta-chat-attachment">
-                      <summary>附件 · {attachment.name}</summary>
-                      <pre>{attachment.text}</pre>
+                      <summary>附件 · {attachment.name}{attachment.pages ? ` · ${attachment.pages}页` : ""}</summary>
+                      {attachment.format && <p>提取文字 · 不含图片与原始版式</p>}
+                      {attachment.image ? <img className="herta-chat-image" alt={attachment.name} src={imageDataURL(attachment.image)} /> : <pre>{attachment.text}</pre>}
                     </details>
                   ))}
+                  <SearchResults events={m.searches} running={m.status === 'streaming'} />
                   {m.reasoning && (
                     <details className="herta-chat-reasoning">
                       <summary>
@@ -599,14 +614,20 @@ export function HertaChat({
                 </div>
               </details>
             )}
+            {(attachments.some(a => a.image) || state.messages.slice(state.contextStart).some(m => m.attachments?.some(a => a.image))) && (
+              <p className="herta-chat-image-notice">{models.find(m => m.key === selected)?.images ? "图片将随当前续聊内容发送给所选模型。" : "当前模型尚未适配图片阅读，请切换视觉模型或移除本次及续聊范围中的图片。"}</p>
+            )}
             {attachments.length > 0 && (
               <ul className="herta-chat-pending-files">
                 {attachments.map((a, i) => (
                   <li key={i}>
-                    {a.name}
+                    <details><summary>{a.name}{a.pages ? ` · ${a.pages}页` : ""}</summary>
+                      {a.format && <p>发送提取文字，不含图片、原始版式与批注。请先检查内容。</p>}
+                      {a.image ? <img className="herta-chat-image" alt={a.name} src={imageDataURL(a.image)} /> : <pre>{a.text}</pre>}
+                    </details>
                     <button
                       type="button"
-                      disabled={busy}
+                      disabled={busy || importing}
                       onClick={() =>
                         setAttachments((v) => v.filter((_, n) => n !== i))
                       }
@@ -638,39 +659,34 @@ export function HertaChat({
             />
             <div className="herta-chat-controls">
               <label className="herta-chat-upload">
-                ＋ 附加文本文件
-                <input
-                  type="file"
-                  multiple
-                  disabled={busy || !active}
-                  accept=".txt,.md,.csv,.json,.xml,.yaml,.yml,.html,.css,.js,.ts,.tsx,.jsx,.py,.rs,.go,.java,.c,.cpp,.h,.sql,.log"
+                {importing ? "正在读取附件…" : "＋ 附加文件"}
+                <input type="file" multiple aria-label="附加文件"
+                  disabled={busy || !active || importing}
+                  accept=".txt,.md,.csv,.json,.xml,.yaml,.yml,.html,.css,.js,.ts,.tsx,.jsx,.py,.rs,.go,.java,.c,.cpp,.h,.sql,.log,.pdf,.docx,.png,.jpg,.jpeg"
                   onChange={async (e) => {
-                    const files = Array.from(e.target.files ?? []);
-                    e.target.value = "";
-                    const chatId = state.activeId;
+                    const files = Array.from(e.target.files ?? []); e.target.value = "";
+                    if (!files.length || importing) return;
+                    const chatId = state.activeId, generation = importGeneration.current;
+                    setImporting(true); setError(null);
                     try {
-                      if (files.some((f) => f.size > 128000)) throw new Error();
-                      const uploaded = await Promise.all(
-                        files.map(async (f) => ({
-                          name: f.name,
-                          text: new TextDecoder("utf-8", {
-                            fatal: true,
-                          }).decode(await f.arrayBuffer()),
-                        })),
-                      );
-                      const next = validateChatAttachments([
-                        ...attachments,
-                        ...uploaded,
-                      ]);
-                      if (activeRef.current === chatId) setAttachments(next);
-                    } catch {
-                      setError(
-                        "请选择 UTF-8 文本或代码文件，最多4个，每个32000字、合计64000字。",
-                      );
-                    }
+                      if (attachments.length + files.length > 4) throw new Error("每条消息最多附加4个文件。");
+                      if (!bridge.parseChatFile) throw new Error("附件读取服务不可用，请重启应用。");
+                      const uploaded: ChatAttachment[] = [];
+                      for (const file of files) {
+                        if (file.size > 4 * 1024 * 1024) throw new Error("单个附件不能超过4 MB。");
+                        const result = await bridge.parseChatFile(file.name, new Uint8Array(await file.arrayBuffer()));
+                        if (!result.ok) throw new Error(result.message);
+                        uploaded.push(result.attachment);
+                      }
+                      const next = validateChatAttachments([...attachments, ...uploaded]);
+                      if (activeRef.current === chatId && importGeneration.current === generation) setAttachments(next);
+                    } catch (e) {
+                      if (activeRef.current === chatId && importGeneration.current === generation) setError(e instanceof Error ? e.message : "附件未能读取。");
+                    } finally { setImporting(false); }
                   }}
                 />
               </label>
+              <SearchToggle supported={models.find(m => m.key === selected)?.search === true} enabled={webSearch} disabled={busy || !active} onChange={value => { setWebSearch(value); if (state.activeId) localStorage.setItem(`the-herta.chat-search.${state.activeId}`, String(value)); }} />
               <select
                 aria-label="聊天模型"
                 value={selected}
@@ -757,7 +773,7 @@ export function HertaChat({
               ) : (
                 <button
                   type="button"
-                  disabled={busy || !draft.trim() || !selected || !active}
+                  disabled={importing || busy || !draft.trim() || !selected || !active}
                   onClick={() => void send()}
                 >
                   发送 ↑

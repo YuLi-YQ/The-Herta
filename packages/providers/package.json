@@ -7,7 +7,9 @@
   "sideEffects": false,
   "exports": {
     ".": "./dist/index.js",
-    "./reasoning": "./dist/reasoning.js"
+    "./reasoning": "./dist/reasoning.js",
+    "./web-search": "./dist/web-search.js",
+    "./images": "./dist/images.js"
   },
   "files": [
     "dist"

@@ -518,6 +518,7 @@ export interface HertaBridge {
   manageHertaChat?: (
     action: import("../../shared/herta-chat.js").HertaChatAction,
   ) => Promise<import("../../shared/herta-chat.js").HertaChatSnapshot>;
+  parseChatFile?: (name: string, bytes: Uint8Array) => Promise<import("../../shared/herta-chat.js").ChatFileResult>;
   saveChatFile?: (name: string, content: string) => Promise<{saved: boolean; failed?: boolean}>;
   getProviderSettings(): Promise<ProviderSettingsView>;
   getProviderReadiness?(sessionId?: string): Promise<ProviderReadiness>;

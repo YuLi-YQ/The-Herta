@@ -379,6 +379,7 @@ export function RoundResults({ round, onRead, loadFile }: RoundResultsProps) {
           <span className="round-process-hint">查看过程</span>
         </summary>
         <div className="round-process-body">
+          <SearchResults events={round.searches} running={round.status === 'running'} />
           {round.publicReasoning
             ?.filter((item) => item.text.trim())
             .map((item) => (
@@ -577,3 +578,4 @@ export function RoundResults({ round, onRead, loadFile }: RoundResultsProps) {
     </section>
   );
 }
+import { SearchResults } from "./WebSearch.js";

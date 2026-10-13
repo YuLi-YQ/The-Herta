@@ -346,3 +346,7 @@ body,
 .herta-waiting { color: var(--herta-secondary); font-weight: normal; }
 
 .herta-message-time { display: block; color: var(--herta-muted); font-size: 11px; line-height: 1.6; margin: 4px 0 10px; font-variant-numeric: tabular-nums; }
+.herta-search-toggle { white-space: nowrap; flex: 0 0 auto; padding: 6px 10px; border-radius: 8px; }
+.herta-search-toggle[aria-pressed="true"] { box-shadow: inset 0 0 0 1px currentColor; }
+.herta-search-results { margin: 12px 0; padding: 10px 14px; border: 1px solid #60526f; border-radius: 10px; min-width: 0; }
+.herta-search-results a { display: block; overflow-wrap: anywhere; color: inherit; text-decoration: underline; margin: 5px 0; }

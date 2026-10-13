@@ -1,3 +1,4 @@
+import { mergeSearchEvent } from "@herta/providers";
 import { createHash, randomUUID } from "node:crypto";
 import {
   existsSync,
@@ -113,6 +114,11 @@ export function lineCounts(
 
 /** Append-only historical snapshots; synchronous event boundaries capture before execution. */
 export class RoundStore {
+  search(event: import("@herta/providers").WebSearchEvent): void {
+    if (!this.active) return;
+    mergeSearchEvent(this.active.summary.searches ??= [], event);
+    this.persist();
+  }
   reasoning(
     id: string,
     role: "persona" | "executor",

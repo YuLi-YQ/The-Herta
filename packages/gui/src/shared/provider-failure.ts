@@ -49,6 +49,7 @@ export function safeProviderFailure(error: unknown): WorkbenchFailure {
       message: "模型请求超时。已保存的结果保留，请检查连接后主动重试。",
       action: "retry",
     };
+  if (code === "search-limit") return { ...base, stage: "stream", code: "search-limit", message: "本次搜索达到次数或续接上限，已保留收到的内容。可缩小问题范围后继续。", action: "retry" };
   if (code === "sse" || code === "stream-interrupted")
     return {
       ...base,

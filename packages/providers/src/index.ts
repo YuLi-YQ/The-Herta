@@ -64,3 +64,6 @@ export {
 } from "./usage.js";
 
 export { reasoningChoices } from "./reasoning.js";
+
+export { webSearchSupport, webSource, mergeSearchEvent, boundedSearchEvents } from "./web-search.js";
+export type { WebSearchEvent } from "./web-search.js";

@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { safeProviderFailure } from "./provider-errors.js";
 
 it.each([
+  [{ code: "search-limit" }, "search-limit", "stream"],
   [{ status: 401 }, "authentication", "request"],
   [{ status: 403 }, "authentication", "request"],
   [{ status: 404 }, "model-not-found", "request"],

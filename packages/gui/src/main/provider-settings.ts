@@ -17,7 +17,7 @@ import type {
   RoleBindings,
   TurnProviderSnapshot,
 } from "@herta/providers";
-import { reasoningChoices } from "@herta/providers";
+import { webSearchSupport, reasoningChoices } from "@herta/providers";
 import { app, safeStorage } from "electron";
 import type {
   ProviderReadiness,
@@ -213,7 +213,8 @@ function load(): ProviderSettings {
     const checkBindings = (b: RoleBindings) => {
       onlyKeys(b, ["persona", "executor"]);
       for (const binding of [b.persona, b.executor]) {
-        onlyKeys(binding, ["providerId", "modelId", "reasoningEffort"]);
+        onlyKeys(binding, ["providerId", "modelId", "reasoningEffort", "webSearch"]);
+        if (binding.webSearch !== undefined && typeof binding.webSearch !== "boolean") throw new Error();
         if (binding.reasoningEffort !== undefined) {
           const provider = settings.providers.find(
             (p) => p.id === binding.providerId,
@@ -507,6 +508,7 @@ export function setProviderBindings(
       )
         throw new Error("绑定的 Provider 或模型不存在。");
       const provider = settings.providers.find((p) => p.id === providerId)!;
+      if (item.webSearch !== undefined && (typeof item.webSearch !== "boolean" || (item.webSearch && !webSearchSupport(provider, modelId)))) throw new Error("当前连接或模型尚不支持联网搜索。");
       const effort = item.reasoningEffort;
       if (
         effort !== undefined &&
@@ -518,6 +520,7 @@ export function setProviderBindings(
         providerId,
         modelId,
         ...(typeof effort === "string" ? { reasoningEffort: effort } : {}),
+        ...(item.webSearch === true ? { webSearch: true } : {}),
       };
     };
     return { persona: binding(b.persona), executor: binding(b.executor) };

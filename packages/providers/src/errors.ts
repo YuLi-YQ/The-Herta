@@ -1,4 +1,5 @@
 export type ProviderErrorCode =
+  | "search-limit"
   | "missing-key"
   | "http"
   | "network"

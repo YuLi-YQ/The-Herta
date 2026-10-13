@@ -36,3 +36,15 @@ export function isAllowedExternalUrl(url: string): boolean {
     EXTERNAL_HOSTS.has(parsed.hostname)
   );
 }
+/** Explicit user-clicked web citations; never file/application protocols or credentials. */
+export function isPublicWebUrl(value: string): boolean {
+  if (value.length > 4096) return false;
+  try {
+    const u = new URL(value);
+    const host = u.hostname.toLowerCase();
+    return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password &&
+      !host.includes(':') && !host.startsWith('[') && !/^\d+(?:\.\d+)*$/.test(host) &&
+      host.includes('.') && !host.endsWith('.localhost') && !host.endsWith('.local') &&
+      (!u.port || u.port === '80' || u.port === '443');
+  } catch { return false; }
+}

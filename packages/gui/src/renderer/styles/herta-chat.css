@@ -376,14 +376,14 @@
   font-size: 11px;
 }
 .herta-chat-pending-files {
-  max-height: 100px;
+  max-height: min(240px, 25vh);
   overflow: auto;
   font-size: 12px;
 }
 .herta-chat-pending-files li {
   display: flex;
   gap: 12px;
-  align-items: center;
+  align-items: flex-start;
 }
 .herta-memory-proposal {
   border: 1px solid var(--herta-border);
@@ -443,3 +443,13 @@
 .herta-chat-upload:focus-within {
   outline: 2px solid var(--herta-accent);
 }
+
+.herta-chat-pending-files details { min-width: 0; flex: 1; }
+.herta-chat-pending-files pre { max-height: 200px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.herta-chat-pending-files { padding: 8px 12px; border: 1px solid var(--herta-border); border-radius: 10px; }
+.herta-chat-pending-files p { margin: 8px 0; color: var(--herta-muted); }
+.herta-chat-pending-files pre { max-height: 120px; margin: 8px 0; }
+
+.herta-chat-image { display:block; max-width:100%; max-height:320px; object-fit:contain; border-radius:8px; margin:8px 0; }
+.herta-chat-image-notice { margin:8px 0; color:var(--text-muted); font-size:12px; }

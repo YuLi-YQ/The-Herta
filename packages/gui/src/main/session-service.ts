@@ -1,4 +1,5 @@
 import { createHertaChat } from "./herta-chat.js";
+import { parseChatFile } from "./chat-file-import.js";
 import { createChatFileSaver } from "./chat-file-export.js";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -826,6 +827,12 @@ export function createSessionService(
     handle("herta-chat:stop", () => hertaChat.stop());
     handle("herta-chat:manage", (_event, action) => hertaChat.manage(action));
     const saveChatFile = createChatFileSaver({directory: app.getPath("documents"), choose: defaultPath => dialog.showSaveDialog(win, {defaultPath})});
+    let parsingChatFile = false;
+    handle("herta-chat:parse-file", async (_event, name, bytes) => {
+      if (parsingChatFile) return {ok:false,message:"请等待当前附件解析完成。"};
+      parsingChatFile = true;
+      try { return await parseChatFile(name, bytes); } finally { parsingChatFile = false; }
+    });
     handle("herta-chat:save-file", (_event, name, content) => saveChatFile(name, content));
     handle(CMD.getProjectNavigation, () => management.navigation());
     handle(CMD.updateProjectNavigation, (_e, input) =>

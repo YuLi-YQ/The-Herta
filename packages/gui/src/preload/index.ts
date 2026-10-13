@@ -18,6 +18,7 @@ const bridge: HertaBridge = {
   sendHertaChat: (input) => ipcRenderer.invoke("herta-chat:send", input),
   stopHertaChat: () => ipcRenderer.invoke("herta-chat:stop"),
   manageHertaChat: (action) => ipcRenderer.invoke("herta-chat:manage", action),
+  parseChatFile: (name, bytes) => ipcRenderer.invoke("herta-chat:parse-file", name, bytes),
   saveChatFile: (name, content) => ipcRenderer.invoke("herta-chat:save-file", name, content),
   getProjectNavigation: () => ipcRenderer.invoke(CMD.getProjectNavigation),
   updateProjectNavigation: (input) =>

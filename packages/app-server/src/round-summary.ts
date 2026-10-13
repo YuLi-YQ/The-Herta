@@ -47,6 +47,7 @@ export interface RoundMetrics {
   partial: boolean;
 }
 export interface RoundSummary {
+  searches?: import("@herta/providers").WebSearchEvent[];
   schemaVersion: 1;
   id: string;
   sessionId: string;

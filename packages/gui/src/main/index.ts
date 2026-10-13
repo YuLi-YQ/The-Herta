@@ -15,7 +15,7 @@ import {
 } from "electron";
 import hertaIcon from "../../resources/herta-icon.png?asset";
 import { CMD, EVT } from "../preload/channels.js";
-import { isAllowedExternalUrl } from "../shared/links.js";
+import { isAllowedExternalUrl, isPublicWebUrl } from "../shared/links.js";
 import { PRODUCT_PROFILE } from "../shared/product-profile.js";
 import {
   defaultCloseToTray,
@@ -535,12 +535,10 @@ function registerUpdateHandlers(): void {
   ipcMain.handle(CMD.updateCheck, async () => {
     await updateService?.checkNow();
   });
-  // An https link to an allowlisted host (`shared/links.ts`) opens in the
-  // OS browser — the netdisk mirror when the update feed is out of reach
-  // (2026-09-09). Anything else is refused here, not merely hidden in the
-  // renderer: the renderer is not trusted with an "open any URL" door.
+  // User-clicked citations may open public web pages; application/file schemes,
+  // embedded credentials and local hosts remain blocked in the main process.
   ipcMain.handle(CMD.openExternal, async (_e, url: unknown) => {
-    if (typeof url !== "string" || !isAllowedExternalUrl(url)) return;
+    if (typeof url !== "string" || !(isAllowedExternalUrl(url) || isPublicWebUrl(url))) throw new Error("Unsupported link");
     await shell.openExternal(url);
   });
   ipcMain.handle(CMD.updateRestart, () => {

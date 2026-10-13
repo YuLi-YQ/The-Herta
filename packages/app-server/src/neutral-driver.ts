@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { webSearchSupport } from "@herta/providers/web-search";
 import type {
   AgentEvent,
   CodingAgentRuntime,
@@ -330,7 +331,9 @@ export class NeutralDriver implements SessionDriver {
         });
         dispatched = true;
       }
+      let searchRemaining = 3;
       for (let pass = 0; pass < 3; pass++) {
+        const searchIds = new Set<string>();
         const calls: ToolCallRequest[] = [];
         let speech = "";
         const textPlan = !personaTools;
@@ -377,6 +380,8 @@ export class NeutralDriver implements SessionDriver {
             options: {
               ...snapshot.persona.defaults,
               reasoningEffort: snapshot.bindings.persona.reasoningEffort,
+              maxWebSearchUses: searchRemaining,
+              webSearch: personaTools && snapshot.bindings.persona.webSearch === true && webSearchSupport(snapshot.persona, snapshot.bindings.persona.modelId),
             },
             signal,
             ...(personaTools &&
@@ -394,6 +399,12 @@ export class NeutralDriver implements SessionDriver {
                 snapshot.persona,
                 snapshot.bindings.persona.modelId,
               );
+            if (event.type === "web-search") {
+              if (event.status === "searching" && !searchIds.has(event.id)) {
+                searchIds.add(event.id); searchRemaining = Math.max(0, searchRemaining - 1);
+              }
+              this.roundStore.search(event);
+            }
             if (event.type === "usage") usage.record(event);
             if (event.type === "public-reasoning-delta")
               this.roundStore.reasoning(

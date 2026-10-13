@@ -60,6 +60,7 @@ export interface ProviderConfig {
 }
 
 export interface ModelBinding {
+  readonly webSearch?: boolean;
   readonly providerId: string;
   readonly modelId: string;
   readonly reasoningEffort?: string;
@@ -88,7 +89,7 @@ export interface TurnProviderSnapshot {
 }
 
 export type NeutralMessage =
-  | { readonly role: "user"; readonly text: string }
+  | { readonly role: "user"; readonly text: string; readonly images?: readonly import("./images.js").MessageImage[] }
   | {
       readonly role: "assistant";
       readonly text: string;
@@ -118,6 +119,9 @@ export interface ModelRequest {
   readonly messages: readonly NeutralMessage[];
   readonly tools: readonly ToolSchema[];
   readonly options: {
+    readonly webSearch?: boolean;
+    /** Remaining server searches in this execution attempt; 0 disables search. */
+    readonly maxWebSearchUses?: number;
     readonly maxOutputTokens?: number;
     readonly temperature?: number;
     readonly reasoningEffort?: string;
@@ -127,6 +131,7 @@ export interface ModelRequest {
 }
 
 export type ModelEvent =
+  | import("./web-search.js").WebSearchEvent
   | {
       readonly type: "public-reasoning-delta";
       readonly text: string;

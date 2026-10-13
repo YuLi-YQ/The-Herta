@@ -1,4 +1,7 @@
+import { validateMessageImage, type MessageImage } from "@herta/providers/images";
 export const chatFailures = {
+  "search-limit":
+    "本次搜索达到次数或续接上限，收到的内容已保留。可缩小问题范围后继续。",
   length:
     "回复额度已用尽，正文可能尚未生成。可降低思考强度、提高回复额度，或拆分问题后再发送。",
   timeout:
@@ -21,6 +24,7 @@ export type HertaChatFailure = keyof typeof chatFailures;
 export const chatOutputBudgets = [8192, 16384, 32768] as const;
 export const defaultChatOutputBudget = 16384;
 export interface HertaChatMessage {
+  searches?: import("@herta/providers").WebSearchEvent[];
   attachments?: ChatAttachment[];
   id: string;
   role: "user" | "assistant";
@@ -56,6 +60,7 @@ export interface HertaChatSnapshot {
   error: string | null;
 }
 export interface HertaChatInput {
+  webSearch?: boolean;
   attachments?: ChatAttachment[];
   chatId: string;
   text: string;
@@ -64,14 +69,20 @@ export interface HertaChatInput {
   maxOutputTokens?: number;
   reasoningEffort?: string;
 }
+export type ChatFileResult =
+  | { ok: true; attachment: ChatAttachment }
+  | { ok: false; message: string };
 export interface ChatAttachment {
+  image?: MessageImage;
+  format?: "pdf" | "docx";
+  pages?: number;
   name: string;
   text: string;
 }
 export function validateChatAttachments(value: unknown): ChatAttachment[] {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.length > 4)
-    throw new Error("每条消息最多附加4个文本文件。");
+    throw new Error("每条消息最多附加4个文件。");
   let total = 0;
   return value.map((item) => {
     if (
@@ -83,10 +94,25 @@ export function validateChatAttachments(value: unknown): ChatAttachment[] {
       item.text.includes("\u0000") ||
       item.text.length > 32000
     )
-      throw new Error("附件需为不超过32000字的文本文件。");
+      throw new Error("附件文本不得超过32000字，名称和内容必须有效。");
     total += item.text.length;
     if (total > 64000) throw new Error("附件总量不能超过64000字。");
-    return { name: item.name, text: item.text };
+    if (item.format !== undefined && !["pdf", "docx"].includes(item.format))
+      throw new Error("附件格式无效。");
+    if (
+      item.pages !== undefined &&
+      (!Number.isInteger(item.pages) || item.pages < 1 || item.pages > 100)
+    )
+      throw new Error("附件页数无效。");
+    const image = item.image === undefined ? undefined : validateMessageImage(item.image);
+    if (image && (item.text || item.format || item.pages)) throw new Error("图片附件不能混入文档内容。");
+    return {
+      ...(image ? { image } : {}),
+      name: item.name,
+      text: item.text,
+      ...(item.format ? { format: item.format } : {}),
+      ...(item.pages ? { pages: item.pages } : {}),
+    };
   });
 }
 export type HertaChatAction =

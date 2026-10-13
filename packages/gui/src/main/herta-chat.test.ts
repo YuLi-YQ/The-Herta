@@ -495,3 +495,43 @@ it("runs an idle pass only after a completed chat and never dispatches tools", a
     vi.useRealTimers();
   }
 });
+it('enables only supported search, persists sources and keeps local tools absent', async () => {
+  mocks.acquire.mockReturnValue({ config: { protocol: 'anthropic-messages', baseURL: 'https://api.deepseek.com/anthropic' }, key: 'synthetic', release: mocks.release });
+  mocks.stream.mockImplementation(async function* () {
+    yield { type: 'web-search', id: 's', status: 'searching', query: 'Python' };
+    yield { type: 'web-search', id: 's', status: 'completed', sources: [{url:'https://www.python.org',title:'Python'}] };
+    yield { type: 'text-delta', text: '回答' };
+    yield { type: 'finished', reason: 'stop' };
+  });
+  const chat = createHertaChat(path);
+  chat.send({...input, modelId:'deepseek-flash',chatId:chat.snapshot().activeId!,webSearch:true});
+  await vi.waitFor(() => expect(chat.snapshot().busy).toBe(false));
+  expect(mocks.stream.mock.calls[0]![0].options.webSearch).toBe(true);
+  expect(mocks.stream.mock.calls[0]![0].tools).toEqual([]);
+  const restored=createHertaChat(path);
+  expect(restored.snapshot().messages[1]?.searches?.[0]).toMatchObject({status:'completed',query:'Python'});
+  await restored.dispose();await chat.dispose();
+});
+it('rejects unsupported search before saving or requesting a message', async () => {
+  const chat=createHertaChat(path);
+  expect(() => chat.send({...input,chatId:chat.snapshot().activeId!,webSearch:true})).toThrow('尚不支持联网搜索');
+  expect(mocks.stream).not.toHaveBeenCalled();expect(chat.snapshot().messages).toHaveLength(0);
+  await chat.dispose();
+});
+
+it("preserves image history while keeping bytes out of prompt text, and rejects switching to text-only models", async()=>{
+ const image={mimeType:"image/png" as const,data:"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="};
+ mocks.acquire.mockReturnValue({config:{protocol:"openai-responses",baseURL:"https://api.openai.com/v1"},key:"test-private",release:mocks.release});
+ const chat=createHertaChat(path), chatId=chat.snapshot().activeId!;
+ chat.send({...input,modelId:"gpt-4.1",chatId,attachments:[{name:"x.png",text:"",image}]});
+ await vi.waitFor(()=>expect(chat.snapshot().busy).toBe(false));
+ const sent=mocks.stream.mock.calls[0]![0].messages[0];
+ expect(sent.images).toEqual([image]);expect(sent.text).not.toContain(image.data);
+ expect(createHertaChat(path).snapshot().messages[0]?.attachments?.[0]?.image).toEqual(image);
+ expect(()=>chat.send({...input,modelId:"deepseek-flash",chatId})).toThrow("图片阅读");
+ expect(mocks.stream).toHaveBeenCalledTimes(1);
+ chat.send({...input,modelId:"gpt-4.1",chatId});
+ await vi.waitFor(()=>expect(chat.snapshot().busy).toBe(false));
+ expect(mocks.stream.mock.calls[1]![0].messages[0].images).toEqual([image]);
+ await chat.dispose();
+});

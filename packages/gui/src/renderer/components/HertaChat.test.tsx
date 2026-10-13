@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 const mock = vi.hoisted(() => ({
   bridge: {
+    parseChatFile: vi.fn(),
     getHertaChat: vi.fn(),
     sendHertaChat: vi.fn(),
     stopHertaChat: vi.fn(),
@@ -364,4 +365,40 @@ it("offers only model-supported effort and preserves the explicit choice for lat
       }),
     ),
   );
+});
+
+it("previews imported document text and sends only the normalized attachment", async () => {
+ mock.bridge.parseChatFile.mockResolvedValue({ok:true,attachment:{name:"report.pdf",text:"Extracted text",format:"pdf",pages:2}});
+ render(<HertaChat onSettings={vi.fn()} />);
+ await screen.findByRole("option",{name:"Text provider · m"});
+ fireEvent.change(screen.getByLabelText("附加文件"),{target:{files:[{name:"report.pdf",size:10,arrayBuffer:async()=>new ArrayBuffer(10)}]}});
+ await screen.findByText("Extracted text");
+ expect(screen.getByText(/report.pdf · 2页/)).toBeInTheDocument();
+ fireEvent.change(screen.getByRole("textbox",{name:"给黑塔的消息"}),{target:{value:"总结附件"}});
+ fireEvent.click(screen.getByRole("button",{name:"发送 ↑"}));
+ await waitFor(()=>expect(mock.bridge.sendHertaChat).toHaveBeenCalledWith(expect.objectContaining({attachments:[{name:"report.pdf",text:"Extracted text",format:"pdf",pages:2}]})));
+});
+it("blocks sending while parsing and keeps draft when a document is rejected",async()=>{
+ let finish!: (value:unknown)=>void;
+ mock.bridge.parseChatFile.mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+ render(<HertaChat onSettings={vi.fn()} />);
+ await screen.findByRole("option",{name:"Text provider · m"});
+ fireEvent.change(screen.getByRole("textbox",{name:"给黑塔的消息"}),{target:{value:"保留草稿"}});
+ fireEvent.change(screen.getByLabelText("附加文件"),{target:{files:[{name:"scan.pdf",size:10,arrayBuffer:async()=>new ArrayBuffer(10)}]}});
+ await waitFor(()=>expect(mock.bridge.parseChatFile).toHaveBeenCalled());
+ expect(screen.getByRole("button",{name:"发送 ↑"})).toBeDisabled();
+ finish({ok:false,message:"文档没有可读取的文字。"});
+ await screen.findByText("文档没有可读取的文字。");
+ expect(screen.getByRole("textbox",{name:"给黑塔的消息"})).toHaveValue("保留草稿");
+ expect(mock.bridge.sendHertaChat).not.toHaveBeenCalled();
+});
+
+it("previews image attachments and explains incompatible models",async()=>{
+ const image={mimeType:"image/png",data:"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="};
+ mock.bridge.parseChatFile.mockResolvedValue({ok:true,attachment:{name:"x.png",text:"",image}});
+ render(<HertaChat onSettings={vi.fn()} />);
+ await screen.findByRole("option",{name:"Text provider · m"});
+ fireEvent.change(screen.getByLabelText("附加文件"),{target:{files:[{name:"x.png",size:68,arrayBuffer:async()=>new ArrayBuffer(68)}]}});
+ expect(await screen.findByAltText("x.png")).toHaveAttribute("src",`data:image/png;base64,${image.data}`);
+ expect(screen.getByText(/当前模型尚未适配图片阅读/)).toBeInTheDocument();
 });

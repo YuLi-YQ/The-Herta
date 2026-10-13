@@ -42,6 +42,7 @@ export interface ProviderReadiness {
 export interface WorkbenchFailure {
   readonly code:
     | ProviderReadinessCode
+    | "search-limit"
     | "authentication"
     | "model-not-found"
     | "rate-limit"

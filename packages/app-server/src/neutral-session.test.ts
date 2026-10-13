@@ -88,6 +88,12 @@ vi.mock("@herta/providers", async (importOriginal) => {
         const persona = request.tools.some(
           (tool) => tool.name === "delegate_execution",
         );
+        if (script.mode === "search-budget" && persona) {
+          for (let i = 0; i < 3; i++) {
+            yield { type: "web-search", id: `s${i}`, status: "searching" };
+            yield { type: "web-search", id: `s${i}`, status: "searching", query: "query" };
+          }
+        }
         if (script.mode === "fail") {
           yield { type: "text-delta", text: "partial response" };
           throw new Error("Synthetic transport disconnected");
@@ -306,6 +312,16 @@ async function until(predicate: () => boolean) {
   }
 }
 describe("Neutral sessions — deterministic adapters, actual host/record/permission/tools", () => {
+  it("shares search budget across persona passes without counting query updates twice", async () => {
+    script.mode = "search-budget";
+    const {root,host}=fixture("anthropic-messages");
+    const session=await host.createSession({backendWorkspace:root});
+    await session.setWorkspaceTrust?.("workspace");
+    await session.submitText("Create test file");
+    const requests=script.requests.filter(r=>r.request.modelId==="persona-model");
+    expect(requests.map(r=>r.request.options.maxWebSearchUses)).toEqual([3,0]);
+  });
+
   it("answer after reopening a question never replays a preceding completed file write", async () => {
     script.mode = "input-after-write";
     const { root, host } = fixture("openai-responses");
