@@ -1,0 +1,65 @@
+/* R22 appearance layer. Every rule is opt-in; classic styles remain unmodified.
+   Motion hooks are explicit: avoid transition:all and panel entrance animation. */
+:root[data-appearance="observatory"] {
+  --herta-bg:#100f17; --herta-sidebar:#14121d; --herta-panel:#1a1725;
+  --herta-elevated:#272135; --herta-hover:#30283f; --herta-border:#352e44;
+  --herta-control:#625672; --herta-text:#f0edf7; --herta-secondary:#bdb4cb;
+  --herta-muted:#a69ab8; --herta-accent:#c6acf3; --herta-focus:#dac9fa;
+  --herta-gold:#cfb885; --herta-on-accent:#241636;
+  --herta-ui-shadow:0 12px 40px -22px #0009;
+  --herta-ui-radius:18px; --herta-ui-fast:120ms; --herta-ui-ease:cubic-bezier(.2,.8,.2,1);
+}
+:root[data-appearance="observatory"][data-theme="light"] {
+  --herta-bg:#fff; --herta-sidebar:#f7f7f9; --herta-panel:#faf9fc;
+  --herta-elevated:#eee8f7; --herta-hover:#eae3f3; --herta-border:#e1dce9;
+  --herta-control:#93859f; --herta-text:#272131; --herta-secondary:#63576f;
+  --herta-muted:#756780; --herta-accent:#705092; --herta-focus:#705092;
+  --herta-gold:#896b39; --herta-on-accent:#fff;
+  --herta-ui-shadow:0 12px 40px -22px #39204430;
+}
+:root[data-appearance="observatory"] .herta-shell{grid-template-rows:64px minmax(0,1fr)}
+:root[data-appearance="observatory"] .herta-title{gap:24px;border-bottom:1px solid var(--herta-border)}
+:root[data-appearance="observatory"] .herta-version{color:var(--herta-muted);font-size:11px}
+:root[data-appearance="observatory"] .herta-shell button:not(.u039-tab){transition:background-color var(--herta-ui-fast) var(--herta-ui-ease),border-color var(--herta-ui-fast) var(--herta-ui-ease);}
+:root[data-appearance="observatory"] .herta-sidebar{padding:20px 14px 14px;gap:10px}
+:root[data-appearance="observatory"] .herta-sidebar > button{border-radius:12px;text-align:left}
+:root[data-appearance="observatory"] .herta-sidebar > button:first-child{background:var(--herta-elevated);border-color:var(--herta-border);padding:10px 14px}
+:root[data-appearance="observatory"] .herta-nav-group-label{letter-spacing:.08em;font-size:11px;color:var(--herta-muted)}
+:root[data-appearance="observatory"] .herta-nav-task{border-radius:10px}
+:root[data-appearance="observatory"] .herta-nav-task.is-active{background:var(--herta-elevated);box-shadow:inset 2px 0 var(--herta-accent)}
+:root[data-appearance="observatory"] :is(.herta-nav-menu,.herta-model-menu){box-shadow:var(--herta-ui-shadow);border-radius:14px}
+:root[data-appearance="observatory"] .herta-composer-box{border-radius:22px;border:1px solid var(--herta-border);box-shadow:var(--herta-ui-shadow);background:var(--herta-panel)}
+:root[data-appearance="observatory"] .herta-composer-box:focus-within{border-color:var(--herta-control)}
+:root[data-appearance="observatory"] .herta-chat-body{grid-template-columns:240px minmax(0,1fr)}
+:root[data-appearance="observatory"] .herta-chat-history{padding:18px 14px}
+:root[data-appearance="observatory"] .herta-chat-history > button{border-radius:12px;text-align:left;padding:10px 14px}
+:root[data-appearance="observatory"] .herta-chat-history nav{gap:6px}
+:root[data-appearance="observatory"] .herta-chat-history nav button{border-radius:10px;padding:10px 12px}
+:root[data-appearance="observatory"] .herta-chat-history nav button.is-active{box-shadow:inset 2px 0 var(--herta-accent)}
+:root[data-appearance="observatory"] .herta-chat-messages{padding:28px max(24px,calc((100% - 920px)/2));}
+:root[data-appearance="observatory"] .herta-chat-message{padding:18px 22px;border:1px solid var(--herta-border);border-radius:18px;line-height:1.8;max-width:92%;margin-bottom:28px}
+:root[data-appearance="observatory"] .herta-chat-message.is-user{background:var(--herta-elevated);border-color:transparent;max-width:78%}
+:root[data-appearance="observatory"] .herta-chat-conversation > footer{border-top:0;padding:14px max(24px,calc((100% - 920px)/2)) 20px;background:var(--herta-bg)}
+:root[data-appearance="observatory"] .herta-chat-conversation > footer > textarea{border:1px solid var(--herta-border);border-radius:20px;padding:16px 18px;background:var(--herta-panel);box-shadow:var(--herta-ui-shadow);min-height:96px}
+:root[data-appearance="observatory"] .herta-chat-conversation > footer > textarea:focus-visible{outline:2px solid var(--herta-focus);outline-offset:2px}
+:root[data-appearance="observatory"] .herta-chat-controls{gap:8px}
+:root[data-appearance="observatory"] .herta-chat-controls :is(button,select){border-radius:10px}
+:root[data-appearance="observatory"] .settings-card{border-radius:22px;box-shadow:var(--herta-ui-shadow);border-color:var(--herta-border)}
+:root[data-appearance="observatory"] .settings-nav-item{border-radius:10px;border-color:transparent}
+:root[data-appearance="observatory"] .settings-nav-item.is-active{background:var(--herta-elevated);color:var(--herta-accent)}
+:root[data-appearance="observatory"] .herta-appearance-choice{padding:16px;border:1px solid var(--herta-border);border-radius:14px;margin:0 0 20px;background:var(--herta-bg)}
+@media(max-width:800px){
+  :root[data-appearance="observatory"] .herta-chat-body{grid-template-columns:170px minmax(0,1fr)}
+  :root[data-appearance="observatory"] .herta-title{gap:10px}
+  :root[data-appearance="observatory"] .herta-version{display:none}
+}
+@media(max-width:600px){
+  :root[data-appearance="observatory"] .herta-title > :is(strong,.herta-star){display:none}
+  :root[data-appearance="observatory"] .herta-title{padding-left:10px;padding-right:140px;min-width:0}
+  :root[data-appearance="observatory"] .herta-chat-body{grid-template-columns:minmax(0,1fr)}
+  :root[data-appearance="observatory"] .herta-chat-history{max-height:130px;border-bottom:1px solid var(--herta-border)}
+  :root[data-appearance="observatory"] .herta-chat-messages{padding:16px}
+  :root[data-appearance="observatory"] .herta-chat-conversation > footer{padding:12px 16px}
+  :root[data-appearance="observatory"] .herta-chat-message.is-user{max-width:94%}
+}
+@media(prefers-reduced-motion:reduce){:root[data-appearance="observatory"]{--herta-ui-fast:0ms}}

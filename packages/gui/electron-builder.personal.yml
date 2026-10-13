@@ -25,6 +25,8 @@ electronLanguages:
   - zh-CN
   - zh-TW
 extraResources:
+  - from: resources/licenses/lucian-ui-MIT.txt
+    to: licenses/lucian-ui-MIT.txt
   - from: ../../LICENSE
     to: LICENSE
   - from: ../../THIRD-PARTY-NOTICES.md

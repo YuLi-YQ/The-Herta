@@ -1,3 +1,4 @@
+import { useAppearance, setAppearance, type Appearance } from "../../lib/appearance.js";
 import { applyThemePref, themePref } from "../../lib/theme.js";
 import type { ThemePref } from "../../ipc/bridge-types.js";
 import { useEffect, useState } from "react";
@@ -18,6 +19,7 @@ import { Toggle } from "./Toggle.js";
  */
 export function WindowSettings(): JSX.Element {
   const t = useT();
+  const appearance = useAppearance();
   const { bridge } = useHertaBridge();
   // The last-known value on the first frame (settings-snapshot.ts); the
   // platform's default only when nothing has been read yet — ON, except on
@@ -106,6 +108,15 @@ export function WindowSettings(): JSX.Element {
   return (
     <>
       <p className="settings-intro">{t("window.intro")}</p>
+      <section className="herta-appearance-choice" aria-label="界面版本">
+        <label className="provider-field">界面风格
+          <select value={appearance} onChange={e => { try { setAppearance(e.target.value as Appearance); setFailed(false); } catch { setFailed(true); } }}>
+            <option value="observatory">星间书房 · 新版</option>
+            <option value="classic">经典界面 · 原版</option>
+          </select>
+        </label>
+        <p className="settings-note">随时切回经典界面，聊天、项目和模型设置不受影响。</p>
+      </section>
       <label className="provider-field">界面主题
         <select value={theme} disabled={themeBusy || !bridge.setTheme} onChange={e => void changeTheme(e.target.value as ThemePref)}>
           <option value="dark">深紫 · 星间书房</option><option value="light">浅色 · 白昼书房</option><option value="system">跟随系统</option>

@@ -334,7 +334,7 @@ export function HertaChat({
             ＋ 新聊天
           </button>
           <nav aria-label="保存的聊天">
-        {list.map((chat) => (
+            {list.map((chat) => (
               <button
                 key={chat.id}
                 className={chat.id === state.activeId ? "is-active" : ""}

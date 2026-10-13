@@ -1,3 +1,4 @@
+import { ModeTabs } from "./ModeTabs.js";
 import { HertaChat } from "./HertaChat.js";
 import welcomePortrait from "../assets/great-herta-welcome-v1.png";
 import { WorkbenchSearch } from "./WebSearch.js";
@@ -791,45 +792,7 @@ export function RoundThreeWorkbench(): JSX.Element {
           ✦
         </span>
         <strong>The Herta</strong>
-        <nav className="herta-mode-tabs" role="tablist" aria-label="工作模式">
-          {[false, true].map((chat) => (
-            <button
-              key={String(chat)}
-              type="button"
-              role="tab"
-              id={chat ? "herta-chat-tab" : "herta-workbench-tab"}
-              aria-selected={chatOpen === chat}
-              aria-controls={
-                chat ? "herta-chat-panel" : "herta-workbench-panel"
-              }
-              tabIndex={chatOpen === chat ? 0 : -1}
-              onClick={() => selectMode(chat)}
-              onKeyDown={(event) => {
-                if (
-                  !["ArrowLeft", "ArrowRight", "Home", "End"].includes(
-                    event.key,
-                  )
-                )
-                  return;
-                event.preventDefault();
-                const next =
-                  event.key === "Home"
-                    ? false
-                    : event.key === "End"
-                      ? true
-                      : !chat;
-                selectMode(next);
-                document
-                  .getElementById(
-                    next ? "herta-chat-tab" : "herta-workbench-tab",
-                  )
-                  ?.focus();
-              }}
-            >
-              {chat ? "与黑塔聊天" : "工作台"}
-            </button>
-          ))}
-        </nav>
+        <ModeTabs chatOpen={chatOpen} selectMode={selectMode} />
         {appVersion && <small className="herta-version">v{appVersion}</small>}
       </header>
       <aside className="herta-sidebar" aria-label="项目与任务导航">
