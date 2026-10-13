@@ -73,6 +73,8 @@ export type ChatFileResult =
   | { ok: true; attachment: ChatAttachment }
   | { ok: false; message: string };
 export interface ChatAttachment {
+  imageMissing?: true;
+  imageRef?: { storage: "sha256"; sha256: string; mimeType: "image/png" | "image/jpeg" };
   image?: MessageImage;
   format?: "pdf" | "docx";
   pages?: number;
@@ -104,10 +106,14 @@ export function validateChatAttachments(value: unknown): ChatAttachment[] {
       (!Number.isInteger(item.pages) || item.pages < 1 || item.pages > 100)
     )
       throw new Error("附件页数无效。");
+    if (item.imageMissing !== undefined || item.imageRef !== undefined) {
+      if (item.imageMissing !== true || item.image || item.text || item.format || !item.imageRef || item.imageRef.storage !== "sha256" || !/^[a-f0-9]{64}$/.test(item.imageRef.sha256) || !["image/png", "image/jpeg"].includes(item.imageRef.mimeType)) throw new Error("图片引用无效。");
+    }
     const image = item.image === undefined ? undefined : validateMessageImage(item.image);
     if (image && (item.text || item.format || item.pages)) throw new Error("图片附件不能混入文档内容。");
     return {
       ...(image ? { image } : {}),
+      ...(item.imageMissing ? { imageMissing: true as const, imageRef: { storage: "sha256" as const, sha256: item.imageRef.sha256, mimeType: item.imageRef.mimeType } } : {}),
       name: item.name,
       text: item.text,
       ...(item.format ? { format: item.format } : {}),

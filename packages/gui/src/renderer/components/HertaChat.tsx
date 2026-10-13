@@ -334,7 +334,7 @@ export function HertaChat({
             ＋ 新聊天
           </button>
           <nav aria-label="保存的聊天">
-            {list.map((chat) => (
+        {list.map((chat) => (
               <button
                 key={chat.id}
                 className={chat.id === state.activeId ? "is-active" : ""}
@@ -478,6 +478,7 @@ export function HertaChat({
                     <details key={n} className="herta-chat-attachment">
                       <summary>附件 · {attachment.name}{attachment.pages ? ` · ${attachment.pages}页` : ""}</summary>
                       {attachment.format && <p>提取文字 · 不含图片与原始版式</p>}
+                      {attachment.imageMissing && <p role="status">图片缺失或损坏，文字记录仍保留。请恢复图片目录，或调整续聊范围后重新上传。</p>}
                       {attachment.image ? <img className="herta-chat-image" alt={attachment.name} src={imageDataURL(attachment.image)} /> : <pre>{attachment.text}</pre>}
                     </details>
                   ))}

@@ -169,7 +169,7 @@ it("migrates v1 exactly once with an intact backup and never requests the provid
   );
   expect(backups).toHaveLength(1);
   expect(readFileSync(join(path, "..", backups[0]!), "utf8")).toBe(original);
-  expect(JSON.parse(readFileSync(path, "utf8")).schemaVersion).toBe(2);
+  expect(JSON.parse(readFileSync(path, "utf8")).schemaVersion).toBe(3);
   expect(createHertaChat(path).snapshot().activeId).toBe(snapshot.activeId);
   expect(
     readdirSync(join(path, "..")).filter((p) => p.includes("v1-backup")),
@@ -534,4 +534,22 @@ it("preserves image history while keeping bytes out of prompt text, and rejects 
  await vi.waitFor(()=>expect(chat.snapshot().busy).toBe(false));
  expect(mocks.stream.mock.calls[1]![0].messages[0].images).toEqual([image]);
  await chat.dispose();
+});
+
+it("backs up v2 before conversion, preserves missing-image history and blocks silent omission",async()=>{
+ const image={mimeType:"image/png",data:"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="};
+ const legacy={schemaVersion:2,activeId:"c",chats:[{id:"c",title:"legacy",updatedAt:"now",pinned:false,archived:false,contextStart:0,contextNote:"",messages:[{id:"u",role:"user",text:"图片问题",at:"now",status:"complete",attachments:[{name:"x.png",text:"",image}]}]}]};
+ const original=JSON.stringify(legacy);writeFileSync(path,original);
+ const chat=createHertaChat(path);chat.manage({type:"rename",id:"c",title:"renamed"});
+ const files=readdirSync(join(path,".."));const backup=files.find(n=>n.includes(".v2-backup-"))!;
+ expect(readFileSync(join(path,"..",backup),"utf8")).toBe(original);
+ expect(readFileSync(path,"utf8")).not.toContain(image.data);
+ await chat.dispose();
+ const blob=join(`${path}.images`,readdirSync(`${path}.images`)[0]!);writeFileSync(blob,"corrupt");
+ const reopened=createHertaChat(path);
+ expect(reopened.snapshot().messages[0]?.text).toBe("图片问题");
+ expect(reopened.snapshot().messages[0]?.attachments?.[0]?.imageMissing).toBe(true);
+ expect(()=>reopened.send({...input,chatId:"c"})).toThrow("缺失或损坏");
+ expect(mocks.stream).not.toHaveBeenCalled();
+ await reopened.dispose();
 });

@@ -1,3 +1,4 @@
+import { createChatImageStore } from "./chat-image-store.js";
 import { imageSupport } from "@herta/providers/images";
 import { randomUUID } from "node:crypto";
 import {
@@ -161,11 +162,13 @@ function decode(value: unknown): Store {
   return { schemaVersion: 2, activeId, chats };
 }
 
-/** Independent text-only runtime. No workspace, executor, tool dispatch or automatic requests. */
+/** Independent chat runtime. No workspace, executor, tool dispatch or automatic requests. */
 export function createHertaChat(
   path: string,
   options: { isWorkbenchBusy?: () => boolean; idleMs?: number } = {},
 ) {
+  const images = createChatImageStore(`${path}.images`);
+  let needsImageBackup = false;
   const memory = createChatMemory(`${path}.memory.json`);
   let memoryStatus = "等待新的聊天内容",
     activityAt = Date.now(),
@@ -184,10 +187,14 @@ export function createHertaChat(
   let abort: AbortController | null = null;
   let running: Promise<void> | null = null;
   const save = (next: Store) => {
-    const serialized = JSON.stringify(next);
+    const serialized = images.serialize(next);
     if (Buffer.byteLength(serialized) > MAX_STORE_BYTES)
       throw new Error("聊天存储容量已满，请先备份记录。");
     mkdirSync(dirname(path), { recursive: true });
+    if (needsImageBackup) {
+      copyFileSync(path, `${path}.v2-backup-${randomUUID()}`, constants.COPYFILE_EXCL);
+      needsImageBackup = false;
+    }
     writeFileSync(`${path}.tmp`, serialized, { mode: 0o600 });
     renameSync(`${path}.tmp`, path);
   };
@@ -221,7 +228,11 @@ export function createHertaChat(
         );
         save(next);
         state = next;
-      } else state = decode(parsed);
+      } else if (parsed.schemaVersion === 3) state = decode(images.hydrate(parsed));
+      else {
+        state = decode(parsed);
+        needsImageBackup = true;
+      }
       return state;
     } catch {
       throw new Error("聊天记录无法读取或升级，原记录及已有备份已保留。");
@@ -468,6 +479,7 @@ export function createHertaChat(
     send(input: HertaChatInput) {
       activity();
       const attachments = validateChatAttachments(input?.attachments);
+      if (attachments.some(a => a.imageMissing || a.imageRef)) throw new Error("请重新上传图片文件。");
       if (
         !input ||
         typeof input.text !== "string" ||
@@ -501,6 +513,7 @@ export function createHertaChat(
         throw new Error(
           "续聊上下文已满，请调整续聊范围或新建聊天；原文仍保留。",
         );
+      if (chat.messages.slice(chat.contextStart).some(m => m.attachments?.some(a => a.imageMissing))) throw new Error("续聊中有缺失或损坏的图片，请恢复图片目录，或调整续聊范围后重新上传。");
       const imageContext = [...chat.messages.slice(chat.contextStart).flatMap(m => m.role === "user" ? m.attachments ?? [] : []), ...attachments].flatMap(a => a.image ? [a.image] : []);
       if (imageContext.length > 8 || imageContext.reduce((n, i) => n + i.data.length, 0) > 12 * 1024 * 1024) throw new Error("续聊图片较多，请减少续聊范围或新建聊天；原图仍保留。");
       const lease = acquireChatProvider(input.providerId, input.modelId);

@@ -6,9 +6,9 @@
 
 ## 使用成品
 
-Windows x64 安装包：`packages/gui/release-round-21/The-Herta-Setup-0.8.10-x64.exe`；便携版：同目录 `The-Herta-0.8.10-portable-x64.exe`。不需要源码或开发服务器。[GitHub Release](https://github.com/YuLi-YQ/The-Herta/releases)提供安装版、便携版及校验文件；搜索与附件更新使用发布批次标签 `v0.8.10-r21.7`，应用版本仍为0.8.10。
+Windows x64 安装包：`packages/gui/release-round-21/The-Herta-Setup-0.8.10-x64.exe`；便携版：同目录 `The-Herta-0.8.10-portable-x64.exe`。不需要源码或开发服务器。[GitHub Release](https://github.com/YuLi-YQ/The-Herta/releases)提供安装版、便携版及校验文件；搜索与附件更新使用发布批次标签 `v0.8.10-r21.9`，应用版本仍为0.8.10。
 
-数据默认位于 `%APPDATA%/HertaAtelier`，便携版也使用该位置，不承诺数据随exe移动。升级前建议备份完整数据目录。当前为个人未签名发行，未提供自动更新。
+数据默认位于 `%APPDATA%/HertaAtelier`，便携版也使用该位置，不承诺数据随exe移动。升级前建议备份完整数据目录。聊天图片独立存放在聊天JSON旁的 `.images` 目录中，备份时须一并保留；schema 3记录不能由旧版读取，回退需恢复升级前备份。当前为个人未签名发行，未提供自动更新。
 
 1. 在「设置 · 连接与模型」选择常用服务商预设，填写 Key 并选择模型；也可自定义 Provider，选择实际支持的协议：OpenAI Responses、OpenAI Chat Completions 或 Anthropic Messages。填写服务根 Base URL、Key 和模型，支持发现或手填模型。OpenAI兼容不代表支持Responses，按供应商实际接口选择。
 2. 点击「保存并验证」，选择仅聊天或编程用途，再绑定角色与执行器；两者可独立选择。仅「保存连接」不请求API；「保存并验证」会进行小型测试。密钥由本机安全存储保护，不能从配置页重新读出原值。
