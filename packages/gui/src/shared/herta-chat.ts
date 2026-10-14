@@ -43,7 +43,24 @@ export interface HertaChatListItem {
   archived: boolean;
   messageCount: number;
 }
+export interface ChatImageAudit {
+  complete: boolean;
+  current: number;
+  backupOnly: number;
+  unreferenced: number;
+  unreferencedBytes: number;
+  missing: number;
+  checkedBackups: number;
+}
+export interface ChatStorageUsage {
+  audit?: ChatImageAudit;
+  checkedAt: string;
+  historyBytes: number;
+  historyLimitBytes: number;
+  images: { bytes: number; files: number; limitBytes: number };
+}
 export interface HertaChatSnapshot {
+  storage?: ChatStorageUsage;
   memory?: {
     enabled: boolean;
     items: { id: string; text: string; at: string; source: "user" | "idle" }[];
@@ -73,6 +90,8 @@ export type ChatFileResult =
   | { ok: true; attachment: ChatAttachment }
   | { ok: false; message: string };
 export interface ChatAttachment {
+  /** Renderer-only marker: bytes are requested only when the preview opens. */
+  imageDeferred?: true;
   imageMissing?: true;
   imageRef?: { storage: "sha256"; sha256: string; mimeType: "image/png" | "image/jpeg" };
   image?: MessageImage;
@@ -97,6 +116,7 @@ export function validateChatAttachments(value: unknown): ChatAttachment[] {
       item.text.length > 32000
     )
       throw new Error("附件文本不得超过32000字，名称和内容必须有效。");
+    if (item.imageDeferred !== undefined) throw new Error("请重新上传图片文件。");
     total += item.text.length;
     if (total > 64000) throw new Error("附件总量不能超过64000字。");
     if (item.format !== undefined && !["pdf", "docx"].includes(item.format))
@@ -107,13 +127,13 @@ export function validateChatAttachments(value: unknown): ChatAttachment[] {
     )
       throw new Error("附件页数无效。");
     if (item.imageMissing !== undefined || item.imageRef !== undefined) {
-      if (item.imageMissing !== true || item.image || item.text || item.format || !item.imageRef || item.imageRef.storage !== "sha256" || !/^[a-f0-9]{64}$/.test(item.imageRef.sha256) || !["image/png", "image/jpeg"].includes(item.imageRef.mimeType)) throw new Error("图片引用无效。");
+      if ((item.imageMissing !== undefined && item.imageMissing !== true) || item.image || item.text || item.format || !item.imageRef || item.imageRef.storage !== "sha256" || !/^[a-f0-9]{64}$/.test(item.imageRef.sha256) || !["image/png", "image/jpeg"].includes(item.imageRef.mimeType)) throw new Error("图片引用无效。");
     }
     const image = item.image === undefined ? undefined : validateMessageImage(item.image);
     if (image && (item.text || item.format || item.pages)) throw new Error("图片附件不能混入文档内容。");
     return {
       ...(image ? { image } : {}),
-      ...(item.imageMissing ? { imageMissing: true as const, imageRef: { storage: "sha256" as const, sha256: item.imageRef.sha256, mimeType: item.imageRef.mimeType } } : {}),
+      ...(item.imageRef ? { ...(item.imageMissing ? { imageMissing: true as const } : {}), imageRef: { storage: "sha256" as const, sha256: item.imageRef.sha256, mimeType: item.imageRef.mimeType } } : {}),
       name: item.name,
       text: item.text,
       ...(item.format ? { format: item.format } : {}),
@@ -123,6 +143,7 @@ export function validateChatAttachments(value: unknown): ChatAttachment[] {
 }
 export type HertaChatAction =
   | { type: "activity" }
+  | { type: "storage" }
   | {
       type: "memory";
       operation: "save" | "delete" | "enable";

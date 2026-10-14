@@ -1,0 +1,23 @@
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { expect, it, vi } from "vitest";
+const mock = vi.hoisted(() => ({ bridge: { readHertaChatImage: vi.fn() } }));
+vi.mock("../context/HertaBridgeContext.js", () => ({ useHertaBridge: () => mock }));
+import { ChatAttachmentPreview } from "./ChatAttachmentPreview.js";
+const image = { mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=" };
+it("reads only on expansion, releases a closed preview, and ignores late results", async () => {
+  let finish!: (value: typeof image) => void;
+  mock.bridge.readHertaChatImage.mockReturnValueOnce(new Promise(resolve => { finish = resolve; })).mockResolvedValue(image);
+  const view = render(<ChatAttachmentPreview attachment={{ name: "x.png", text: "", imageDeferred: true }} chatId="c" messageId="m" index={0} />);
+  const details = view.container.querySelector("details")!;
+  expect(mock.bridge.readHertaChatImage).not.toHaveBeenCalled();
+  details.open = true; fireEvent(details, new Event("toggle"));
+  await waitFor(() => expect(mock.bridge.readHertaChatImage).toHaveBeenCalledTimes(1));
+  details.open = false; fireEvent(details, new Event("toggle"));
+  await act(async () => finish(image));
+  expect(screen.queryByRole("img")).toBeNull();
+  details.open = true; fireEvent(details, new Event("toggle"));
+  expect(await screen.findByRole("img", { name: "x.png" })).toBeVisible();
+  expect(mock.bridge.readHertaChatImage).toHaveBeenLastCalledWith("c", "m", 0);
+  details.open = false; fireEvent(details, new Event("toggle"));
+  await waitFor(() => expect(screen.queryByRole("img")).toBeNull());
+});

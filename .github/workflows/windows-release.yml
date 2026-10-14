@@ -49,7 +49,7 @@ jobs:
         run: |
           $version = (Get-Content packages/gui/package.json | ConvertFrom-Json).version
           if ($version -ne '0.8.10') { throw 'Review release workflow before changing version.' }
-          $tag = "v$version-r22.1"
+          $tag = "v$version-r23.3"
           $output = 'packages/gui/release-round-21'
           $files = @("$output/The-Herta-Setup-$version-x64.exe", "$output/The-Herta-$version-portable-x64.exe")
           foreach ($file in $files) { if (!(Test-Path -LiteralPath $file)) { throw "Missing package: $file" } }
@@ -58,7 +58,7 @@ jobs:
           $checksums | Set-Content -LiteralPath $checksumFile -Encoding utf8
           gh release view $tag --json isDraft > $null 2>&1
           if ($LASTEXITCODE -eq 0) { throw 'Release already exists; inspect it before publishing again.' }
-          gh release create $tag --target $env:RELEASE_COMMIT --draft --title "The Herta $version · 可回退的界面更新" --notes-file docs/RELEASE_NOTES.md
+          gh release create $tag --target $env:RELEASE_COMMIT --draft --title "The Herta $version · 聊天图片与存储更新" --notes-file docs/RELEASE_NOTES.md
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           gh release upload $tag @files $checksumFile
           if ($LASTEXITCODE) { exit $LASTEXITCODE }

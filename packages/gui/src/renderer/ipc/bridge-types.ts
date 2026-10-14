@@ -508,6 +508,7 @@ export type StageImagesReply =
  * `on*` register ipcRenderer.on listeners and return an unsubscribe.
  */
 export interface HertaBridge {
+  readHertaChatImage?: (chatId: string, messageId: string, index: number) => Promise<import("@herta/providers/images").MessageImage>;
   getHertaChat?: () => Promise<
     import("../../shared/herta-chat.js").HertaChatSnapshot
   >;

@@ -1,3 +1,4 @@
+import { auditChatImages } from "./chat-image-audit.js";
 import { createChatImageStore } from "./chat-image-store.js";
 import { imageSupport } from "@herta/providers/images";
 import { randomUUID } from "node:crypto";
@@ -169,6 +170,7 @@ export function createHertaChat(
 ) {
   const images = createChatImageStore(`${path}.images`);
   let needsImageBackup = false;
+  let storage: HertaChatSnapshot["storage"];
   const memory = createChatMemory(`${path}.memory.json`);
   let memoryStatus = "等待新的聊天内容",
     activityAt = Date.now(),
@@ -197,6 +199,14 @@ export function createHertaChat(
     }
     writeFileSync(`${path}.tmp`, serialized, { mode: 0o600 });
     renameSync(`${path}.tmp`, path);
+    // Serialization already validated and saved these blobs. Retain only references in long-lived state.
+    for (const chat of next.chats) for (const message of chat.messages) {
+      if (message.attachments) message.attachments = message.attachments.map(a => {
+        if (!a.image) return a;
+        const { image, ...rest } = a;
+        return { ...rest, imageRef: images.referenceImage(image) };
+      });
+    }
   };
   const read = (): Store => {
     if (state) return state;
@@ -228,7 +238,7 @@ export function createHertaChat(
         );
         save(next);
         state = next;
-      } else if (parsed.schemaVersion === 3) state = decode(images.hydrate(parsed));
+      } else if (parsed.schemaVersion === 3) state = decode(images.hydrate(parsed, true));
       else {
         state = decode(parsed);
         needsImageBackup = true;
@@ -256,6 +266,7 @@ export function createHertaChat(
     }
     return structuredClone({
       memory: memoryView,
+      ...(storage ? { storage } : {}),
       revision,
       activeId: store.activeId,
       chats: store.chats.map((c) => ({
@@ -266,7 +277,11 @@ export function createHertaChat(
         archived: c.archived,
         messageCount: c.messages.length,
       })),
-      messages: chat?.messages ?? [],
+      messages: (chat?.messages ?? []).map(m => ({ ...m, attachments: m.attachments?.map(a => {
+        if (!a.image && !a.imageRef) return a;
+        const { image, imageRef, imageMissing, ...rest } = a;
+        return { ...rest, imageDeferred: true as const };
+      }) })),
       contextStart: chat?.contextStart ?? 0,
       contextNote: chat?.contextNote ?? "",
       contextCharacters: chat
@@ -389,9 +404,27 @@ export function createHertaChat(
   timer.unref?.();
   return {
     snapshot,
+    readImage(chatId: string, messageId: string, index: number) {
+      const chat = selected();
+      if (!chat || chat.id !== chatId || typeof messageId !== "string" || !Number.isInteger(index) || index < 0 || index >= 4) throw new Error("图片不可用。");
+      const attachment = chat.messages.find(m => m.id === messageId)?.attachments?.[index];
+      try {
+        if (attachment?.imageRef) return images.readImage(attachment.imageRef);
+        if (attachment?.image) return attachment.image;
+      } catch { throw new Error("图片缺失或损坏，请恢复图片目录或重新上传。"); }
+      throw new Error("图片不可用。");
+    },
     manage(action: HertaChatAction) {
       activity();
       if (action?.type === "activity") return snapshot();
+      if (action?.type === "storage") {
+        read();
+        try {
+          storage = { checkedAt: new Date().toISOString(), historyBytes: statSync(path).size, historyLimitBytes: MAX_STORE_BYTES, images: images.usage(), audit: auditChatImages(path) };
+        } catch { throw new Error("存储用量暂时无法读取，请稍后刷新。"); }
+        revision++;
+        return snapshot();
+      }
       if (action?.type === "memory") {
         memory.edit(action);
         revision++;
@@ -513,8 +546,16 @@ export function createHertaChat(
         throw new Error(
           "续聊上下文已满，请调整续聊范围或新建聊天；原文仍保留。",
         );
-      if (chat.messages.slice(chat.contextStart).some(m => m.attachments?.some(a => a.imageMissing))) throw new Error("续聊中有缺失或损坏的图片，请恢复图片目录，或调整续聊范围后重新上传。");
-      const imageContext = [...chat.messages.slice(chat.contextStart).flatMap(m => m.role === "user" ? m.attachments ?? [] : []), ...attachments].flatMap(a => a.image ? [a.image] : []);
+      const context = chat.messages.slice(chat.contextStart);
+      const imageCount = [...context.flatMap(m => m.role === "user" ? m.attachments ?? [] : []), ...attachments].filter(a => a.image || a.imageRef).length;
+      if (imageCount > 8) throw new Error("续聊图片较多，请减少续聊范围或新建聊天；原图仍保留。");
+      // Resolve only the selected continuation range, before acquiring a provider or saving a turn.
+      const resolvedContext = context.map(m => ({ ...m, attachments: m.attachments?.map(a => {
+        if (!a.imageRef) return a;
+        try { const { imageRef, imageMissing, ...rest } = a; return { ...rest, image: images.readImage(imageRef) }; }
+        catch { throw new Error("续聊中有缺失或损坏的图片，请恢复图片目录，或调整续聊范围后重新上传。"); }
+      }) }));
+      const imageContext = [...resolvedContext.flatMap(m => m.role === "user" ? m.attachments ?? [] : []), ...attachments].flatMap(a => a.image ? [a.image] : []);
       if (imageContext.length > 8 || imageContext.reduce((n, i) => n + i.data.length, 0) > 12 * 1024 * 1024) throw new Error("续聊图片较多，请减少续聊范围或新建聊天；原图仍保留。");
       const lease = acquireChatProvider(input.providerId, input.modelId);
       if (imageContext.length && !imageSupport(lease.config, input.modelId)) {
@@ -568,8 +609,7 @@ export function createHertaChat(
       revision++;
       abort = controller;
       const answer = chat.messages.at(-1)!;
-      const history: NeutralMessage[] = chat.messages
-        .slice(chat.contextStart, -1)
+      const history: NeutralMessage[] = [...resolvedContext, { ...chat.messages.at(-2)!, attachments }]
         .filter((m) => m.text)
         .map((m) =>
           m.role === "user"

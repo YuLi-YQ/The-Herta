@@ -14,6 +14,7 @@ function subscribe<T>(channel: string, cb: (e: T) => void): () => void {
 }
 
 const bridge: HertaBridge = {
+  readHertaChatImage: (chatId, messageId, index) => ipcRenderer.invoke("herta-chat:image", chatId, messageId, index),
   getHertaChat: () => ipcRenderer.invoke("herta-chat:snapshot"),
   sendHertaChat: (input) => ipcRenderer.invoke("herta-chat:send", input),
   stopHertaChat: () => ipcRenderer.invoke("herta-chat:stop"),

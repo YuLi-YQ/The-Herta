@@ -17,6 +17,8 @@ import { useHertaBridge } from "../context/HertaBridgeContext.js";
 import { WaitingStatus } from "./WaitingStatus.js";
 import { MessageContent } from "./MessageContent.js";
 import { MessageTime } from "./MessageTime.js";
+import { ChatAttachmentPreview } from "./ChatAttachmentPreview.js";
+import { ChatStorage } from "./ChatStorage.js";
 import { ChatMemory } from "./ChatMemory.js";
 import "../styles/herta-chat.css";
 
@@ -37,6 +39,7 @@ function safeError(error: unknown): string {
   const value = String(error);
   return (
     [
+      "存储用量暂时无法读取，请稍后刷新。",
       "聊天已切换，请在当前聊天重新发送。",
       "当前模型不支持所选思考强度，请重新选择。",
       "续聊上下文已满，请调整续聊范围或新建聊天；原文仍保留。",
@@ -318,6 +321,7 @@ export function HertaChat({
           <small>聊天 · 记忆与文件</small>
         </div>
         <div className="herta-chat-header-actions">
+          <ChatStorage usage={state.storage} busy={busy} onRefresh={() => manage({ type: "storage" })} />
           <ChatMemory memory={state.memory} onManage={manage} />
           <button type="button" onClick={onSettings}>
             连接与模型
@@ -475,12 +479,7 @@ export function HertaChat({
                   <strong>{m.role === "assistant" ? "黑塔" : "你"}</strong>
                   <MessageTime at={m.at} />
                   {m.attachments?.map((attachment, n) => (
-                    <details key={n} className="herta-chat-attachment">
-                      <summary>附件 · {attachment.name}{attachment.pages ? ` · ${attachment.pages}页` : ""}</summary>
-                      {attachment.format && <p>提取文字 · 不含图片与原始版式</p>}
-                      {attachment.imageMissing && <p role="status">图片缺失或损坏，文字记录仍保留。请恢复图片目录，或调整续聊范围后重新上传。</p>}
-                      {attachment.image ? <img className="herta-chat-image" alt={attachment.name} src={imageDataURL(attachment.image)} /> : <pre>{attachment.text}</pre>}
-                    </details>
+                    <ChatAttachmentPreview key={`${state.activeId}:${m.id}:${n}`} attachment={attachment} chatId={state.activeId!} messageId={m.id} index={n} />
                   ))}
                   <SearchResults events={m.searches} running={m.status === 'streaming'} />
                   {m.reasoning && (
@@ -615,7 +614,7 @@ export function HertaChat({
                 </div>
               </details>
             )}
-            {(attachments.some(a => a.image) || state.messages.slice(state.contextStart).some(m => m.attachments?.some(a => a.image))) && (
+            {(attachments.some(a => a.image) || state.messages.slice(state.contextStart).some(m => m.attachments?.some(a => a.image || a.imageDeferred))) && (
               <p className="herta-chat-image-notice">{models.find(m => m.key === selected)?.images ? "图片将随当前续聊内容发送给所选模型。" : "当前模型尚未适配图片阅读，请切换视觉模型或移除本次及续聊范围中的图片。"}</p>
             )}
             {attachments.length > 0 && (

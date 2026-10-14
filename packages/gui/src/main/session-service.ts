@@ -822,6 +822,7 @@ export function createSessionService(
   function registerHandlers(): void {
     if (handlersRegistered) return;
     handlersRegistered = true;
+    handle("herta-chat:image", (_event, chatId, messageId, index) => hertaChat.readImage(chatId, messageId, index));
     handle("herta-chat:snapshot", () => hertaChat.snapshot());
     handle("herta-chat:send", (_event, input) => hertaChat.send(input));
     handle("herta-chat:stop", () => hertaChat.stop());

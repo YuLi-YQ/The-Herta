@@ -48,13 +48,32 @@ export function createChatImageStore(directory: string) {
     return ref;
   }
   return {
+    referenceImage: put,
+    readImage(ref: unknown): MessageImage {
+      if (!isRef(ref)) throw new Error("图片引用无效。");
+      return read(ref);
+    },
+    usage() {
+      const limitBytes = 256 * 1024 * 1024;
+      if (!existsSync(directory)) return { bytes: 0, files: 0, limitBytes };
+      const directoryStat = lstatSync(directory);
+      if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) throw new Error("图片存储目录无效。");
+      let bytes = 0, files = 0;
+      for (const name of readdirSync(directory)) {
+        const stat = lstatSync(join(directory, name));
+        if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("图片存储包含无法统计的文件。");
+        bytes += stat.size;
+        if (/^[a-f0-9]{64}$/.test(name)) files++;
+      }
+      return { bytes, files, limitBytes };
+    },
     serialize(store: unknown): string {
       return JSON.stringify(store, (key, value) => {
         if (key === "schemaVersion") return 3;
         if (key === "image" && value?.data) return put(value);
         // Retain unavailable references rather than deleting missing attachments on the next save.
         if (key === "attachments" && Array.isArray(value)) return value.map(a => {
-          if (!a.imageMissing) return a;
+          if (!a.imageRef) return a;
           if (!isRef(a.imageRef)) throw new Error("图片引用无效。");
           const { imageMissing, imageRef, ...rest } = a;
           return { ...rest, image: imageRef };
@@ -62,11 +81,12 @@ export function createChatImageStore(directory: string) {
         return value;
       });
     },
-    hydrate(store: unknown): unknown {
+    hydrate(store: unknown, deferred = false): unknown {
       return JSON.parse(JSON.stringify(store), (key, value) => {
         if (key === "attachments" && Array.isArray(value)) return value.map(a => {
           if (!a.image) return a;
           if (!isRef(a.image)) throw new Error("图片引用无效。");
+          if (deferred) { const { image, ...rest } = a; return { ...rest, imageRef: image }; }
           try { return { ...a, image: read(a.image) }; }
           catch { const { image, ...rest } = a; return { ...rest, imageMissing: true, imageRef: image }; }
         });
