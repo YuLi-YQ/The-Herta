@@ -121,6 +121,7 @@ for (const name of [
   requireFile(join(ROOT, name));
 for (const name of [
   "out/main/index.js",
+  "out/main/chat-storage-worker.js",
   "out/preload/index.cjs",
   "out/renderer/index.html",
   "out/bundle-manifest.json",
@@ -213,6 +214,7 @@ if (unpackedFlag !== -1) {
         );
         const asar = appBuilderRequire("@electron/asar");
         const entries = asar.listPackage(archive);
+        if (!entries.some(name => posix(name).replace(/^\//, "") === "out/main/chat-storage-worker.js")) failures.push("Storage scan worker missing from app.asar");
         const packedFonts = new Set();
         for (const name of entries) {
           const nativeFile = name.replace(/^[\\/]/, "");

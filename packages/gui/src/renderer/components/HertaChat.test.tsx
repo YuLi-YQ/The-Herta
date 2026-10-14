@@ -402,3 +402,13 @@ it("previews image attachments and explains incompatible models",async()=>{
  expect(await screen.findByAltText("x.png")).toHaveAttribute("src",`data:image/png;base64,${image.data}`);
  expect(screen.getByText(/当前模型尚未适配图片阅读/)).toBeInTheDocument();
 });
+it("keeps chat controls available while a storage-only refresh is pending",async()=>{
+ mock.bridge.manageHertaChat.mockImplementation(action=>action.type==="storage"?new Promise(()=>{}):mock.bridge.getHertaChat());
+ const view=render(<HertaChat onSettings={vi.fn()}/>);
+ await screen.findByRole("option",{name:"Text provider · m"});
+ fireEvent.click(screen.getByRole("button",{name:"存储空间"}));
+ await waitFor(()=>expect(mock.bridge.manageHertaChat).toHaveBeenCalledWith({type:"storage"}));
+ expect(screen.getByRole("button",{name:"＋ 新聊天"})).not.toBeDisabled();
+ expect(screen.getByRole("textbox",{name:"给黑塔的消息"})).not.toBeDisabled();
+ view.unmount();
+});

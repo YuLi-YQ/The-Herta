@@ -826,7 +826,7 @@ export function createSessionService(
     handle("herta-chat:snapshot", () => hertaChat.snapshot());
     handle("herta-chat:send", (_event, input) => hertaChat.send(input));
     handle("herta-chat:stop", () => hertaChat.stop());
-    handle("herta-chat:manage", (_event, action) => hertaChat.manage(action));
+    handle("herta-chat:manage", (_event, action) => action?.type === "storage" ? hertaChat.inspectStorage() : hertaChat.manage(action));
     const saveChatFile = createChatFileSaver({directory: app.getPath("documents"), choose: defaultPath => dialog.showSaveDialog(win, {defaultPath})});
     let parsingChatFile = false;
     handle("herta-chat:parse-file", async (_event, name, bytes) => {

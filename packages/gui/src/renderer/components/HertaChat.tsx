@@ -239,7 +239,7 @@ export function HertaChat({
   };
   const manage = async (action: HertaChatAction) => {
     if (busy || !bridge.manageHertaChat) return false;
-    setManaging(true);
+    if (action.type !== "storage") setManaging(true);
     setError(null);
     try {
       receive(await bridge.manageHertaChat(action));
@@ -248,7 +248,7 @@ export function HertaChat({
       setError(safeError(e));
       return false;
     } finally {
-      setManaging(false);
+      if (action.type !== "storage") setManaging(false);
     }
   };
   const send = async () => {

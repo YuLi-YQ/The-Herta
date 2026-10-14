@@ -31,6 +31,11 @@ vi.mock("@herta/providers", () => ({
 vi.mock("@herta/app-server", () => ({
   desktopPersonaIdentity: () => "Herta persona",
 }));
+vi.mock("./chat-storage-scan.js", async () => {
+ const { statSync } = await import("node:fs");
+ const { createChatImageStore } = await import("./chat-image-store.js");
+ return { createChatStorageScan: (path: string) => ({run: async () => ({ checkedAt: new Date().toISOString(), historyBytes: statSync(path).size, historyLimitBytes: 64*1024*1024, images: createChatImageStore(`${path}.images`).usage() }), dispose: () => {} }) };
+});
 import { createHertaChat } from "./herta-chat.js";
 let path: string;
 const input = { text: "你好", providerId: "p", modelId: "m" };
@@ -568,7 +573,7 @@ it("backs up v2 before conversion, preserves missing-image history and blocks si
 it("storage inspection preserves chat bytes and performs no model request",async()=>{
  const chat=createHertaChat(path); chat.snapshot();
  const before=readFileSync(path);
- const view=chat.manage({type:"storage"});
+ const view=await chat.inspectStorage();
  expect(view.storage).toMatchObject({historyBytes:before.length,historyLimitBytes:64*1024*1024,images:{bytes:0,files:0,limitBytes:256*1024*1024}});
  expect(readFileSync(path).equals(before)).toBe(true);
  expect(mocks.acquire).not.toHaveBeenCalled();

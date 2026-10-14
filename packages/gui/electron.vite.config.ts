@@ -134,7 +134,10 @@ export default defineConfig({
       bundleManifest("main"),
       ...(PRODUCT_PROFILE.voice ? [ttsWorker()] : []),
     ],
-    build: { outDir: "out/main" },
+    build: { outDir: "out/main", rollupOptions: {
+      input: { index: resolve(__dirname, "src/main/index.ts"), "chat-storage-worker": resolve(__dirname, "src/main/chat-storage-worker.ts") },
+      output: { entryFileNames: "[name].js" },
+    } },
   },
   preload: {
     plugins: [bundleManifest("preload")],

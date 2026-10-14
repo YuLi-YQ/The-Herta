@@ -1,4 +1,4 @@
-import { auditChatImages } from "./chat-image-audit.js";
+import { createChatStorageScan } from "./chat-storage-scan.js";
 import { createChatImageStore } from "./chat-image-store.js";
 import { imageSupport } from "@herta/providers/images";
 import { randomUUID } from "node:crypto";
@@ -169,6 +169,7 @@ export function createHertaChat(
   options: { isWorkbenchBusy?: () => boolean; idleMs?: number } = {},
 ) {
   const images = createChatImageStore(`${path}.images`);
+  const storageScan = createChatStorageScan(path);
   let needsImageBackup = false;
   let storage: HertaChatSnapshot["storage"];
   const memory = createChatMemory(`${path}.memory.json`);
@@ -414,17 +415,21 @@ export function createHertaChat(
       } catch { throw new Error("图片缺失或损坏，请恢复图片目录或重新上传。"); }
       throw new Error("图片不可用。");
     },
-    manage(action: HertaChatAction) {
+    async inspectStorage() {
+      activity();
+      read();
+      const startedRevision = revision;
+      const result = await storageScan.run();
+      if (disposed) throw new Error("存储用量暂时无法读取，请稍后刷新。");
+      if (storage === result) return snapshot();
+      if (revision !== startedRevision && result.audit) result.audit.complete = false;
+      storage = result;
+      revision++;
+      return snapshot();
+    },
+    manage(action: Exclude<HertaChatAction, { type: "storage" }>) {
       activity();
       if (action?.type === "activity") return snapshot();
-      if (action?.type === "storage") {
-        read();
-        try {
-          storage = { checkedAt: new Date().toISOString(), historyBytes: statSync(path).size, historyLimitBytes: MAX_STORE_BYTES, images: images.usage(), audit: auditChatImages(path) };
-        } catch { throw new Error("存储用量暂时无法读取，请稍后刷新。"); }
-        revision++;
-        return snapshot();
-      }
       if (action?.type === "memory") {
         memory.edit(action);
         revision++;
@@ -749,6 +754,7 @@ export function createHertaChat(
     },
     async dispose() {
       disposed = true;
+      storageScan.dispose();
       clearInterval(timer);
       memoryAbort?.abort();
       abort?.abort();
