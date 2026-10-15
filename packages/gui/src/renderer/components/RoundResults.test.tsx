@@ -1,8 +1,18 @@
 import type { RoundFileContent, RoundSummary } from "@herta/app-server";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render as renderUI, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RoundReader, roundDiffRows } from "./RoundReader.js";
 import { cleanToolText, RoundResults } from "./RoundResults.js";
+import type { ReactElement, ReactNode } from "react";
+import { HertaBridgeProvider } from "../context/HertaBridgeContext.js";
+import { createMockHertaBridge } from "../ipc/mock-bridge.js";
+
+function render(element: ReactElement) {
+  const { bridge } = createMockHertaBridge();
+  return renderUI(element, { wrapper: ({ children }: { children: ReactNode }) =>
+    <HertaBridgeProvider bridge={bridge}>{children}</HertaBridgeProvider> });
+}
+
 
 const file: RoundFileContent = { roundId: "r", fileId: "f", path: "src/main.ts", before: "const old = 1;", after: "const next = 2;", diff: "--- before\n+++ after\n-const old = 1;\n+const next = 2;", sourceLabel: "本轮净变化" };
 const round: RoundSummary = { schemaVersion: 1, id: "r", sessionId: "s", attemptIds: ["a"], recordStart: 0, startedAt: "2026-10-07T00:00:00Z", endedAt: "2026-10-07T00:01:03Z", durationMs: 63000, status: "completed", files: [{ id: "f", path: file.path, kind: "modified", added: 1, removed: 1, confidence: "tool" }], activities: [
@@ -112,4 +122,17 @@ it("hides empty task results and routine execution disclaimers", () => {
  expect(screen.queryByText("本轮任务结果")).not.toBeInTheDocument();
  expect(screen.queryByText("本轮没有可核验的工具工作项。")).not.toBeInTheDocument();
  expect(screen.queryByText(/执行成功不代表/)).not.toBeInTheDocument();
+});
+
+it.each(["cancelled", "interrupted"] as const)("preserves changed files for review after %s without claiming completion", status => {
+ const read = vi.fn();
+ render(<RoundResults round={{...round,status,activities:[{...round.activities[1]!,status:status === "cancelled" ? "cancelled" : "unknown"}]}} onRead={read} loadFile={vi.fn()}/>);
+ expect(screen.queryByText("已完成")).not.toBeInTheDocument();
+ expect(screen.getByLabelText("本轮修改文件")).toBeInTheDocument();
+ const files=screen.getByLabelText("本轮修改文件");
+ fireEvent.click(within(files).getByRole("button",{name:file.path}));
+ expect(read).toHaveBeenCalledWith("r","f",undefined);
+ const process=document.querySelector(".round-tools") as HTMLElement;
+ expect(within(process).getByText(status === "cancelled" ? "已取消" : "结果未确认")).toBeInTheDocument();
+ expect(within(process).queryByText("执行成功")).not.toBeInTheDocument();
 });

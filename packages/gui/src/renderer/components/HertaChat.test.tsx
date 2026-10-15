@@ -467,3 +467,22 @@ it("isolates pending attachment imports across chats and ignores late completion
  expect(await screen.findByText("新聊天附件")).toBeInTheDocument();
  expect(screen.getByRole("button",{name:"发送 ↑"})).not.toBeDisabled();
 });
+
+it.each([
+ "续聊图片较多，请减少续聊范围或新建聊天；原图仍保留。",
+ "续聊中有缺失或损坏的图片，请恢复图片目录，或调整续聊范围后重新上传。",
+ "当前模型尚未适配图片阅读。请选择已验证的视觉模型，或移除附件、调整续聊范围中的图片。",
+ "当前连接或模型尚不支持联网搜索。",
+ "请重新上传图片文件。",
+])("shows a safe actionable send rejection and preserves draft: %s", async message => {
+ mock.bridge.sendHertaChat.mockRejectedValue(new Error("IPC: " + message + " private-diagnostic"));
+ render(<HertaChat onSettings={vi.fn()}/>);
+ await screen.findByRole("option",{name:"Text provider · m"});
+ const box=screen.getByRole("textbox",{name:"给黑塔的消息"});
+ fireEvent.change(box,{target:{value:"保留这段问题"}});
+ fireEvent.click(screen.getByRole("button",{name:"发送 ↑"}));
+ expect(await screen.findByRole("alert")).toHaveTextContent(message);
+ expect(screen.queryByText(/private-diagnostic/)).not.toBeInTheDocument();
+ expect(box).toHaveValue("保留这段问题");
+ expect(mock.bridge.sendHertaChat).toHaveBeenCalledTimes(1);
+});
