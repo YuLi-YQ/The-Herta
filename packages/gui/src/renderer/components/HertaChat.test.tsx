@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 const mock = vi.hoisted(() => ({
   bridge: {
@@ -411,4 +411,59 @@ it("keeps chat controls available while a storage-only refresh is pending",async
  expect(screen.getByRole("button",{name:"＋ 新聊天"})).not.toBeDisabled();
  expect(screen.getByRole("textbox",{name:"给黑塔的消息"})).not.toBeDisabled();
  view.unmount();
+});
+
+it("keeps an existing chat error when storage refresh fails, then allows retry", async () => {
+ mock.bridge.parseChatFile.mockResolvedValue({ok:false,message:"文档没有可读取的文字。"});
+ mock.bridge.manageHertaChat.mockImplementation(action => action.type === "storage" ? Promise.reject(new Error("private storage path")) : mock.bridge.getHertaChat());
+ render(<HertaChat onSettings={vi.fn()}/>);
+ await screen.findByRole("option",{name:"Text provider · m"});
+ fireEvent.change(screen.getByLabelText("附加文件"),{target:{files:[{name:"scan.pdf",size:10,arrayBuffer:async()=>new ArrayBuffer(10)}]}});
+ await screen.findByText("文档没有可读取的文字。");
+ fireEvent.click(screen.getByRole("button",{name:"存储空间"}));
+ await screen.findByText("暂时无法读取用量，请稍后刷新。");
+ expect(screen.getByText("文档没有可读取的文字。")).toBeInTheDocument();
+ expect(screen.queryByText(/private storage path/)).not.toBeInTheDocument();
+ mock.bridge.manageHertaChat.mockImplementation(()=>mock.bridge.getHertaChat());
+ fireEvent.click(screen.getByRole("button",{name:"刷新用量"}));
+ await waitFor(()=>expect(screen.queryByText("暂时无法读取用量，请稍后刷新。")).not.toBeInTheDocument());
+ expect(screen.getByText("文档没有可读取的文字。")).toBeInTheDocument();
+});
+it("does not issue another refresh when reopening storage while pending", async () => {
+ let finish!: (value: unknown) => void;
+ mock.bridge.manageHertaChat.mockImplementation(action => action.type === "storage" ? new Promise(resolve=>{finish=resolve;}) : mock.bridge.getHertaChat());
+ render(<HertaChat onSettings={vi.fn()}/>);
+ await screen.findByRole("option",{name:"Text provider · m"});
+ fireEvent.click(screen.getByRole("button",{name:"存储空间"}));
+ document.querySelector('dialog[aria-label="聊天存储空间"]')!.removeAttribute("open");
+ fireEvent.click(screen.getByRole("button",{name:"存储空间"}));
+ expect(mock.bridge.manageHertaChat.mock.calls.filter(([action])=>action.type==="storage")).toHaveLength(1);
+ finish(await mock.bridge.getHertaChat());
+ await waitFor(()=>expect(screen.getByRole("button",{name:"刷新用量"})).not.toBeDisabled());
+});
+
+it("isolates pending attachment imports across chats and ignores late completion", async () => {
+ mock.bridge.getHertaChat.mockResolvedValue(snap("a",0));
+ mock.bridge.manageHertaChat.mockResolvedValue(snap("b",1));
+ const finishes: ((value:unknown)=>void)[]=[];
+ mock.bridge.parseChatFile.mockImplementation(()=>new Promise(resolve=>finishes.push(resolve)));
+ render(<HertaChat onSettings={vi.fn()}/>);
+ await screen.findByRole("option",{name:"Text provider · m"});
+ const file=(name:string)=>({name,size:10,arrayBuffer:async()=>new ArrayBuffer(10)});
+ fireEvent.change(screen.getByLabelText("附加文件"),{target:{files:[file("old.pdf"),file("unused.pdf")]}});
+ await waitFor(()=>expect(finishes).toHaveLength(1));
+ fireEvent.click(screen.getByRole("button",{name:"话题B"}));
+ await waitFor(()=>expect(screen.getByLabelText("附加文件")).not.toBeDisabled());
+ fireEvent.change(screen.getByRole("textbox",{name:"给黑塔的消息"}),{target:{value:"新话题"}});
+ expect(screen.getByRole("button",{name:"发送 ↑"})).not.toBeDisabled();
+ fireEvent.change(screen.getByLabelText("附加文件"),{target:{files:[file("new.pdf")]}});
+ await waitFor(()=>expect(finishes).toHaveLength(2));
+ await act(async()=>finishes[0]!({ok:true,attachment:{name:"old.pdf",text:"旧聊天附件",format:"pdf"}}));
+ expect(screen.getByLabelText("附加文件")).toBeDisabled();
+ expect(screen.getByRole("button",{name:"发送 ↑"})).toBeDisabled();
+ expect(screen.queryByText("旧聊天附件")).not.toBeInTheDocument();
+ expect(mock.bridge.parseChatFile).toHaveBeenCalledTimes(2);
+ await act(async()=>finishes[1]!({ok:true,attachment:{name:"new.pdf",text:"新聊天附件",format:"pdf"}}));
+ expect(await screen.findByText("新聊天附件")).toBeInTheDocument();
+ expect(screen.getByRole("button",{name:"发送 ↑"})).not.toBeDisabled();
 });

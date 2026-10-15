@@ -81,7 +81,7 @@ export function HertaChat({
   useEffect(() => { setWebSearch(!!state.activeId && localStorage.getItem(`the-herta.chat-search.${state.activeId}`) === "true"); }, [state.activeId]);
   const [importing, setImporting] = useState(false);
   const importGeneration = useRef(0);
-  useEffect(() => { importGeneration.current++; }, [state.activeId]);
+  useEffect(() => { importGeneration.current++; setImporting(false); }, [state.activeId]);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   useEffect(() => setAttachments([]), [state.activeId]);
   const [budget, setBudget] = useState<number>(defaultChatOutputBudget);
@@ -239,13 +239,15 @@ export function HertaChat({
   };
   const manage = async (action: HertaChatAction) => {
     if (busy || !bridge.manageHertaChat) return false;
-    if (action.type !== "storage") setManaging(true);
-    setError(null);
+    if (action.type !== "storage") {
+      setManaging(true);
+      setError(null);
+    }
     try {
       receive(await bridge.manageHertaChat(action));
       return true;
     } catch (e) {
-      setError(safeError(e));
+      if (action.type !== "storage") setError(safeError(e));
       return false;
     } finally {
       if (action.type !== "storage") setManaging(false);
@@ -673,6 +675,7 @@ export function HertaChat({
                       if (!bridge.parseChatFile) throw new Error("附件读取服务不可用，请重启应用。");
                       const uploaded: ChatAttachment[] = [];
                       for (const file of files) {
+                        if (activeRef.current !== chatId || importGeneration.current !== generation) return;
                         if (file.size > 4 * 1024 * 1024) throw new Error("单个附件不能超过4 MB。");
                         const result = await bridge.parseChatFile(file.name, new Uint8Array(await file.arrayBuffer()));
                         if (!result.ok) throw new Error(result.message);
@@ -682,7 +685,9 @@ export function HertaChat({
                       if (activeRef.current === chatId && importGeneration.current === generation) setAttachments(next);
                     } catch (e) {
                       if (activeRef.current === chatId && importGeneration.current === generation) setError(e instanceof Error ? e.message : "附件未能读取。");
-                    } finally { setImporting(false); }
+                    } finally {
+                      if (activeRef.current === chatId && importGeneration.current === generation) setImporting(false);
+                    }
                   }}
                 />
               </label>

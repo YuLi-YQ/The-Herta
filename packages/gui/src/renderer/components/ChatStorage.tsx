@@ -6,13 +6,17 @@ export function ChatStorage({ usage, busy, onRefresh }: {
   usage?: ChatStorageUsage; busy: boolean; onRefresh: () => Promise<boolean>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const pending = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const [failed, setFailed] = useState(false);
   async function refresh() {
+    if (pending.current) return;
+    pending.current = true;
+    setFailed(false);
     setRefreshing(true);
     try { setFailed(!(await onRefresh())); }
     catch { setFailed(true); }
-    finally { setRefreshing(false); }
+    finally { pending.current = false; setRefreshing(false); }
   }
   return <>
     <button type="button" disabled={busy} onClick={() => { dialog.current?.showModal(); void refresh(); }}>存储空间</button>
