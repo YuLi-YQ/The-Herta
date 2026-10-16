@@ -1,0 +1,32 @@
+/* Project-owned feedback layer; classic appearance has no new entrance effects.
+   Lucian #039 keeps its original timings; the preference only disables motion. */
+@keyframes herta-panel-reveal { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-appearance="observatory"]:not([data-motion="off"])
+    :is(.herta-nav-menu, .composer-model-popover, .round-reader, .round-hover-preview) {
+    animation: herta-panel-reveal 160ms var(--herta-ui-ease, ease-out);
+  }
+  :root[data-appearance="observatory"]:not([data-motion="off"])
+    .round-tool > details[open] > .round-tool-detail {
+    animation: herta-panel-reveal 120ms var(--herta-ui-ease, ease-out);
+  }
+}
+:root[data-motion="off"] :is(.herta-shell, .settings-card, .round-hover-preview),
+:root[data-motion="off"] :is(.herta-shell, .settings-card, .round-hover-preview) *,
+:root[data-motion="off"] :is(.herta-shell, .settings-card, .round-hover-preview) *::before,
+:root[data-motion="off"] :is(.herta-shell, .settings-card, .round-hover-preview) *::after {
+  animation: none !important;
+  transition-duration: 0s !important;
+  scroll-behavior: auto !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.herta-shell, .settings-card, .round-hover-preview),
+  :is(.herta-shell, .settings-card, .round-hover-preview) *,
+  :is(.herta-shell, .settings-card, .round-hover-preview) *::before,
+  :is(.herta-shell, .settings-card, .round-hover-preview) *::after {
+    animation: none !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}
+

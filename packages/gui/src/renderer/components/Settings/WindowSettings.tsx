@@ -1,3 +1,4 @@
+import { useMotionPreference, setMotionPreference, type MotionPreference } from "../../lib/motion.js";
 import { useAppearance, setAppearance, type Appearance } from "../../lib/appearance.js";
 import { applyThemePref, themePref } from "../../lib/theme.js";
 import type { ThemePref } from "../../ipc/bridge-types.js";
@@ -20,6 +21,7 @@ import { Toggle } from "./Toggle.js";
 export function WindowSettings(): JSX.Element {
   const t = useT();
   const appearance = useAppearance();
+  const motion = useMotionPreference();
   const { bridge } = useHertaBridge();
   // The last-known value on the first frame (settings-snapshot.ts); the
   // platform's default only when nothing has been read yet — ON, except on
@@ -108,6 +110,15 @@ export function WindowSettings(): JSX.Element {
   return (
     <>
       <p className="settings-intro">{t("window.intro")}</p>
+      <section className="herta-appearance-choice" aria-label="界面动效设置">
+        <label className="provider-field">界面动效
+          <select value={motion} onChange={e => { try { setMotionPreference(e.target.value as MotionPreference); setFailed(false); } catch { setFailed(true); } }}>
+            <option value="system">跟随系统 · 轻量动效</option>
+            <option value="off">关闭动效</option>
+          </select>
+        </label>
+        <small>系统开启“减少动态效果”时自动关闭。不会影响消息接收和任务执行。</small>
+      </section>
       <section className="herta-appearance-choice" aria-label="界面版本">
         <label className="provider-field">界面风格
           <select value={appearance} onChange={e => { try { setAppearance(e.target.value as Appearance); setFailed(false); } catch { setFailed(true); } }}>

@@ -54,6 +54,13 @@
   :root[data-appearance="observatory"] .herta-version{display:none}
 }
 @media(max-width:600px){
+  :root[data-appearance="observatory"] .settings-card{flex-direction:column;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px)}
+  :root[data-appearance="observatory"] .settings-nav{display:flex;flex-wrap:wrap;gap:4px;width:auto;padding:12px;border-right:0;border-bottom:1px solid var(--herta-border);max-height:30dvh;overflow-y:auto}
+  :root[data-appearance="observatory"] .settings-nav-eyebrow{flex-basis:100%;margin:0 6px 4px}
+  :root[data-appearance="observatory"] .settings-nav-item{width:auto;margin:0;padding:8px 10px}
+  :root[data-appearance="observatory"] .settings-content{min-height:0;padding:18px 16px;overscroll-behavior:contain}
+  :root[data-appearance="observatory"] .herta-appearance-choice{padding:12px}
+
   :root[data-appearance="observatory"] .herta-title > :is(strong,.herta-star){display:none}
   :root[data-appearance="observatory"] .herta-title{padding-left:10px;padding-right:140px;min-width:0}
   :root[data-appearance="observatory"] .herta-chat-body{grid-template-columns:minmax(0,1fr)}
