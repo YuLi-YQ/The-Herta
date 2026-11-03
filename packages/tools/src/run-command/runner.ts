@@ -10,6 +10,9 @@ export interface RunOptions {
    *  `childProcessEnv()` (process.env minus the AppImage launcher's entries).
    *  Callers must have vetted model-supplied keys through the env guard. */
   env?: NodeJS.ProcessEnv;
+  /** Host-only: a vetted Windows shim wrapper already supplied cmd's exact
+   * quoting. Never derive this flag from tool or plugin input. */
+  windowsVerbatimArguments?: boolean;
   /** The started process's pid, once it has one — the run's journal records
    *  it, so a relaunch can end a command the app died during (ADR 0071
    *  §1.6). */
@@ -154,6 +157,7 @@ export async function runCommand(
         ...(isWin ? {} : { detached: true }),
         stdio: ["ignore", "pipe", "pipe"],
         env: options.env ?? childProcessEnv(),
+        ...(isWin && options.windowsVerbatimArguments ? { windowsVerbatimArguments: true } : {}),
         windowsHide: true,
       });
     } catch (err) {

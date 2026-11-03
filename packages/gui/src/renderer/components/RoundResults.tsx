@@ -201,9 +201,12 @@ function ToolRow({
       ) : (
         <div className="round-tool-static">{title}</div>
       )}
-      {activity.summary && (
-        <p className="round-tool-summary">{activity.summary}</p>
-      )}
+      {/* A bare "denied" repeats the 已拒绝 state beside the title (R45). */}
+      {activity.summary &&
+        !(
+          activity.status === "denied" &&
+          /^denied\.?$/i.test(activity.summary.trim())
+        ) && <p className="round-tool-summary">{activity.summary}</p>}
       {activity.files.length > 0 && (
         <div className="round-tool-files">
           {activity.files.map((file) => (
@@ -218,7 +221,18 @@ function ToolRow({
   );
 }
 
+/** Rounds recorded before R72 carry the scan's fixed scope as a limitation of
+ *  each round; it is the same every time, so it is told once beside the file
+ *  list instead (SCAN_SCOPE) and never listed or counted as a limitation. */
+const LEGACY_SCOPE_NOTE =
+  "仅扫描工作区内文本；依赖、构建、内部及凭据目录、符号链接不纳入；期间观测变化归属不确定";
+const SCAN_SCOPE =
+  "只统计工作区内的文本文件；依赖、构建、内部与凭据目录及符号链接不计入。";
+
 export function RoundResults({ round, onRead, loadFile }: RoundResultsProps) {
+  const limitations = round.limitations.filter(
+    (reason) => reason !== LEGACY_SCOPE_NOTE,
+  );
   const [filesExpanded, setFilesExpanded] = useState(false);
   const [filter, setFilter] = useState<"all" | "failed" | "files">("all");
   const [preview, setPreview] = useState<{
@@ -440,7 +454,9 @@ export function RoundResults({ round, onRead, loadFile }: RoundResultsProps) {
           {round.files.length > 0 ? (
             <section className="round-files-card" aria-label="本轮修改文件">
               <header>
-                <strong>本轮修改 {round.files.length} 个文件</strong>
+                <strong title={SCAN_SCOPE}>
+                  本轮修改 {round.files.length} 个文件
+                </strong>
                 <span className="round-diff-stat">
                   <span className="round-added">+{total("added")}</span>
                   <span className="round-removed">−{total("removed")}</span>
@@ -497,9 +513,9 @@ export function RoundResults({ round, onRead, loadFile }: RoundResultsProps) {
                 </button>
               )}
             </section>
-          ) : round.activities.length > 0 || round.limitations.length > 0 ? (
-            <p className="round-empty-files">
-              {round.limitations.length
+          ) : round.activities.length > 0 || limitations.length > 0 ? (
+            <p className="round-empty-files" title={SCAN_SCOPE}>
+              {limitations.length
                 ? "未记录到可确认的文件变更，见下方记录限制。"
                 : "本轮未修改文件"}
             </p>
@@ -532,20 +548,20 @@ export function RoundResults({ round, onRead, loadFile }: RoundResultsProps) {
               </ul>
             </details>
           )}
-          <p className="round-usage">
-            本轮用量{" "}
-            {round.metrics.totalTokens === null
-              ? "--"
-              : round.metrics.totalTokens.toLocaleString()}{" "}
-            tokens{round.metrics.partial ? " · 记录不完整" : ""}
-          </p>
+          {/* Nothing reported means nothing to show, not a row of "--" (R72). */}
+          {round.metrics.totalTokens !== null && (
+            <p className="round-usage">
+              本轮用量 {round.metrics.totalTokens.toLocaleString()} tokens
+              {round.metrics.partial ? " · 记录不完整" : ""}
+            </p>
+          )}
         </>
       )}
-      {round.limitations.length > 0 && (
+      {limitations.length > 0 && (
         <details className="round-limitations">
-          <summary>记录限制 · {round.limitations.length}</summary>
+          <summary>记录限制 · {limitations.length}</summary>
           <ul>
-            {round.limitations.map((reason) => (
+            {limitations.map((reason) => (
               <li key={reason}>{reason}</li>
             ))}
           </ul>

@@ -2,8 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-/** The stylesheet's own bytes, read off disk (see record-left.test.ts for why
- *  not `import.meta.url` or `?raw`). */
+/** The stylesheet's own bytes, read off disk.
+ *
+ * Not `new URL(..., import.meta.url)`: under the jsdom environment
+ * `import.meta.url` is an http URL and readFileSync rejects the scheme. Not
+ * `?raw`/`?inline` either — Vite's CSS pipeline claims the file and hands
+ * back something other than the source text. So: cwd-relative, tolerating
+ * either root vitest is started from (repo or package). */
 const CSS = ((): string => {
   const rel = "src/renderer/styles/reference-ux.css";
   for (const base of [".", "packages/gui"]) {

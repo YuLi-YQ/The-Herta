@@ -6,8 +6,6 @@ import {
   useResolvedTheme,
 } from "../../hooks/useResolvedTheme.js";
 import { afterLaunch } from "../../lib/launch-gate.js";
-import lampDay from "../../upstream-assets/artwork/agent_lamp.webp";
-import lampNight from "../../upstream-assets/artwork/agent_lamp_night.webp";
 import { RingSVG } from "./DeviceRing.js";
 import {
   initialDeviceVisual,
@@ -40,11 +38,20 @@ const CALM_HOLD_MS = 1500;
    state change restarts it. */
 const PARK_UNFOCUSED_MS = 5000;
 
-/** The lamp layers by theme (ADR 0057 §2.14): what the scene's white idle
- *  lamp adds to the picture, rendered by the art export. */
+/** Publication fixture for this inactive legacy renderer. The public build
+ * excludes the upstream scene artwork; a plain ellipse preserves texture
+ * loading and the existing shader geometry without redistributing that art.
+ * The current application does not mount DeviceGlow. */
+const LAMP_MASK = "data:image/svg+xml," + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1" width="216" height="270" preserveAspectRatio="none">` +
+  `<rect width="1" height="1" fill="black"/>` +
+  `<ellipse cx="${DEVICE_GLOW_GEOMETRY.center[0]}" cy="${DEVICE_GLOW_GEOMETRY.center[1]}" ` +
+  `rx="${DEVICE_GLOW_GEOMETRY.ringRadius[0]}" ry="${DEVICE_GLOW_GEOMETRY.ringRadius[1]}" ` +
+  `fill="none" stroke="white" stroke-width="0.006"/></svg>`,
+);
 const LAMP_LAYERS: Record<ResolvedTheme, string> = {
-  light: lampDay,
-  dark: lampNight,
+  light: LAMP_MASK,
+  dark: LAMP_MASK,
 };
 
 export interface DeviceGlowProps {

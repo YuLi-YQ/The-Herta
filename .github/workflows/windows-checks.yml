@@ -1,0 +1,54 @@
+name: Windows checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out source without persistent credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install pinned Windows toolchain and frozen dependencies
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/bootstrap-windows.ps1
+      - name: Build shared packages
+        run: ./scripts/pnpm.ps1 build
+      - name: Check main and renderer types
+        run: ./scripts/pnpm.ps1 --filter @herta/gui typecheck
+      # The three public-tree cases cover the replaced artwork fixtures and
+      # absent opening catalog. This deliberately is not the full legacy suite.
+      - name: Check public artwork-independent fixtures
+        run: >-
+          ./scripts/pnpm.ps1 exec vitest run
+          packages/gui/src/renderer/components/UtilityRail/DeviceGlow.test.tsx
+          packages/gui/src/renderer/components/Opening/ascii-renderer.test.ts
+          packages/gui/src/renderer/components/Opening/pick-opening-segment.test.ts
+          -t 'uploads the procedural public mask once its image has decoded, and draws it|synthetic segment exercises committed geometry and frame decoding without artwork|returns a rejecting loader when the public build has no opening catalog'
+      - name: Check inert plugin data boundaries
+        run: >-
+          ./scripts/pnpm.ps1 exec vitest run
+          packages/gui/src/shared/executable-plugins.test.ts --project gui-node
+          -t 'preserves JavaScript as inert text|makes all returned objects owned|does not evaluate or import source'
+      - name: Bundle desktop sources
+        run: ./scripts/pnpm.ps1 --filter @herta/gui build
+      - name: Check bundled dependency notices
+        run: ./scripts/pnpm.ps1 --filter @herta/gui checknotices
+      - name: Check Windows payload policy
+        run: ./.runtime/node-v22.23.3-win-x64/node.exe packages/gui/scripts/check-personal-payload.mjs

@@ -73,6 +73,9 @@ export type NavigationMutation =
     };
 
 export interface WorkbenchPermission extends PermissionModeState {
+  /** R130: a plan lock overrides the normal grant; ordinary permission changes are refused. */
+  readonly planLocked?: boolean;
+  readonly planDamaged?: boolean;
   readonly sessionId: string | null;
   readonly projectId: string | null;
   readonly source: "project" | "session" | "default";

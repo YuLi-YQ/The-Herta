@@ -1,0 +1,17 @@
+{
+  "family": "Noto Serif SC",
+  "weight": 600,
+  "licence": "SIL Open Font License 1.1 (resources/licenses/NotoSerifSC-OFL.txt)",
+  "source": "Google Fonts css2 API, text= subset",
+  "lines": [
+    "把难题拿来，别让我无聊。",
+    "这次，有什么有趣的事？",
+    "黑塔的会客室",
+    "The Herta",
+    "THE HERTA / WORKBENCH"
+  ],
+  "chars": " /ABCEHKNORTWaehrt。么事什会别塔客室我把拿无有来次的聊让趣这难题黑，？",
+  "bytes": 8648,
+  "sha256": "1d29d0179ce2a6c7e0a678daf25527478788a32161ba657168cbbc82c8a2f301",
+  "licenceSha256": "5e0da210fb04058a8c0087985d2d456b931c2579811a49655721d3cf0c36b6d6"
+}

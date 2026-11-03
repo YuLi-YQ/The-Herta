@@ -71,6 +71,12 @@ export interface BanzhuanBridgeDeps {
    *  §1.5) instead of starting a new one. Everything else — projection,
    *  beats, the done-marker — is the same. */
   readonly resume?: true;
+  /** The host attaches the delegation's pictures to the executor's request
+   *  itself (F02, the neutral driver), so a picture's task line says so
+   *  instead of pointing at file tools (backend-user-history.ts). Absent →
+   *  the lines as before: the legacy stack mounts `view_image` for a model
+   *  that can see (ADR 0048 §5). */
+  readonly picturesAttached?: true;
 }
 
 /**
@@ -155,6 +161,10 @@ async function invokeBanzhuanBridgeInner(
   // failures, none of which occur in a no-op), but using a dedicated flag
   // makes the no-op test unambiguous regardless.
   let projectedAny = false;
+  // A completed, visible backend answer is useful even when no tool was run
+  // (for example, reading an attached picture). Keep only the final text,
+  // never reasoning, streamed fragments or text accompanying a tool call.
+  let finalVisibleAnswer: string | undefined;
   // Remember the most-recent run_command output so the done-marker roll-up
   // can include it (the report's evidence[] only has short summaries). Both
   // lanes are captured together — the canonical string and its structured
@@ -327,6 +337,13 @@ async function invokeBanzhuanBridgeInner(
         eventQueue[processedIdx] = undefined;
         processedIdx += 1;
         if (event === undefined) continue;
+
+        if (event.layer === "backend" && event.type === "assistant.final") {
+          const text = event.message.toolCalls.length === 0
+            ? event.message.text.trim()
+            : "";
+          finalVisibleAnswer = text || undefined;
+        }
 
         if (event.type === "turn.started" && event.layer === "backend") {
           if (beatsEnabled) {
@@ -506,7 +523,9 @@ async function invokeBanzhuanBridgeInner(
         recordLength: record.length,
       });
     } else {
-      const extracted = extractUserMessages(record, deps.lang);
+      const extracted = extractUserMessages(record, deps.lang, {
+        picturesAttached: deps.picturesAttached === true,
+      });
       const boundary = findLastDispatchBoundary(record);
       const recentDialogue = extractRecentDialogue(record, boundary);
       const workingHistory = extractWorkingHistory(record, boundary);
@@ -619,7 +638,7 @@ async function invokeBanzhuanBridgeInner(
       report.tests.length === 0;
     const marker = sanitizeSystemBlock(
       trulyNoop
-        ? buildNoopMarker()
+        ? buildNoopMarker(finalVisibleAnswer)
         : buildDoneMarker(report, lastCommandTail, lastCommandEvidence, {
             ...(gitCommit !== undefined ? { commit: gitCommit } : {}),
             ...(gitPushedRef !== undefined ? { pushedRef: gitPushedRef } : {}),

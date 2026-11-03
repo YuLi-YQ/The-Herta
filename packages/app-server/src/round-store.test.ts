@@ -130,3 +130,80 @@ it("does not offer precise navigation when a search result disagrees with the sa
  expect(round.activities[0]!.files[0]!.line).toBeUndefined();
  expect(round.limitations.join(" ")).toContain("未提供精确行定位");
 });
+it("names a call refused at the approval gate by its command, not the tool (R45)", () => {
+  const { store } = setup();
+  store.begin("a1", 0);
+  store.event({
+    type: "permission.requested",
+    layer: "backend",
+    request: {
+      id: "request-1",
+      call: { id: "c1", tool: "run_command", input: { argv: ["node", "-e", "console.log(1+1)"] } },
+      reason: "node runs inline code",
+      risk: "workspace_write",
+      code: "command_ask_interpreter",
+    },
+  });
+  store.event({
+    type: "tool.call.finished",
+    layer: "backend",
+    id: "c1",
+    tool: "run_command",
+    result: { ok: false, error: { code: "permission_denied", message: "denied", retryable: false }, summary: "denied" },
+  });
+  store.event({
+    type: "tool.call.finished",
+    layer: "backend",
+    id: "c2",
+    tool: "write_new_file",
+    result: { ok: false, error: { code: "permission_denied", message: "denied", retryable: false }, summary: "denied" },
+  });
+  store.finish("completed");
+  const [refused, unseen] = store.summaries()[0]!.activities;
+  expect(refused).toMatchObject({ title: "node -e console.log(1+1)", command: "node -e console.log(1+1)", status: "denied" });
+  expect(unseen).toMatchObject({ title: "write_new_file", status: "denied" });
+  expect(unseen).not.toHaveProperty("command");
+});
+// R67: a net change is attributed to the tools only when their own boundary snapshots explain it end to end.
+function toolEdit(store: RoundStore, workspace: string, id: string, file: string, value: string) {
+  store.event({ type: "tool.call.started", layer: "backend", id, tool: "edit_file", inputSummary: `edit ${file}`, input: { path: file } });
+  writeFileSync(join(workspace, file), value);
+  store.event({ type: "tool.call.finished", layer: "backend", id, tool: "edit_file", result: { ok: true, summary: "edited" } });
+}
+it("attributes a file to the tools when consecutive tool edits explain the whole net change (R67)", () => {
+  const { workspace, store } = setup();
+  writeFileSync(join(workspace, "a.ts"), "const a = 1;\n");
+  store.begin("a1", 0);
+  toolEdit(store, workspace, "t1", "a.ts", "const a = 2;\n");
+  toolEdit(store, workspace, "t2", "a.ts", "const a = 3;\n");
+  toolEdit(store, workspace, "t3", "b.ts", "export const b = 1;\n");
+  store.finish("completed");
+  const files = store.summaries()[0]!.files;
+  expect(files.find((f) => f.path === "a.ts")?.confidence).toBe("tool");
+  expect(files.find((f) => f.path === "b.ts")?.confidence).toBe("tool");
+});
+it("keeps a file observed when it also changed outside the tool calls (R67)", () => {
+  const { workspace, store } = setup();
+  writeFileSync(join(workspace, "a.ts"), "const a = 1;\n");
+  writeFileSync(join(workspace, "c.ts"), "const c = 1;\n");
+  store.begin("a1", 0);
+  writeFileSync(join(workspace, "a.ts"), "const a = 9;\n"); // before any tool
+  toolEdit(store, workspace, "t1", "a.ts", "const a = 2;\n");
+  toolEdit(store, workspace, "t2", "c.ts", "const c = 2;\n");
+  writeFileSync(join(workspace, "c.ts"), "const c = 7;\n"); // after the tool
+  writeFileSync(join(workspace, "d.ts"), "untouched by tools\n");
+  store.finish("completed");
+  const files = store.summaries()[0]!.files;
+  expect(files.find((f) => f.path === "a.ts")?.confidence).toBe("observed");
+  expect(files.find((f) => f.path === "c.ts")?.confidence).toBe("observed");
+  expect(files.find((f) => f.path === "d.ts")?.confidence).toBe("observed");
+});
+it("does not repeat the scan's fixed scope as a limitation of every round (R72)", () => {
+  const { workspace, store } = setup();
+  writeFileSync(join(workspace, "a.ts"), "const a = 1;\n");
+  store.begin("plain", 0);
+  store.finish("completed");
+  const round = store.summaries()[0]!;
+  expect(round.files).toHaveLength(0);
+  expect(round.limitations).toEqual([]);
+});

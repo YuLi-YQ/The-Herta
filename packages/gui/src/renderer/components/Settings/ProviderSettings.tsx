@@ -2,13 +2,16 @@ import { providerPresets } from "../../../shared/provider-presets.js";
 import type {
   ModelBinding,
   ProviderConfig,
+  ProviderModel,
   ProviderProtocol,
   RoleBindings,
 } from "@herta/providers";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import type {
+  ImageCheckView,
   ProviderSettingsView,
   SaveProviderInput,
+  ValidateProviderModelResult,
 } from "../../../shared/provider-settings-ipc.js";
 import { useHertaBridge } from "../../context/HertaBridgeContext.js";
 import "./provider-settings.css";
@@ -49,6 +52,109 @@ const validationLabels = {
   "tools-available": "工具可用",
   failed: "验证失败",
 };
+/** Only a passed or failed image probe is worth a word; untested says nothing. */
+const imageLabels = {
+  unknown: "",
+  supported: " · 识图通过",
+  unsupported: " · 识图未通过",
+};
+/** F06 (R104): a result saved for an earlier connection is not shown as current, and an old pass
+ *  carries a reminder; nothing re-probes on its own. */
+const STALE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
+const statusLabel = (p: ProviderConfig, m: ProviderModel, now = Date.now()): string => {
+  if (m.validation.providerRevision !== p.revision || m.validation.protocol !== p.protocol)
+    return "需重新验证（连接已修改）";
+  const passed = ["text-available", "tools-available"].includes(m.validation.state);
+  const checked = m.validation.checkedAt ? Date.parse(m.validation.checkedAt) : Number.NaN;
+  return `${validationLabels[m.validation.state]}${passed && now - checked > STALE_AFTER_MS ? "（已超过30天，建议重新验证）" : ""}`;
+};
+/** F06 (R109): image results are dated too, beside the settings (provider-image-checks.ts). An old
+ *  pass gets the same reminder, and a result a connection change reset says so instead of nothing.
+ *  A result saved before R109 has no date, so no reminder. */
+const imageCheckFor = (
+  view: ProviderSettingsView | null,
+  p: ProviderConfig,
+  m: ProviderModel,
+): ImageCheckView | undefined =>
+  view?.imageChecks?.find((c) => c.providerId === p.id && c.modelId === m.id);
+const imageLabel = (m: ProviderModel, check: ImageCheckView | undefined, now = Date.now()): string => {
+  // R110: a request with pictures was refused since the last check. The result was not changed,
+  // so it is still named; the next conclusive check clears the mark.
+  if (check?.review)
+    return m.capabilities.images === "unknown" ? " · 识图待复核" : `${imageLabels[m.capabilities.images]}（待复核）`;
+  if (m.capabilities.images === "unknown")
+    return check?.connectionChanged ? " · 识图需重新测试（连接已修改）" : "";
+  const checked = check?.checkedAt ? Date.parse(check.checkedAt) : Number.NaN;
+  return `${imageLabels[m.capabilities.images]}${m.capabilities.images === "supported" && now - checked > STALE_AFTER_MS ? "（已超过30天，建议重新测试识图）" : ""}`;
+};
+const refusalSurfaces = { chat: "黑塔聊天", workbench: "工作台" } as const;
+const checkedTitle = (m: ProviderModel, check?: ImageCheckView): string | undefined => {
+  const lines = [
+    m.validation.checkedAt && !Number.isNaN(Date.parse(m.validation.checkedAt))
+      ? `上次验证：${new Date(m.validation.checkedAt).toLocaleString()}`
+      : "",
+    check?.checkedAt ? `识图检测：${new Date(check.checkedAt).toLocaleString()}` : "",
+    check?.review
+      ? `识图待复核：${new Date(check.review.at).toLocaleString()}，${refusalSurfaces[check.review.surface]}中附带图片的请求被服务拒绝（HTTP ${check.review.status}）。原因未确认，识图结果未自动更改；重新测试识图后清除。`
+      : "",
+  ].filter(Boolean);
+  return lines.length ? lines.join("\n") : undefined;
+};
+/** F06 (R104): the words for a probe that saved nothing. */
+const unsavedNotice = (result: ValidateProviderModelResult): string | null =>
+  result.superseded
+    ? "已有更新的验证在进行，本次结果未采用。"
+    : result.kept
+      ? `验证未完成：${result.kept.diagnostic}已有验证结果保留，可稍后重试。`
+      : null;
+/** Describe the saved effective binding, never the unsaved advanced-editor selection. */
+function currentBinding(
+  view: ProviderSettingsView,
+  binding: ModelBinding,
+  role: "persona" | "executor",
+) {
+  const provider = view.settings.providers.find(
+    (p) => p.id === binding.providerId,
+  );
+  const model = provider?.models.find((m) => m.id === binding.modelId);
+  if (!provider)
+    return { label: binding.modelId, status: "连接不存在", ready: false };
+  if (!model)
+    return {
+      label: `${binding.modelId} · ${provider.name}`,
+      status: "模型已不在连接中",
+      ready: false,
+    };
+  const current =
+    model.validation.providerRevision === provider.revision &&
+    model.validation.protocol === provider.protocol;
+  const validated =
+    current &&
+    (role === "executor"
+      ? model.validation.state === "tools-available" &&
+        model.capabilities.tools === "supported"
+      : ["text-available", "tools-available"].includes(model.validation.state));
+  const credential =
+    provider.authentication === "none" ||
+    view.credentialStatuses[provider.id]?.set === true;
+  const status =
+    current &&
+    role === "executor" &&
+    model.validation.state === "text-available"
+      ? "文本可用，需验证工具"
+      : current &&
+          role === "executor" &&
+          model.validation.state === "tools-available" &&
+          model.capabilities.tools !== "supported"
+        ? "工具能力需重新验证"
+        : statusLabel(provider, model);
+  return {
+    label: `${model.alias || model.id} · ${provider.name}`,
+    status: credential ? status : `${status} · 缺少 API Key`,
+    ready: validated && credential,
+    title: checkedTitle(model, imageCheckFor(view, provider, model)),
+  };
+}
 const fresh = (): Draft => ({
   timeoutMs: 60000,
   name: "",
@@ -105,6 +211,8 @@ export function ProviderSettings({
   const [separate, setSeparate] = useState(false);
   const [setupChoice, setSetupChoice] = useState("");
   const [setupComplete, setSetupComplete] = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
+  const setupId = useId();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
@@ -135,6 +243,30 @@ export function ProviderSettings({
       ),
     );
   }, [view, scope, sessionId]);
+  // The guided choice starts on the model actually in use — this task's own
+  // binding, else the global one — when chat and coding share it, so a set-up
+  // app no longer reads as "nothing chosen" (R68). Never overrides a choice.
+  useEffect(() => {
+    const inUse =
+      (sessionId ? view?.settings.sessionBindings[sessionId] : undefined) ??
+      view?.settings.defaultBindings;
+    if (
+      !inUse ||
+      inUse.persona.providerId !== inUse.executor.providerId ||
+      inUse.persona.modelId !== inUse.executor.modelId ||
+      !view?.settings.providers.some(
+        (p) =>
+          p.id === inUse.persona.providerId &&
+          p.models.some((m) => m.id === inUse.persona.modelId),
+      )
+    )
+      return;
+    setSetupChoice(
+      (current) =>
+        current ||
+        JSON.stringify([inUse.persona.providerId, inUse.persona.modelId]),
+    );
+  }, [view, sessionId]);
   const patch = (changes: Partial<Draft>): void => {
     setDraft((d) => (d ? { ...d, ...changes } : d));
     setDirty(true);
@@ -211,15 +343,24 @@ export function ProviderSettings({
         if (saved)
           setSetupChoice(JSON.stringify([saved.id, saved.defaults.model]));
         setSetupComplete(false);
+        setShowSetup(true);
         setNotice(
-          "配置已安全保存；下一步选择模型并验证。保存没有发送网络请求。",
+          "连接已保存。下一步：选择模型并验证。",
         );
         if (verify && saved) {
           setNotice("连接已保存，正在验证所选模型…");
+          let unsaved: string | null = null;
           try {
             for (const kind of (verify === "tools" ? ["text", "tools"] : ["text"]) as ("text" | "tools")[]) {
+              // A save that kept the connection keeps the model's results (R83): nothing to resend.
+              const kept = saved.models.find(m => m.id === saved.defaults.model);
+              if (kept && kept.validation.providerRevision === saved.revision && kept.validation.protocol === saved.protocol &&
+                (kind === "tools" ? kept.validation.state === "tools-available" && kept.capabilities.tools === "supported" : ["text-available", "tools-available"].includes(kept.validation.state)))
+                continue;
               const result = await bridge.validateProviderModel({ providerId: saved.id, modelId: saved.defaults.model, expectedRevision: saved.revision, kind });
               setView(result.view);
+              unsaved = unsavedNotice(result);
+              if (unsaved) throw new Error("Validation not saved");
               const current = result.view.settings.providers.find(p => p.id === saved.id);
               const model = current?.models.find(m => m.id === saved.defaults.model);
               const valid = current?.revision === saved.revision && model?.validation.providerRevision === saved.revision && model.validation.protocol === saved.protocol &&
@@ -230,7 +371,7 @@ export function ProviderSettings({
           } catch {
             setDraft(fromProvider(saved));
             setNotice("");
-            setError("连接已保存，但模型验证未完成或配置已变化。请检查后重试；原有绑定未更改。");
+            setError(unsaved ? `连接已保存。${unsaved}` : "连接已保存，但模型验证未完成或配置已变化。请检查后重试；原有绑定未更改。");
             return false;
           }
         }
@@ -365,7 +506,7 @@ export function ProviderSettings({
               value={encode({ providerId: p.id, modelId: m.id })}
             >
               {p.name} / {m.alias || m.id} ·{" "}
-              {validationLabels[m.validation.state]}
+              {statusLabel(p, m)}
             </option>
           )),
         )}
@@ -384,7 +525,7 @@ export function ProviderSettings({
           }),
         );
         setBindingsDirty(false);
-        setNotice("模型绑定已保存，应用于下一轮；执行器须通过工具能力测试。");
+        setNotice("模型绑定已保存，下一轮生效。");
         return true;
       } catch {
         setError("模型绑定保存失败，原绑定已保留。请重试。");
@@ -400,7 +541,7 @@ export function ProviderSettings({
     if (bindingsDirty) return saveBindings();
     return true;
   }, [dirty, save, bindingsDirty, saveBindings]);
-  const probe = async (kind: "models" | "text" | "tools"): Promise<void> => {
+  const probe = async (kind: "models" | "text" | "tools" | "images"): Promise<void> => {
     const provider = view?.settings.providers.find((p) => p.id === draft?.id);
     if (!provider || dirty || busy) return;
     setBusy(true);
@@ -431,14 +572,34 @@ export function ProviderSettings({
         });
         setView(result.view);
         setNotice(
-          `${validationLabels[result.validation.state]}${result.validation.diagnostic ? `：${result.validation.diagnostic}` : ""}`,
+          unsavedNotice(result) ??
+          (kind === "images"
+            ? result.images?.supported
+              ? "识图检测通过：附加的图片会发给该模型。"
+              : `识图检测未通过：${result.images?.diagnostic ?? "模型没有读出测试图片。"}`
+            : `${validationLabels[result.validation.state]}${result.validation.diagnostic ? `：${result.validation.diagnostic}` : ""}`),
         );
       }
     } catch {
       setError(
-        "请求失败或配置已变更。请检查服务地址、凭据与模型后重试；仍可手填模型。未经验证的执行器未激活。",
+        "请求失败或配置已变更。请检查服务地址、凭据与模型后重试；也可以手动填写模型。",
       );
       setNotice("");
+    } finally {
+      setBusy(false);
+    }
+  };
+  /** R109 (F06): the explicit way out of an unreadable record file; main keeps its bytes. */
+  const resetImageChecks = async (): Promise<void> => {
+    if (!bridge.resetImageChecks || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await bridge.resetImageChecks();
+      setView(result.view);
+      setNotice(`原记录文件已另存为 ${result.preserved}；之后的识图检测会重新记录时间。`);
+    } catch {
+      setError("重置识图检测记录失败，原文件保持不变。请重试。");
     } finally {
       setBusy(false);
     }
@@ -463,7 +624,7 @@ export function ProviderSettings({
     setBusy(true);
     setError("");
     setSetupComplete(false);
-    setNotice("正在验证文本，再验证无副作用工具能力…");
+    setNotice("正在验证文本与工具能力…");
     try {
       for (const kind of ["text", "tools"] as const) {
         const result = await bridge.validateProviderModel({
@@ -473,13 +634,16 @@ export function ProviderSettings({
           kind,
         });
         setView(result.view);
+        const unsaved = unsavedNotice(result);
         if (
+          unsaved ||
           result.validation.state === "failed" ||
           (kind === "tools" && result.validation.state !== "tools-available")
         ) {
           setError(
-            result.validation.diagnostic ||
-              "模型未通过验证，请检查连接和模型。执行器未激活。",
+            unsaved ??
+              (result.validation.diagnostic ||
+                "模型未通过验证，请检查连接和模型。"),
           );
           setNotice("");
           return;
@@ -490,7 +654,7 @@ export function ProviderSettings({
       );
     } catch {
       setError(
-        "验证未完成或配置版本已改变。请重新保存并验证；不会自动重试或发送对话。",
+        "验证未完成或配置已改变，请重新保存并验证。",
       );
       setNotice("");
     } finally {
@@ -508,6 +672,7 @@ export function ProviderSettings({
     )
       return;
     setBusy(true);
+    setShowSetup(true);
     setError("");
     try {
       setView(
@@ -543,106 +708,159 @@ export function ProviderSettings({
       </div>
     );
   const credential = draft?.id ? view.credentialStatuses[draft.id] : undefined;
+  const taskBindings = sessionId
+    ? view.settings.sessionBindings[sessionId]
+    : undefined;
+  const effectiveBindings = taskBindings ?? view.settings.defaultBindings;
+  const currentModels = effectiveBindings
+    ? [
+        {
+          role: "黑塔",
+          ...currentBinding(view, effectiveBindings.persona, "persona"),
+        },
+        {
+          role: "执行",
+          ...currentBinding(view, effectiveBindings.executor, "executor"),
+        },
+      ]
+    : [];
+  const currentReady =
+    currentModels.length === 2 && currentModels.every((model) => model.ready);
+  const setupExpanded = !currentReady || showSetup;
   const endpoint = draft
     ? `${draft.baseURL.replace(/\/+$/, "")}/${draft.protocol === "openai-responses" ? "responses" : draft.protocol === "openai-chat-completions" ? "chat/completions" : "messages"}`
     : "";
   return (
     <div className="provider-settings">
-      <p className="settings-note">
-        选择服务与模型 → 保存并验证 → 应用。仅保存连接不发送请求。
-      </p>
       {error && (
         <p className="provider-error" role="alert">
           {error}
         </p>
       )}
       {notice && <p role="status">{notice}</p>}
-      <section className="provider-setup" aria-label="首次配置引导">
-        <h3>开始使用</h3>
-        <ol className="provider-setup-steps">
-          <li>保存连接</li>
-          <li>选择模型</li>
-          <li>验证模型</li>
-          <li>应用并返回</li>
-        </ol>
-        <label className="provider-field">
-          用于对话和编程的模型
-          <select
-            value={setupChoice}
-            disabled={busy || dirty || bindingsDirty}
-            onChange={(e) => {
-              setSetupChoice(e.target.value);
-              setSetupComplete(false);
-              setNotice("");
-            }}
-          >
-            <option value="">请选择已保存的模型</option>
-            {view.settings.providers.flatMap((p) =>
-              p.models.map((m) => (
-                <option
-                  key={`${p.id}/${m.id}`}
-                  value={encode({ providerId: p.id, modelId: m.id })}
-                >
-                  {p.name} / {m.alias || m.id} ·{" "}
-                  {validationLabels[m.validation.state]}
-                </option>
-              )),
+      {effectiveBindings && (
+        <section className="provider-setup" aria-label="工作台模型配置">
+          <div className="provider-list-head">
+            <h3>{currentReady ? "工作台模型" : "工作台模型需要处理"}</h3>
+            {currentReady && (
+              <button
+                type="button"
+                disabled={busy}
+                aria-expanded={setupExpanded}
+                aria-controls={setupId}
+                onClick={() => setShowSetup((value) => !value)}
+              >
+                {setupExpanded ? "收起调整" : "调整模型"}
+              </button>
             )}
-          </select>
-        </label>
-        <p className="provider-help">
-          “验证模型”会顺序发送文本和无副作用工具测试，可能消耗 API
-          额度；不会读取项目或自动发送对话。
-        </p>
-        {setupProvider &&
-          setupModel &&
-          setupModel.validation.providerRevision !== setupProvider.revision && (
-            <p>连接已修改，请重新验证当前配置版本。</p>
-          )}
-        {sessionId && view.settings.sessionBindings[sessionId] && (
+          </div>
+          <small className="provider-help">
+            {taskBindings
+              ? "当前任务独立配置"
+              : sessionId
+                ? "当前任务沿用全局默认"
+                : "全局默认"}
+          </small>
+          {currentModels.map((model) => (
+            <div key={model.role} title={model.title}>
+              {model.role}：<strong>{model.label}</strong> · {model.status}
+            </div>
+          ))}
+        </section>
+      )}
+      {setupExpanded && (
+        <section
+          id={setupId}
+          className="provider-setup"
+          aria-label={effectiveBindings ? "调整模型配置" : "首次配置引导"}
+        >
+          <h3>{effectiveBindings ? "调整模型" : "开始使用"}</h3>
           <p className="provider-help">
-            当前任务已有独立配置。设置全局默认不会覆盖它，请选择“用于当前任务”，或在高级设置清除覆盖。
+            {currentReady
+              ? "选择模型后应用；黑塔与执行模型也可在高级设置中分别选择。"
+              : effectiveBindings
+                ? "检查验证状态，修复连接或选择其他模型后再应用。"
+                : "添加连接并保存验证，再选择模型的应用范围。"}
           </p>
-        )}
-        <div className="provider-actions">
-          <button
-            type="button"
-            disabled={!setupBinding || busy || dirty || bindingsDirty}
-            onClick={() => void verifySetup()}
-          >
-            验证模型（文本 + 工具）
-          </button>
-          <button
-            type="button"
-            disabled={!setupVerified || busy || dirty || bindingsDirty}
-            onClick={() => void applySetup("global")}
-          >
-            设为全局默认
-          </button>
-          {sessionId && (
+          <small className="provider-help">独立聊天在消息框选择模型。</small>
+          <label className="provider-field">
+            用于对话和编程的模型
+            <select
+              value={setupChoice}
+              disabled={busy || dirty || bindingsDirty}
+              onChange={(e) => {
+                setSetupChoice(e.target.value);
+                setSetupComplete(false);
+                setNotice("");
+              }}
+            >
+              <option value="">请选择已保存的模型</option>
+              {view.settings.providers.flatMap((p) =>
+                p.models.map((m) => (
+                  <option
+                    key={`${p.id}/${m.id}`}
+                    value={encode({ providerId: p.id, modelId: m.id })}
+                  >
+                    {p.name} / {m.alias || m.id} · {statusLabel(p, m)}
+                  </option>
+                )),
+              )}
+            </select>
+          </label>
+          <p className="provider-help">
+            “验证模型”会发送小型文本与工具测试请求，可能消耗少量额度。
+          </p>
+          {setupProvider &&
+            setupModel &&
+            setupModel.validation.providerRevision !==
+              setupProvider.revision && (
+              <p>连接已修改，请重新验证当前配置版本。</p>
+            )}
+          {sessionId && view.settings.sessionBindings[sessionId] && (
+            <p className="provider-help">
+              当前任务已有独立配置。设置全局默认不会覆盖它，请选择“用于当前任务”，或在高级设置清除覆盖。
+            </p>
+          )}
+          <div className="provider-actions">
+            <button
+              type="button"
+              disabled={!setupBinding || busy || dirty || bindingsDirty}
+              onClick={() => void verifySetup()}
+            >
+              验证模型（文本 + 工具）
+            </button>
             <button
               type="button"
               disabled={!setupVerified || busy || dirty || bindingsDirty}
-              onClick={() => void applySetup("session")}
+              onClick={() => void applySetup("global")}
             >
-              用于当前任务
+              设为全局默认
             </button>
-          )}
-          {setupComplete && onDone && (
-            <button type="button" disabled={busy} onClick={onDone}>
-              完成，返回任务
-            </button>
-          )}
-        </div>
-      </section>
+            {sessionId && (
+              <button
+                type="button"
+                disabled={!setupVerified || busy || dirty || bindingsDirty}
+                onClick={() => void applySetup("session")}
+              >
+                用于当前任务
+              </button>
+            )}
+            {setupComplete && onDone && (
+              <button type="button" disabled={busy} onClick={onDone}>
+                完成，返回任务
+              </button>
+            )}
+          </div>
+        </section>
+      )}
       <div className="provider-list-head">
-        <h3>已保存的 Provider</h3>
+        <h3>已保存的连接</h3>
         <button type="button" disabled={busy} onClick={() => select(fresh())}>
-          新增 Provider
+          新增连接
         </button>
       </div>
       {!view.settings.providers.length && (
-        <p>尚无连接。添加 Provider 后可以手填模型 ID。</p>
+        <p>还没有连接。添加后可以手动填写模型 ID。</p>
       )}
       <ul className="provider-list">
         {view.settings.providers.map((p) => (
@@ -662,7 +880,7 @@ export function ProviderSettings({
                 {p.models
                   .map(
                     (m) =>
-                      `${m.alias || m.id}：${validationLabels[m.validation.state]}`,
+                      `${m.alias || m.id}：${statusLabel(p, m)}${imageLabel(m, imageCheckFor(view, p, m))}`,
                   )
                   .join(" / ")}
               </small>
@@ -686,9 +904,21 @@ export function ProviderSettings({
           </li>
         ))}
       </ul>
+      {view.imageCheckIssue === "unreadable" && (
+        <div className="provider-confirm">
+          <p>
+            识图检测记录文件无法读取，原文件已保留。识图结果仍按已保存的配置生效，只是暂不显示检测时间，新的检测时间也不会记录。
+          </p>
+          {bridge.resetImageChecks && (
+            <button type="button" disabled={busy} onClick={() => void resetImageChecks()}>
+              另存原文件并重新记录
+            </button>
+          )}
+        </div>
+      )}
       {deleteId && (
         <div className="provider-confirm" role="alert">
-          <p>删除此 Provider 及凭据？相关绑定将清除，历史对话仍保留。</p>
+          <p>删除这个连接及其凭据？相关绑定会清除，历史对话保留。</p>
           <button
             type="button"
             disabled={busy}
@@ -701,7 +931,7 @@ export function ProviderSettings({
                   setDirty(false);
                 }
                 setDeleteId(null);
-                setNotice("Provider 已删除。");
+                setNotice("连接已删除。");
               } catch {
                 setError("删除失败，连接配置已保留。请重试。");
               } finally {
@@ -983,18 +1213,18 @@ export function ProviderSettings({
                   </button>
                 </div>
                 <ul className="provider-models">
-                  {draft.models.map((m) => (
+                  {draft.models.map((m) => {
+                    const savedProvider = view.settings.providers.find((p) => p.id === draft.id);
+                    const saved = savedProvider?.models.find((x) => x.id === m.id);
+                    const check = savedProvider && saved ? imageCheckFor(view, savedProvider, saved) : undefined;
+                    return (
                     <li key={m.id}>
-                      <span>
-                        {m.alias || m.id} <code>{m.alias ? m.id : ""}</code> ·
-                        {
-                          validationLabels[
-                            view.settings.providers
-                              .find((p) => p.id === draft.id)
-                              ?.models.find((x) => x.id === m.id)?.validation
-                              .state ?? "unverified"
-                          ]
-                        }
+                      <span title={saved ? checkedTitle(saved, check) : undefined}>
+                        {m.alias || m.id}
+                        {m.alias && <> <code>{m.id}</code></>}
+                        {" · "}
+                        {savedProvider && saved ? statusLabel(savedProvider, saved) : validationLabels.unverified}
+                        {saved ? imageLabel(saved, check) : ""}
                       </span>
                       <button
                         type="button"
@@ -1015,7 +1245,8 @@ export function ProviderSettings({
                         移除
                       </button>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               </details>
               <label className="provider-field">
@@ -1034,7 +1265,7 @@ export function ProviderSettings({
               </label>
               {draft.presetId && (
                 <p className="provider-help">
-                  预设是常用模型建议；账户可用性以验证为准。思考强度在对话框内调整。
+                  预设是常用模型建议，账户能否使用以验证为准。
                 </p>
               )}
               <div className="provider-actions">
@@ -1068,13 +1299,20 @@ export function ProviderSettings({
                 >
                   测试工具
                 </button>
+                <button
+                  type="button"
+                  disabled={!draft.id || dirty || busy}
+                  onClick={() => void probe("images")}
+                >
+                  测试识图
+                </button>
               </div>
               <label className="provider-field">验证用途
                 <select value={validationUse} onChange={e => setValidationUse(e.target.value as "text" | "tools")}>
                   <option value="tools">编程（文本与工具）</option><option value="text">仅聊天（文本）</option>
                 </select>
               </label>
-              <p className="provider-help">保存并验证会向所选服务发送小型测试请求。工具测试不读取项目；仅保存连接不会激活未验证模型。</p>
+              <p className="provider-help">“保存并验证”会发送小型测试请求，可能消耗少量额度；只保存连接不发送请求。</p>
               <div className="provider-actions">
                 <button type="submit">{busy ? "正在处理…" : "保存并验证"}</button>
                 <button type="button" onClick={() => void save()}>保存连接</button>
@@ -1094,7 +1332,7 @@ export function ProviderSettings({
         </form>
       )}
       <details className="provider-bindings">
-        <summary>高级设置 · 角色与执行器模型绑定</summary>
+        <summary>高级设置 · 对话与编程模型</summary>
         <label className="provider-field">
           绑定范围
           <select
@@ -1103,10 +1341,10 @@ export function ProviderSettings({
             onChange={(e) => setScope(e.target.value as "global" | "session")}
           >
             <option value="global">全局默认</option>
-            {sessionId && <option value="session">当前会话覆盖</option>}
+            {sessionId && <option value="session">当前任务覆盖</option>}
           </select>
         </label>
-        {scope === "session" && <p>仅覆盖当前会话；清除覆盖后沿用全局绑定。</p>}
+        {scope === "session" && <p>仅覆盖当前任务；清除后沿用全局默认。</p>}
         {bindingSelect("persona", "黑塔对话模型")}
         <label className="provider-checkbox-row">
           <input
@@ -1127,7 +1365,7 @@ export function ProviderSettings({
         </label>
         {separate && bindingSelect("executor", "编程执行模型")}
         <p>
-          绑定变更仅作用于下一轮。执行器必须通过同配置版本的工具能力验证；文本测试成功不代表工具可用。
+          改动从下一轮生效。编程执行模型需通过工具验证；文本可用不代表工具可用。
         </p>
         <div className="provider-actions">
           <button
@@ -1142,7 +1380,7 @@ export function ProviderSettings({
             disabled={busy}
             onClick={() => void saveBindings(true)}
           >
-            {scope === "session" ? "清除会话覆盖" : "清除默认绑定"}
+            {scope === "session" ? "清除任务覆盖" : "清除默认绑定"}
           </button>
         </div>
       </details>

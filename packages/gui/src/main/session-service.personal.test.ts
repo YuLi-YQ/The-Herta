@@ -17,6 +17,7 @@ const checks = vi.hoisted(() => ({
   fetch: vi.fn(),
   ipcHandle: vi.fn(),
   openPath: vi.fn(),
+  recordRefused: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -48,9 +49,12 @@ vi.mock("./provider-migration.js", () => ({
   migrateLegacyProvider: vi.fn(async () => ({ status: "not-needed" })),
 }));
 vi.mock("./provider-settings.js", () => ({
+  getProviderReadiness: () => ({ ready: true }),
+  ProviderConfigurationError: class extends Error {},
   acquireTurnProviders: vi.fn(() => {
     throw new Error("No configured Provider");
   }),
+  recordImageRequestRefused: checks.recordRefused,
 }));
 vi.mock("./settings-ipc.js", () => ({
   registerSettingsHandlers: vi.fn(),
@@ -171,6 +175,10 @@ it("boots the personal session host without constructing voice services or makin
   expect(config).not.toHaveProperty("voiceAssetsDir");
   expect(config.providers.deepseekApiKey).toBe("");
   expect(config.neutralProviders.resolveTurn).toBeTypeOf("function");
+  // R110 (F06): the workbench's refused requests with pictures reach the record beside the settings.
+  const refused = { providerId: "p", providerRevision: 2, modelId: "m", status: 400, surface: "workbench" };
+  config.neutralProviders.onImageRequestRefused(refused);
+  expect(checks.recordRefused).toHaveBeenCalledWith(refused);
   expect(config.dream.enabled).toBe(false);
   expect(send).toHaveBeenCalledWith(EVT.reset, { noSession: true });
   for (const factory of [
@@ -231,4 +239,229 @@ it("rejects foreign and missing frames before trusted permission handler input i
     "权限选择已过期或不属于当前任务",
   );
   await service.dispose();
+});
+
+it("R90 rejects a submit addressed to a different session before invoking the active one", async () => {
+  const host = {
+    activeSession: null as unknown,
+    setPdfPictureTranscription: vi.fn(),
+    reapOrphanedProcesses: vi.fn(async () => undefined),
+    closeActiveSession: vi.fn(async () => undefined),
+    dispose: vi.fn(),
+  };
+  checks.createHost.mockReturnValue(host);
+  const { wc, event } = trustedWindow();
+  const service = createSessionService(wc, {} as BrowserWindow);
+  try {
+    await service.start();
+    const submit = vi.fn(async () => ({ turnId: "unexpected" }));
+    host.activeSession = { sessionId: "new-session", submitText: submit, record: [], stagedImageList: [{ id: "image-1" }] };
+    const listener = checks.ipcHandle.mock.calls.find(([channel]) => channel === CMD.submitText)?.[1];
+    const result = await listener(event, "old draft", undefined, "old-session");
+    expect(result).toMatchObject({ failure: { stage: "configuration", message: expect.stringContaining("任务已切换") } });
+    expect(submit).not.toHaveBeenCalled();
+    for (const invalid of ["", "../other", 42, null]) {
+      await expect(listener(event, "draft", undefined, invalid)).rejects.toThrow("任务输入格式");
+    }
+    expect(submit).not.toHaveBeenCalled();
+    const accepted = await listener(event, "correct draft", ["image-1"], "new-session");
+    expect(accepted).toEqual({ turnId: "unexpected" });
+    expect(submit).toHaveBeenCalledExactlyOnceWith("correct draft", { stagedImageIds: ["image-1"] });
+  } finally {
+    host.activeSession = null;
+    await service.dispose();
+  }
+});
+
+
+
+it("R93 refuses missing image handles before sending any part of a message", async () => {
+  const host = { activeSession: null as unknown, setPdfPictureTranscription: vi.fn(), reapOrphanedProcesses: vi.fn(async () => undefined), closeActiveSession: vi.fn(async () => undefined), dispose: vi.fn() };
+  checks.createHost.mockReturnValue(host);
+  const { wc, event } = trustedWindow();
+  const service = createSessionService(wc, {} as BrowserWindow);
+  try {
+    await service.start();
+    const submit = vi.fn(async () => ({ turnId: "unexpected" }));
+    host.activeSession = { sessionId: "s", record: [], stagedImageList: [{ id: "valid" }], submitText: submit };
+    const listener = checks.ipcHandle.mock.calls.find(([channel]) => channel === CMD.submitText)?.[1];
+    const result = await listener(event, "picture question", ["valid", "lost"], "s");
+    expect(result).toMatchObject({ failure: { stage: "configuration", message: expect.stringContaining("图片暂存已失效") } });
+    expect(submit).not.toHaveBeenCalled();
+    submit.mockImplementationOnce(async () => { throw Object.assign(new Error("missing copy"), { code: "image-unreadable" }); });
+    const failedRead = await listener(event, "restore image", ["valid"], "s");
+    expect(failedRead).toMatchObject({ failure: { code: "image-unreadable", stage: "configuration" } });
+  } finally { host.activeSession = null; await service.dispose(); }
+});
+
+
+
+it("R98 binds the manifest reset to the active task and names an unrestorable picture as an attachment problem", async () => {
+  const host = { activeSession: null as unknown, setPdfPictureTranscription: vi.fn(), reapOrphanedProcesses: vi.fn(async () => undefined), closeActiveSession: vi.fn(async () => undefined), dispose: vi.fn() };
+  checks.createHost.mockReturnValue(host);
+  const { wc, event } = trustedWindow();
+  const service = createSessionService(wc, {} as BrowserWindow);
+  try {
+    await service.start();
+    const reset = vi.fn(async () => ({ ok: true as const, backup: "s.json.damaged-x" }));
+    const submit = vi.fn(async () => { throw Object.assign(new Error("missing copy"), { code: "image-unreadable" }); });
+    host.activeSession = { sessionId: "s", record: [], stagedImageList: [{ id: "valid" }], submitText: submit, resetPendingImages: reset };
+    const resetListener = checks.ipcHandle.mock.calls.find(([channel]) => channel === CMD.resetPendingImages)?.[1];
+    expect(await resetListener(event, "other")).toEqual({ ok: false, reason: "failed" });
+    expect(await resetListener(event, 42)).toEqual({ ok: false, reason: "failed" });
+    expect(reset).not.toHaveBeenCalled();
+    expect(await resetListener(event, "s")).toEqual({ ok: true, backup: "s.json.damaged-x" });
+    const listener = checks.ipcHandle.mock.calls.find(([channel]) => channel === CMD.submitText)?.[1];
+    const failed = await listener(event, "restore image", ["valid"], "s");
+    expect(failed).toMatchObject({ failure: { code: "image-unreadable", stage: "configuration", action: "attachment", message: expect.stringContaining("图片缺失") } });
+  } finally { host.activeSession = null; await service.dispose(); }
+});
+
+it("R98 reads restored pictures for the active task only, with bounded ids", async () => {
+  const host = { activeSession: null as unknown, setPdfPictureTranscription: vi.fn(), reapOrphanedProcesses: vi.fn(async () => undefined), closeActiveSession: vi.fn(async () => undefined), dispose: vi.fn() };
+  checks.createHost.mockReturnValue(host);
+  const { wc, event } = trustedWindow();
+  const service = createSessionService(wc, {} as BrowserWindow);
+  try {
+    await service.start();
+    const prepare = vi.fn(async (ids: readonly string[]) => ids.filter((id) => id === "lost"));
+    host.activeSession = { sessionId: "s", record: [], stagedImageList: [], prepareStagedImages: prepare };
+    const listener = checks.ipcHandle.mock.calls.find(([channel]) => channel === CMD.prepareStagedImages)?.[1];
+    for (const ids of [undefined, "kept", [1], [""], ["a", "b", "c", "d", "e", "f"], ["x".repeat(129)]])
+      expect(await listener(event, "s", ids)).toEqual({ ok: false });
+    expect(await listener(event, "other", ["kept"])).toEqual({ ok: false });
+    expect(prepare).not.toHaveBeenCalled();
+    expect(await listener(event, "s", ["kept", "lost"])).toEqual({ ok: true, unreadable: ["lost"] });
+  } finally { host.activeSession = null; await service.dispose(); }
+});
+
+it("R100 asks for all-or-nothing only on request, returns the missing paths, and names a move in progress", async () => {
+  const host = { activeSession: null as unknown, setPdfPictureTranscription: vi.fn(), reapOrphanedProcesses: vi.fn(async () => undefined), closeActiveSession: vi.fn(async () => undefined), dispose: vi.fn() };
+  checks.createHost.mockReturnValue(host);
+  const { wc, event } = trustedWindow();
+  const service = createSessionService(wc, {} as BrowserWindow);
+  try {
+    await service.start();
+    const attach = vi.fn(async (_paths: readonly string[], _progress?: unknown, opts?: { requireAll?: boolean }) =>
+      opts?.requireAll ? { ok: false as const, reason: "missing" as const, missing: ["C:\\gone.md"] } : { ok: false as const, reason: "workspace_changing" as const });
+    const stage = vi.fn(async () => ({ ok: false as const, reason: "workspace_changing" as const }));
+    host.activeSession = { sessionId: "s", record: [], stagedImageList: [], attachFiles: attach, stageImages: stage };
+    const attachListener = checks.ipcHandle.mock.calls.find(([channel]) => channel === CMD.attachFiles)?.[1];
+    expect(await attachListener(event, "s", ["C:\\gone.md"], { requireAll: true })).toEqual({ ok: false, message: "missing files", missing: ["C:\\gone.md"] });
+    expect(attach.mock.calls[0]?.[2]).toEqual({ requireAll: true });
+    for (const loose of [undefined, { requireAll: "yes" }, "requireAll", null])
+      expect(await attachListener(event, "s", ["C:\\a.md"], loose)).toEqual({ ok: false, message: "workspace changing" });
+    expect(attach.mock.calls.slice(1).every((call) => call[2] === undefined)).toBe(true);
+    const stageListener = checks.ipcHandle.mock.calls.find(([channel]) => channel === CMD.stageImages)?.[1];
+    expect(await stageListener(event, "s", [{ path: "C:\\a.png" }])).toEqual({ ok: false, message: "workspace changing" });
+  } finally { host.activeSession = null; await service.dispose(); }
+});
+
+it("R116 binds a picture's model use to the active task, checks the request's shape first, and passes on the session's answer", async () => {
+  const host = {
+    activeSession: null as unknown,
+    setPdfPictureTranscription: vi.fn(),
+    reapOrphanedProcesses: vi.fn(async () => undefined),
+    closeActiveSession: vi.fn(async () => undefined),
+    dispose: vi.fn(),
+  };
+  checks.createHost.mockReturnValue(host);
+  const { wc, event } = trustedWindow();
+  const service = createSessionService(wc, {} as BrowserWindow);
+  try {
+    await service.start();
+    const change = vi.fn(
+      async (
+        _targets: readonly { index: number; path: string }[],
+        _use: "stop" | "send",
+      ) =>
+        ({ ok: true as const, changed: 2 }) as
+          | { ok: true; changed: number }
+          | { ok: false; reason: "turn_in_progress" | "not_found" | "invalid" },
+    );
+    host.activeSession = {
+      sessionId: "s",
+      record: [],
+      stagedImageList: [],
+      setPictureModelUse: change,
+    };
+    const listener = checks.ipcHandle.mock.calls.find(
+      ([channel]) => channel === CMD.setPictureModelUse,
+    )?.[1];
+    const target = { index: 3, path: ".herta/attachments/s/a.png" };
+    expect(await listener(event, "other", [target], "stop")).toEqual({
+      ok: false,
+      reason: "no_session",
+    });
+    expect(await listener(event, 42, [target], "stop")).toEqual({
+      ok: false,
+      reason: "no_session",
+    });
+    const many = Array.from({ length: 33 }, (_, index) => ({
+      index,
+      path: target.path,
+    }));
+    const malformed: [unknown, unknown][] = [
+      [undefined, "stop"],
+      [target, "stop"],
+      ["a.png", "stop"],
+      [[], "stop"],
+      [many, "stop"],
+      [[null], "stop"],
+      [[{ index: -1, path: target.path }], "stop"],
+      [[{ index: 1.5, path: target.path }], "stop"],
+      [[{ index: "3", path: target.path }], "stop"],
+      [[{ index: 2 ** 53, path: target.path }], "stop"],
+      [[{ index: 3, path: "" }], "stop"],
+      [[{ index: 3, path: "p".repeat(4097) }], "stop"],
+      [[{ index: 3 }], "stop"],
+      [[target], "pause"],
+      [[target], undefined],
+    ];
+    for (const [targets, use] of malformed)
+      expect(await listener(event, "s", targets, use)).toEqual({
+        ok: false,
+        reason: "invalid",
+      });
+    expect(change).not.toHaveBeenCalled();
+    // Only the index and path go on: anything else the window sends is dropped.
+    expect(
+      await listener(
+        event,
+        "s",
+        [
+          { ...target, extra: "dropped" },
+          { index: 4, path: target.path },
+        ],
+        "stop",
+      ),
+    ).toEqual({ ok: true, changed: 2 });
+    expect(change).toHaveBeenCalledExactlyOnceWith(
+      [target, { index: 4, path: target.path }],
+      "stop",
+    );
+    expect(await listener(event, "s", many.slice(0, 32), "send")).toEqual({
+      ok: true,
+      changed: 2,
+    });
+    for (const reason of [
+      "turn_in_progress",
+      "not_found",
+      "invalid",
+    ] as const) {
+      change.mockResolvedValueOnce({ ok: false, reason });
+      expect(await listener(event, "s", [target], "send")).toEqual({
+        ok: false,
+        reason,
+      });
+    }
+    host.activeSession = { sessionId: "s", record: [], stagedImageList: [] };
+    expect(await listener(event, "s", [target], "send")).toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+  } finally {
+    host.activeSession = null;
+    await service.dispose();
+  }
 });

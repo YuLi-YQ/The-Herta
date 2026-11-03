@@ -5,7 +5,7 @@ import { isPathInside } from "./path-containment.js";
 import { permissionModeState, withPermissionMode } from "./permission-mode.js";
 import type { PermissionRequest } from "./types/events.js";
 import type { ToolCallRequest, ToolContext } from "./types/tool.js";
-import { trustCovers } from "./workspace-trust.js";
+import { permissionModeCoversRequest } from "./workspace-trust.js";
 
 export type RiskLevel =
   | "workspace_read"
@@ -271,10 +271,7 @@ export class RulePermissionEngine implements PermissionEngine {
         ? { consequence: verdict.consequence }
         : {}),
     };
-    if (
-      mode === "full-access" ||
-      (mode === "workspace-edit" && trustCovers(request))
-    )
+    if (permissionModeCoversRequest(mode, request))
       return { kind: "allow" };
     const revision = permissionModeState(ctx)?.revision;
     const decision = this.ask.present(request, ctx.signal).then((answer) => {

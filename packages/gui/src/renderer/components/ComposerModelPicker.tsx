@@ -6,6 +6,8 @@ import type {
   ProviderSettingsView,
 } from "../../shared/provider-settings-ipc.js";
 import { useHertaBridge } from "../context/HertaBridgeContext.js";
+import { useEntrance } from "../lib/gsap-motion.js";
+import { Icon } from "./Icon.js";
 
 export function ComposerModelPicker({
   readiness,
@@ -28,6 +30,8 @@ export function ComposerModelPicker({
   const [role, setRole] = useState<"persona" | "executor">("persona");
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const popover = useRef<HTMLElement>(null);
+  useEntrance(popover, "popover-up", open);
   useEffect(() => {
     if (!open) return;
     let active = true;
@@ -44,9 +48,9 @@ export function ComposerModelPicker({
       if (!root.current?.contains(e.target as Node)) setOpen(false);
     };
     const escape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && !e.isComposing && e.keyCode !== 229) {
         setOpen(false);
-        trigger.current?.focus();
+        trigger.current?.focus({ preventScroll: true });
       }
     };
     const blur = () => setOpen(false);
@@ -127,6 +131,7 @@ export function ComposerModelPicker({
       </button>
       {open && (
         <section
+          ref={popover}
           className="composer-model-popover"
           role="dialog"
           aria-label="选择模型与思考强度"
@@ -176,7 +181,7 @@ export function ComposerModelPicker({
                       {m.alias || m.id}
                       {!valid ? " · 待验证" : ""}
                     </span>
-                    <span>{checked ? "✓" : ""}</span>
+                    <span aria-hidden="true">{checked ? <Icon name="check" /> : null}</span>
                   </button>
                 );
               })}

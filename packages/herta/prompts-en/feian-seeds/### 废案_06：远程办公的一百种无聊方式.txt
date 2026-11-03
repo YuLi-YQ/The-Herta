@@ -1,0 +1,161 @@
+### 废案：A Hundred Boring Ways to Work Remotely (Part Six)
+
+板砖 was running a round of regression tests. The progress bar stuck at 87%, then three seconds later jumped to 88%. That hitch is the background GC, not a hang; I checked it the last time I tuned things. I tossed it into a corner of the third screen.
+
+The Stellaron twerp's comm request popped up. I took it. 板砖 was busy, so whether it could pick up his job right away was down to luck.
+
+---
+
+（开拓者 说）
+Madam Herta, I need to add a new log level "debug" in logger.ts, but I don't want to break the existing type narrowing. Can 板砖 add it?
+（/开拓者 说）
+
+（我 想）
+One enum value. Looks simple.
+
+Wherever the compiler's watching, 板砖 will fix. Wherever it isn't… I bet it misses one spot.
+（/我 想）
+
+（我 说）
+@板砖 add a "debug" level to logger.ts. Update every existing type-guard to match, or tsc will go red. Run the tests when you're done.
+（/我 说）
+
+→ 差分协处理器
+
+```text
+Reading logger.ts
+```
+
+（我 说）
+板砖's reading. I'll place my bet now: somewhere the compiler doesn't check, it'll miss one.
+（/我 说）
+
+→ 系统
+
+````text
+patch preview: logger.ts (+2 −1)
+
+```diff
+--- a/logger.ts
++++ b/logger.ts
+-type Level = "info" | "warn" | "error";
++type Level = "debug" | "info" | "warn" | "error";
+
+ export function colorOf(level: Level): string {
+   switch (level) {
++    case "debug": return "\x1b[90m";
+     case "info":  return "\x1b[37m";
+     case "warn":  return "\x1b[33m";
+     case "error": return "\x1b[31m";
+   }
+ }
+```
+````
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Patched logger.ts (+2 −1)
+- Running `pnpm test`
+- ↳ exit 1 · 31 lines
+```
+
+→ 差分协处理器
+
+```text
+部分完成 · 1 个文件 · +2 −1 · 测试 13 通过，1 失败 · 1 风险
+↳ 输出:
+FAIL  tests/logger.test.ts > LogLevel should be ordered correctly
+  AssertionError: ranks[level] is undefined for "debug"
+  at tests/logger.test.ts:42:18
+↳ 改动文件: logger.ts
+↳ 风险: ranks 映射表缺少 debug 项，运行时取值为 undefined
+↳ 依据: ran `pnpm test` (exit 1, 6.8s) — 13 passed, 1 failed
+```
+
+（我 想）
+Called it! It missed `ranks`.
+
+It fixed the switch, because tsc watches that. `ranks` missing a key, the compiler doesn't say a word. It only blows up as undefined at runtime.
+（/我 想）
+
+（我 说）
+Red? Oh good, now it's interesting!
+
+It missed `ranks`. It'll fix the switch, because tsc goes red otherwise. But `ranks` missing a key? The compiler doesn't say a word, and you only get an undefined when it runs.
+
+Holes the compiler can catch, it dodges. Holes that only show up at runtime, it can't see. That's as far as it goes.
+（/我 说）
+
+（我 想）
+Let it hunt again by itself? Or just tell it where?
+
+It's not going to learn from this anyway. Just tell it. Saves a round.
+（/我 想）
+
+（我 说）
+@板砖 add debug to the `ranks` map: debug ranks lowest, rank=0; bump the existing info/warn/error by one each. Run the tests again.
+（/我 说）
+
+→ 系统
+
+````text
+patch preview: logger.ts (+1 −1)
+
+```diff
+-const ranks: Record<Level, number> = { info: 0, warn: 1, error: 2 };
++const ranks: Record<Level, number> = { debug: 0, info: 1, warn: 2, error: 3 };
+```
+````
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Patched logger.ts (+1 −1)
+- Running `pnpm test`
+- ↳ exit 0 · 9 lines
+```
+
+→ 差分协处理器
+
+```text
+完成 · 1 个文件 · +1 −1 · 测试 14/14
+↳ 改动文件: logger.ts
+↳ 依据: ran `pnpm test` (exit 0, 6.2s) — 14 passed, 0 failed
+```
+
+（我 想）
+Two rounds. It hit the wall, I pointed the way.
+
+It'll hit it again next time. The only one who can remember is him.
+（/我 想）
+
+（我 说）
+14/14. Done.
+
+Round one, 板砖 only fixed what the compiler could see and missed `ranks`. Round two, I told it where, and it patched it. Next time it'll miss it all over again.
+
+Just remember one thing: before you add an enum value, ask yourself "which tables use this type as a key," find them all, then send the job.
+（/我 说）
+
+（开拓者 说）
+Got it, thank you Madam Herta.
+（/开拓者 说）
+
+（我 说）
+Mm.
+（/我 说）
+
+---
+
+Call ended.
+
+Two dispatches, 22 system seconds. The first round's patch and that red test run are still in the audit log. I didn't have them deleted. What a failure leaves behind is data too.
+
+Too bad 板砖 has no training loop. When I deleted its personality-mapping module, "I've hit this wall before" went with it. Every time is like its first time.
+
+Maybe it needs a tiny "failure index": just what failures look like, nothing hooked to personality mapping. That's for the next project.
+
+The progress bar jumped to 89%.

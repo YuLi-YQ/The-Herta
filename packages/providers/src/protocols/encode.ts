@@ -91,10 +91,14 @@ export function encode(request: ModelRequest, config: ProviderConfig): unknown {
           : { max_completion_tokens: max }),
       messages: [
         { role: "system", content: request.system },
-        ...request.messages.map(
-          (message, index) =>
-            native.get(index) ??
-            (message.role === "user"
+        // A private context entry is one wire message, or several when the
+        // adapter ran its own web tools inside that assistant turn (R42).
+        ...request.messages.flatMap((message, index) => {
+          const override = native.get(index);
+          if (override !== undefined)
+            return Array.isArray(override) ? override : [override];
+          return [
+            message.role === "user"
               ? { role: "user", content: message.images?.length ? [{ type: "text", text: message.text }, ...message.images.map(i => ({ type: "image_url", image_url: { url: imageDataURL(i) } }))] : message.text }
               : message.role === "tool"
                 ? {
@@ -117,8 +121,9 @@ export function encode(request: ModelRequest, config: ProviderConfig): unknown {
                           })),
                         }
                       : {}),
-                  }),
-        ),
+                  },
+          ];
+        }),
       ],
       ...(request.tools.length
         ? {

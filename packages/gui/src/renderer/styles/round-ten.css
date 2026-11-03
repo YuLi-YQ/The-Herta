@@ -42,14 +42,15 @@
   padding: 10px 18px;
   border-radius: 16px 16px 4px 16px;
 }
+/* Hidden from sight, not from screen readers (R73): the bubble's side shows
+   who wrote it, the label still says it aloud. */
 .herta-r10 .herta-transcript > article.herta-user > strong {
-  display: none;
-}
-.herta-r10 .herta-user .herta-message-content > :first-child {
-  margin-top: 0;
-}
-.herta-r10 .herta-user .herta-message-content > :last-child {
-  margin-bottom: 0;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .herta-r10 .herta-composer {
   padding: 0;
@@ -239,22 +240,6 @@
     max-width: 42%;
   }
 }
-/* Local controls must not inherit the sidebar's full-width action style. */
-.herta-r3 .herta-nav-recovery {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-}
-.herta-r3 .herta-nav-recovery > span {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.herta-r3 .herta-nav-recovery > button {
-  width: auto;
-  margin: 0;
-  white-space: nowrap;
-}
 .herta-r10 .round-task-card > .round-note {
   margin: 12px 16px;
 }
@@ -286,6 +271,21 @@
 .herta-r10 .composer-model-picker .herta-model-status {
   max-width: 100%;
   margin: 0;
+}
+/* R45: model and send action as one group at the row's end. With the reader
+   open (or a narrow window) the row wraps as a unit, so ↑ stays on the right
+   instead of starting a line of its own. */
+.herta-r10 .herta-composer-send-group {
+  order: 3;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-left: auto;
+}
+.herta-r10 .herta-composer-send-group > .composer-model-picker {
+  margin-left: 0;
+  max-width: 240px;
 }
 .herta-r10 .composer-model-popover {
   position: absolute;

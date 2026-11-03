@@ -117,6 +117,7 @@ export {
   makeRecapSummarize,
   type PreparedRecap,
   prepareTurnRecap,
+  type RecapOutcome,
   type RecapRuntime,
 } from "./narrative/session-recap-runtime.js";
 export {

@@ -1,6 +1,3 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   alphaFromStrength,
@@ -261,24 +258,25 @@ describe("ascii-renderer glyph sizes (M-opening-2)", () => {
     expect(missing).toEqual([]);
   });
 
-  it("every committed opening segment has the geometry the glyph sheet is drawn to", () => {
-    const dir = fileURLToPath(
-      new URL("../../upstream-assets/openings/", import.meta.url),
-    );
-    const files = readdirSync(dir).filter((f) => f.endsWith(".json"));
-    expect(files.length).toBeGreaterThan(0);
-    for (const file of files) {
-      const segment = JSON.parse(
-        readFileSync(join(dir, file), "utf8"),
-      ) as SegmentData;
-      expect([file, segment.width, segment.height]).toEqual([
-        file,
-        OPENING_SEGMENT_GEOMETRY.width,
-        OPENING_SEGMENT_GEOMETRY.height,
-      ]);
-      const largest = segment.cells.reduce((m, c) => Math.max(m, c[2]), 0);
-      expect(largest).toBeLessThanOrEqual(OPENING_SEGMENT_GEOMETRY.maxCellSize);
-    }
+  it("synthetic segment exercises committed geometry and frame decoding without artwork", () => {
+    // A procedural three-cell, two-frame fixture. Its dimensions are fixed
+    // independently of the renderer so a geometry contract change is visible.
+    // No character image or excluded opening data is copied into public tests.
+    const segment: SegmentData = {
+      type: "adaptive-ascii-video-segment-v1", width: 1908, height: 1080,
+      fps: 2, frameCount: 2, activeCount: 3,
+      cells: [[18, 18, 36], [954, 540, 18], [1890, 1062, 36]],
+      framesBase64: btoa(String.fromCharCode(0, 127, 255, 255, 127, 0)),
+    };
+    expect([segment.width, segment.height]).toEqual([
+      OPENING_SEGMENT_GEOMETRY.width, OPENING_SEGMENT_GEOMETRY.height,
+    ]);
+    expect(segment.cells.length).toBe(segment.activeCount);
+    expect(Math.max(...segment.cells.map(cell => cell[2]))).toBe(OPENING_SEGMENT_GEOMETRY.maxCellSize);
+    const frames = decodeBase64ToBytes(segment.framesBase64);
+    expect(frames.length).toBe(segment.frameCount * segment.activeCount);
+    expect([0, 1, 2].map(cell => getInterpolatedBrightness(frames, 3, 2, cell, 0.5))).toEqual([127.5, 127, 127.5]);
+    expect(getInterpolatedBrightness(frames, 3, 2, 2, 1)).toBe(0);
   });
 
   it("OPENING_GLYPHS holds every symbol of every group", () => {

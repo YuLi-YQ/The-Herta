@@ -9,5 +9,8 @@ void import("./boot.js");
 import "./styles/round-two.css";
 
 import "./styles/observatory.css";
+import "./styles/conversation.css";
+import "./styles/interaction.css";
+import "./styles/display-font.css";
 
 import "./styles/motion.css";

@@ -117,6 +117,8 @@ export interface V2ActorDriverDeps {
   /** Structured static Herta prefix. See `StaticHertaPrefix` in
    *  `@herta/herta`'s narrative/actor-prompt. */
   readonly staticPrefix: StaticHertaPrefix;
+  /** F09: read once at turn start, never folded into the static prefix. */
+  readonly goalContext?: () => string;
   readonly bus: EventBus<AgentEvent>;
   readonly runtimeFactory: () => CodingAgentRuntime;
   /**
@@ -198,6 +200,8 @@ export interface V2ActorDriverDeps {
    *  Built at app bootstrap (router summarizer + persisted cache). Undefined
    *  → no compaction. */
   readonly recap?: RecapRuntime;
+  /** Desktop queue, consumed only when this driver prepares an actual turn. */
+  readonly consumeCompactRequest?: () => boolean;
   /**
    * Re-derives `staticPrefix` at a step event (ADR 0069 §1). Absent → the
    * prefix is fixed for the driver's life (tests, a caller with a fixed
@@ -471,6 +475,7 @@ export class V2ActorDriver {
     opts: { readonly resume?: true } = {},
   ): Promise<TerminalRecord> {
     const prevLen = this.record.length;
+    const goalContext = this.deps.goalContext?.() ?? "";
 
     // Slice 13: classify intent before the actor runs. Router failure
     // is non-fatal — we keep the prior state and proceed.
@@ -491,7 +496,8 @@ export class V2ActorDriver {
     // 2026-06-20). Computed once here and threaded into the turn as
     // `precomputedRecap`; the forceCompact one-shot is consumed up here too so
     // it clears even if the turn later throws.
-    const forceCompact = this.forceCompactPending;
+    const desktopForce = this.deps.consumeCompactRequest?.() ?? false;
+    const forceCompact = this.forceCompactPending || desktopForce;
     this.forceCompactPending = false;
     const recapPending = prepareTurnRecap(
       prelimRecord,
@@ -564,6 +570,7 @@ export class V2ActorDriver {
               provider: this.deps.provider,
               model: this.deps.model,
               staticPrefix: this.staticPrefix,
+              ...(goalContext ? { goalContext } : {}),
               attachedMetaThink: corpusActive
                 ? this.planMetaThink(this.currentIntentState).attachment
                 : undefined,
@@ -666,6 +673,7 @@ export class V2ActorDriver {
         provider: this.deps.provider,
         model: this.deps.model,
         staticPrefix: this.staticPrefix,
+        ...(goalContext ? { goalContext } : {}),
         bus: this.deps.bus,
         runtimeFactory: this.deps.runtimeFactory,
         sink: this.deps.sink,
@@ -984,8 +992,6 @@ export class V2ActorDriver {
     // record, so a persister failure (disk full, permission denied) propagates
     // with BOTH still intact rather than leaving memory shortened ahead of disk
     // (which would desync the canonical record on the next resume).
-    this.persister?.truncateToBlockCount(userIndex);
-    this.record = this.record.slice(0, userIndex);
     // Recap-sidecar invalidation: when the truncation cuts at/below the
     // cached compaction boundary, the sidecar describes record state that no
     // longer exists. Validate-on-first-use would discard it on the next turn
@@ -997,12 +1003,16 @@ export class V2ActorDriver {
       const cached = recap.cacheRead();
       if (
         cached !== null &&
-        (cached.boundaryIndex >= this.record.length ||
+        (cached.boundaryIndex <= 0 ||
+          cached.boundaryIndex >= userIndex ||
           this.record[cached.boundaryIndex]?.kind !== "user")
       ) {
         recap.cacheInvalidate?.();
       }
     }
+    // Discard derived cache first: if that fails, do not truncate a transcript the cache would misrepresent.
+    this.persister?.truncateToBlockCount(userIndex);
+    this.record = this.record.slice(0, userIndex);
     // Per-turn state resets (same as loadRecord): the next turn rebuilds mood +
     // meta-think anchors against the new, shorter record.
     this.currentIntentState = "默认";
@@ -1040,11 +1050,29 @@ export class V2ActorDriver {
    * re-syncs the renderer instead (SessionImpl does, via resyncRecord).
    */
   replaceBlockAt(index: number, block: SystemBlock): boolean {
-    if (index < 0 || index >= this.record.length) return false;
+    return this.replaceBlocksAt([{ index, block }]);
+  }
+
+  /** Persist a whole batch before publishing any changed row (R128). */
+  replaceBlocksAt(
+    changes: readonly { readonly index: number; readonly block: SystemBlock }[],
+  ): boolean {
+    if (changes.length === 0) return true;
+    if (
+      new Set(changes.map(({ index }) => index)).size !== changes.length ||
+      changes.some(
+        ({ index }) =>
+          !Number.isSafeInteger(index) ||
+          index < 0 ||
+          index >= this.record.length,
+      )
+    )
+      return false;
     const next = [...this.record];
-    next[index] = block;
+    for (const { index, block } of changes) next[index] = block;
+    if (this.persister && !this.persister.replaceBlocksAt(changes))
+      return false;
     this.record = next;
-    this.persister?.replaceBlockAt(index, block);
     return true;
   }
 

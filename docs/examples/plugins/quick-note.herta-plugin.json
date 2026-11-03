@@ -1,0 +1,42 @@
+{
+  "manifest": {
+    "schemaVersion": 2,
+    "apiVersion": 1,
+    "id": "herta.example.quick-note",
+    "name": "快捷便笺",
+    "version": "1.0.0",
+    "description": "把输入整理成可审阅的便笺草稿。点击追加后才写入编辑区，不调用模型。",
+    "entry": "main.js",
+    "capabilities": [
+      {
+        "name": "draft.append"
+      }
+    ],
+    "actions": [
+      {
+        "id": "prepare-note",
+        "title": "准备便笺",
+        "scope": "both",
+        "export": "run",
+        "inputs": [
+          {
+            "id": "text",
+            "label": "便笺内容",
+            "type": "text",
+            "required": true,
+            "maxLength": 4000
+          }
+        ],
+        "capabilities": [
+          "draft.append"
+        ]
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "main.js",
+      "source": "export async function run(input, api) {\n  const note = '便笺\\n' + input.text;\n  await api.draft.append({ text: note });\n  return '便笺已准备。点击“追加到草稿”后才会写入编辑区。';\n}\n"
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import type { TerminalRecord, TerminalRecordBlock } from "@herta/core";
 import type { AttachedMetaThink } from "./meta-think.js";
 import { buildMetaThinkSection } from "./meta-think.js";
 import type { PromptLang } from "./prompt-lang.js";
+import { escapeUserText } from "./escape.js";
 import { serializeTerminalRecord } from "./serialize.js";
 
 /**
@@ -55,6 +56,8 @@ export interface ActorPrompt {
    *  `PHASE_TWO_THOUGHT_HINT`, `PHASE_TWO_SPEECH_HINT`,
    *  `PHASE_TWO_SPEECH_RETRY_HINT`. Omit when no hint applies. */
   readonly formatHint?: string;
+  /** F09: owner goal data, dynamic and never part of the cached static prefix. */
+  readonly goalContext?: string;
   /** The open tag the model continues from: `（我 想）` or `（我 说）`.
    *  (The partial `（我 ` of the removed single-phase surface detection
    *  is still serialized correctly — no trailing newline — should a
@@ -372,6 +375,7 @@ export function serializeActorPrompt(doc: ActorPrompt): string {
     lang: doc.lang ?? "zh",
   });
   const tailParts: string[] = [];
+  if (doc.goalContext) tailParts.push(escapeUserText(doc.goalContext));
   if (doc.formatHint !== undefined && doc.formatHint.length > 0) {
     tailParts.push(doc.formatHint);
   }

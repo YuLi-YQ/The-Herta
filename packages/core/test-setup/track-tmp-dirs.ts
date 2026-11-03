@@ -35,8 +35,9 @@
  * limit, and a suite with every test green was reported failed. A holder
  * that is a child process lets go within a few hundred milliseconds; a
  * holder that is the test process itself (an open database) never lets go
- * before the worker exits, and that directory is the once-per-run sweep's
- * job (`sweep-tmp-dirs.ts`), not this hook's.
+ * before the worker exits. Such leftovers are retained for explicit,
+ * ownership-aware cleanup. No later run scans or deletes unrelated temporary
+ * directories based only on a name prefix or age.
  */
 import { createRequire } from "node:module";
 import { basename } from "node:path";

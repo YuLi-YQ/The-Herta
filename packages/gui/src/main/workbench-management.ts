@@ -1,5 +1,5 @@
 import type { Session, SessionMetadata } from "@herta/app-server";
-import type { PermissionModeState } from "@herta/core";
+import type { PermissionMode, PermissionModeState, PlanReply } from "@herta/core";
 import type {
   NavigationMutation,
   SetWorkbenchPermissionInput,
@@ -15,6 +15,11 @@ interface Dependencies {
   cleared: () => void;
 }
 const modes = new Set(["read-only", "workspace-edit", "full-access"]);
+const permissionRank: Record<PermissionMode, number> = {
+  "read-only": 0,
+  "workspace-edit": 1,
+  "full-access": 2,
+};
 function plainObject(value: unknown): value is Record<string, unknown> {
   return (
     !!value &&
@@ -26,7 +31,7 @@ function plainObject(value: unknown): value is Record<string, unknown> {
 /** GUI-owned navigation and grants, never loaded from model-controlled project files. */
 export function createWorkbenchManagement(deps: Dependencies) {
   let store: ProjectNavigationStore | undefined;
-  const epochs = new Map<string, PermissionModeState>();
+  const epochs = new Map<string, PermissionModeState & { planLocked: boolean }>();
   function storage() {
     store ??= new ProjectNavigationStore(deps.profile);
     return store;
@@ -41,7 +46,7 @@ export function createWorkbenchManagement(deps: Dependencies) {
       })),
     );
   }
-  function permissionFor(
+  function basePermissionFor(
     sessionId: string,
     backendWorkspace?: string,
   ): WorkbenchPermission {
@@ -66,16 +71,9 @@ export function createWorkbenchManagement(deps: Dependencies) {
     const project = view.projects.find((p) => p.projectId === task?.projectId);
     const mode =
       task?.permissionMode ?? project?.permissionMode ?? "workspace-edit";
-    const previous = epochs.get(sessionId);
-    const state = {
-      mode,
-      revision: previous
-        ? previous.revision + (previous.mode === mode ? 0 : 1)
-        : view.revision,
-    };
-    epochs.set(sessionId, state);
     return {
-      ...state,
+      mode,
+      revision: view.revision,
       sessionId,
       projectId: project?.projectId ?? null,
       source: task?.permissionMode
@@ -84,6 +82,50 @@ export function createWorkbenchManagement(deps: Dependencies) {
           ? "project"
           : "default",
       projectMode: project?.permissionMode ?? "workspace-edit",
+    };
+  }
+  /** Read-only state from the active session, never from renderer input. Failed reads lock too. */
+  function planLockFor(sessionId: string): { locked: boolean; damaged?: true } {
+    const active = deps.active() as
+      | (Session & { getPlan?: () => PlanReply })
+      | null;
+    if (active?.sessionId !== sessionId || !active.getPlan)
+      return { locked: false };
+    try {
+      const reply = active.getPlan();
+      return {
+        locked: !reply.ok || reply.view.locked,
+        ...(reply.view?.damaged ? { damaged: true as const } : {}),
+      };
+    } catch {
+      return { locked: true };
+    }
+  }
+  function permissionFor(
+    sessionId: string,
+    backendWorkspace?: string,
+  ): WorkbenchPermission {
+    const base = basePermissionFor(sessionId, backendWorkspace);
+    const plan = planLockFor(sessionId);
+    const mode = plan.locked ? "read-only" : base.mode;
+    const previous = epochs.get(sessionId);
+    const state = {
+      mode,
+      revision: previous
+        ? previous.revision +
+          (previous.mode === mode && previous.planLocked === plan.locked
+            ? 0
+            : 1)
+        : Math.max(1, base.revision),
+      planLocked: plan.locked,
+    };
+    epochs.set(sessionId, state);
+    return {
+      ...base,
+      mode,
+      revision: state.revision,
+      ...(plan.locked ? { planLocked: true } : {}),
+      ...(plan.damaged ? { planDamaged: true } : {}),
     };
   }
   function permission(): WorkbenchPermission {
@@ -103,6 +145,8 @@ export function createWorkbenchManagement(deps: Dependencies) {
     input: SetWorkbenchPermissionInput,
   ): WorkbenchPermission {
     const current = permission();
+    if (current.planLocked)
+      throw new Error("计划模式中权限固定为只读，请先退出计划模式。");
     if (
       !plainObject(input) ||
       Object.keys(input).some(
@@ -148,6 +192,47 @@ export function createWorkbenchManagement(deps: Dependencies) {
     if (next.mode !== current.mode && next.revision === current.revision)
       throw new Error("权限修订未更新。");
     return next;
+  }
+  /** Trusted runtime callback, called while the plan is STILL locked. Never an IPC of its own.
+   *  Lowering the underlying grant before unlocking is fail-closed across either file failing. */
+  function restorePlanPermission(
+    sessionId: string,
+    backendWorkspace: string,
+    previousMode: PermissionMode,
+    confirmed: boolean,
+  ): PermissionMode {
+    const active = deps.active();
+    const fail = (code: string): never => {
+      throw Object.assign(new Error("Plan permission restoration refused"), {
+        code,
+      });
+    };
+    if (
+      !active ||
+      active.sessionId !== sessionId ||
+      active.backendWorkspace !== backendWorkspace
+    )
+      return fail("no_target");
+    if (active.turnInFlight) fail("busy");
+    if (
+      !modes.has(previousMode) ||
+      typeof confirmed !== "boolean" ||
+      !planLockFor(sessionId).locked
+    )
+      fail("invalid");
+    const base = basePermissionFor(sessionId, backendWorkspace);
+    // A sidecar may not restore a grant that the trusted navigation state no longer permits.
+    const restored =
+      permissionRank[previousMode] <= permissionRank[base.mode]
+        ? previousMode
+        : base.mode;
+    if (restored === "full-access" && !confirmed) fail("confirmation_required");
+    try {
+      storage().setSessionPermission(sessionId, restored);
+    } catch {
+      fail("storage");
+    }
+    return restored;
   }
   async function update(input: NavigationMutation) {
     if (!plainObject(input)) throw new Error("导航操作无效。");
@@ -222,5 +307,5 @@ export function createWorkbenchManagement(deps: Dependencies) {
       }
     }
   }
-  return { navigation, permission, permissionFor, setPermission, update };
+  return { navigation, permission, permissionFor, restorePlanPermission, setPermission, update };
 }

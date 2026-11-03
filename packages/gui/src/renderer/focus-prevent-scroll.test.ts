@@ -3,7 +3,7 @@ import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /** The renderer's source root, found from either cwd vitest runs in (see
- *  record-left.test.ts for why not `import.meta.url`). */
+ *  styles/app-frame-clip.test.ts for why not `import.meta.url`). */
 const ROOT = ((): string => {
   for (const base of [".", "packages/gui"]) {
     const p = resolve(process.cwd(), base, "src/renderer");

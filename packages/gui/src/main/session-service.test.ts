@@ -34,6 +34,11 @@ describe("countsAsUserActivity — what tells a running dream pass the user is b
       CMD.search,
       CMD.attachFiles,
       CMD.stageImages,
+      // F04 (R116): turning a picture's sending off or back on.
+      CMD.setPictureModelUse,
+      CMD.updateSessionCompact,
+      CMD.draftChatContext,
+      CMD.cancelChatContextDraft,
       CMD.readWorkspaceFile,
       CMD.readWorkspaceLog,
       CMD.recordSlice,
@@ -55,6 +60,7 @@ describe("countsAsUserActivity — what tells a running dream pass the user is b
       CMD.refreshRepo,
       CMD.maybePlayEasterEgg,
       CMD.getDreamConfig,
+      CMD.getSessionCompact,
       CMD.getDeepSeekKeyStatus,
       CMD.windowIsMaximized,
     ]) {
@@ -741,5 +747,13 @@ describe("startForwarders", () => {
     await Promise.resolve(); // let all 8 pumps park in next()
     stop();
     expect(returns).toBe(8);
+  });
+});
+
+describe("R100 handleSetWorkspace", () => {
+  it("says a workspace change waits for an attachment copy", async () => {
+    const set = vi.fn(async () => ({ ok: false as const, reason: "attachments_in_progress" as const }));
+    const host = { activeSession: { sessionId: "s", setWorkspace: set } } as never;
+    expect(await handleSetWorkspace(host, "s", process.cwd(), "/home/u")).toEqual({ ok: false, message: "attachments in progress" });
   });
 });

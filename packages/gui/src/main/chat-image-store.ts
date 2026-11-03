@@ -56,16 +56,20 @@ export function createChatImageStore(directory: string) {
     usage() {
       const limitBytes = 256 * 1024 * 1024;
       if (!existsSync(directory)) return { bytes: 0, files: 0, limitBytes };
+      // A file or a link (a folder moved elsewhere) where the library belongs is reported, not
+      // followed: saving and showing images fail until it is a plain folder again (R53).
       const directoryStat = lstatSync(directory);
-      if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) throw new Error("图片存储目录无效。");
-      let bytes = 0, files = 0;
+      if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) return { bytes: 0, files: 0, limitBytes, invalid: true as const };
+      // Anything but a plain file (a folder, a link) is neither followed nor counted, only
+      // reported; the reference audit then stays incomplete, so no cleanup is offered (R52).
+      let bytes = 0, files = 0, others = 0;
       for (const name of readdirSync(directory)) {
         const stat = lstatSync(join(directory, name));
-        if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("图片存储包含无法统计的文件。");
+        if (!stat.isFile() || stat.isSymbolicLink()) { others++; continue; }
         bytes += stat.size;
         if (/^[a-f0-9]{64}$/.test(name)) files++;
       }
-      return { bytes, files, limitBytes };
+      return others ? { bytes, files, limitBytes, others } : { bytes, files, limitBytes };
     },
     serialize(store: unknown): string {
       return JSON.stringify(store, (key, value) => {

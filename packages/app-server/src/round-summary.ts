@@ -38,6 +38,14 @@ export interface RoundActivity {
   truncated?: boolean;
   files: { fileId: string; path: string; line?: number }[];
 }
+/** F04 (R115): what one request did with a picture the record cites: sent, or why not
+ *  (neutral-images.ts `ImageMiss`). Index and stored path both, since a rewind reuses indices:
+ *  a reader matches a row only when both agree. */
+export interface RoundPicture {
+  index: number;
+  path: string;
+  outcome: "sent" | "unsupported" | "unreadable" | "over_limit" | "stopped";
+}
 export interface RoundMetrics {
   totalTokens: number | null;
   cacheHitRate: number | null;
@@ -68,6 +76,9 @@ export interface RoundSummary {
   }[];
   metrics: RoundMetrics;
   limitations: string[];
+  /** F04 (R115): the pictures of the round's persona request and of its latest delegation, row
+   *  by row (the newest 64 rows each). Absent before R115 and when the record cites no picture. */
+  pictures?: { persona?: RoundPicture[]; executor?: RoundPicture[] };
 }
 export interface RoundFileContent {
   /** Renderer navigation hint; never used to select a disk path. */

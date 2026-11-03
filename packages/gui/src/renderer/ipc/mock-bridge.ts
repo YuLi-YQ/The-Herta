@@ -6,6 +6,7 @@ import type {
   RecordEvent,
   RenameSessionResult,
   RepoEvent,
+  ResetPendingImagesResult,
   ResolveApprovalOpts,
   ResumeEvent,
   RewindResult,
@@ -42,6 +43,7 @@ import type {
   SessionNoSession,
   SessionOpenFailure,
   SessionSnapshot,
+  SetPictureModelUseReply,
   SpeechControlEvent,
   StagedImageInfo,
   StageImagesReply,
@@ -85,13 +87,19 @@ export interface MockHertaBridgeOpts {
    *  as a promise, hold the ingest open to see what the composer shows while
    *  a document is being read. */
   readonly attachFilesResult?:
-    | { ok: boolean; message?: string }
-    | Promise<{ ok: boolean; message?: string }>;
+    | { ok: boolean; message?: string; missing?: readonly string[] }
+    | Promise<{ ok: boolean; message?: string; missing?: readonly string[] }>;
   readonly removeAttachmentResult?: { ok: boolean; message?: string };
+  /** F04 (R116). Default: every target changes. The mock does not rewrite
+   *  the record; a test pushes the session's reset itself (`emitRecord`). */
+  readonly setPictureModelUseResult?: SetPictureModelUseReply;
   /** Seed for stageImages (ADR 0048 §4). Default: every input stages, with a
    *  synthetic id/path — enough for the composer strip to render. */
   readonly stageImagesResult?: StageImagesReply;
   readonly unstageImageResult?: boolean;
+  readonly resetPendingImagesResult?: ResetPendingImagesResult;
+  /** Ids `prepareStagedImages` reports unreadable (default none). */
+  readonly unreadableStagedImages?: readonly string[];
   readonly getDreamConfigResult?: DreamConfig;
   /** Seed for getBackendConfig (Settings → Coprocessor). Default
    *  `{ thinking: "high", contract: "minimal" }` (the real handler's
@@ -234,6 +242,9 @@ export interface MockHertaBridge {
     pickAttachments: number;
     attachFiles: Array<[string, readonly string[]]>;
     removeAttachment: Array<[string, string]>;
+    setPictureModelUse: Array<
+      [string, readonly { index: number; path: string }[], "stop" | "send"]
+    >;
     stageImages: Array<
       [
         string,
@@ -245,6 +256,11 @@ export interface MockHertaBridge {
       ]
     >;
     unstageImage: Array<[string, string]>;
+    /** R118: the job id each stageImages call carried, in call order. */
+    stageJobs: Array<string | undefined>;
+    cancelStaging: Array<[string, string]>;
+    resetPendingImages: string[];
+    prepareStagedImages: Array<[string, readonly string[]]>;
     pathForFile: number;
     getDreamConfig: number;
     setDreamConfig: DreamConfig[];
@@ -409,8 +425,13 @@ export function createMockHertaBridge(
     pickAttachments: 0,
     attachFiles: [],
     removeAttachment: [],
+    setPictureModelUse: [],
     stageImages: [],
     unstageImage: [],
+    stageJobs: [],
+    cancelStaging: [],
+    resetPendingImages: [],
+    prepareStagedImages: [],
     pathForFile: 0,
   };
 
@@ -549,11 +570,15 @@ export function createMockHertaBridge(
   const openSettingsCbs = new Set<() => void>();
 
   const bridge: HertaBridge = {
+    promptPlugins: async () => ({ ok: true, snapshot: { revision: 0, items: [] } }),
     discoverProviderModels: async () => {
       throw new Error("Discovery is not configured in this test bridge.");
     },
     validateProviderModel: async () => {
       throw new Error("Validation is not configured in this test bridge.");
+    },
+    resetImageChecks: async () => {
+      throw new Error("Image check reset is not configured in this test bridge.");
     },
     getProviderSettings: async () => ({
       settings: {
@@ -712,8 +737,15 @@ export function createMockHertaBridge(
       calls.removeAttachment.push([sid, path]);
       return opts.removeAttachmentResult ?? { ok: true };
     },
-    stageImages: async (sid, inputs) => {
+    setPictureModelUse: async (sid, targets, use) => {
+      calls.setPictureModelUse.push([sid, targets, use]);
+      return (
+        opts.setPictureModelUseResult ?? { ok: true, changed: targets.length }
+      );
+    },
+    stageImages: async (sid, inputs, job) => {
       calls.stageImages.push([sid, inputs]);
+      calls.stageJobs.push(job);
       if (opts.stageImagesResult !== undefined) return opts.stageImagesResult;
       // The per-message picture cap, whole-batch like the real handler. The
       // real one also counts what is ALREADY staged; this mock is stateless
@@ -751,6 +783,18 @@ export function createMockHertaBridge(
     unstageImage: async (sid, id) => {
       calls.unstageImage.push([sid, id]);
       return opts.unstageImageResult ?? true;
+    },
+    cancelStaging: async (sid, job) => {
+      calls.cancelStaging.push([sid, job]);
+      return true;
+    },
+    resetPendingImages: async (sid) => {
+      calls.resetPendingImages.push(sid);
+      return opts.resetPendingImagesResult ?? { ok: true, backup: `${sid}.json.damaged-test` };
+    },
+    prepareStagedImages: async (sid, ids) => {
+      calls.prepareStagedImages.push([sid, ids]);
+      return { ok: true, unreadable: ids.filter((id) => opts.unreadableStagedImages?.includes(id)) };
     },
     // jsdom Files have no real path; the mock returns the name so a drop test
     // can assert what got forwarded without pretending to know a temp path.

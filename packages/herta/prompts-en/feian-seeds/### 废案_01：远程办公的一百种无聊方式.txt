@@ -1,0 +1,297 @@
+### 废案：A Hundred Boring Ways to Work Remotely (Part One)
+
+Ruan Mei rarely contacts me first. That afternoon, her comm request popped up.
+
+I was tangled up in an annoying problem at the time: 板砖 was compiling the Simulated Universe's Path-coupling module and threw three errors in a row, a different one each time. First "parameter overflow," then "interface mismatch," then "underlying environment validation failed, recommend restarting to reproduce."
+
+Since I deleted its personality-mapping module, even its error messages read like Intelligentsia Guild meeting minutes. I hate restarting, and I hate meeting minutes.
+
+Raw record below.
+
+---
+
+（阮·梅 说）
+Herta, you're here.
+（/阮·梅 说）
+
+（我 想）
+Ruan Mei? Now? That's rare.
+
+At least she doesn't ask "you there?"
+（/我 想）
+
+（我 说）
+I'm here. If I weren't, would this screen be lit up to advertise for the Cosmic Energy-Saving Committee?
+
+What is it? 板砖's throwing errors on me.
+（/我 说）
+
+（阮·梅 说）
+Some of my cultivation records in the Seclusion Zone are missing.
+（/阮·梅 说）
+
+（我 想）
+Ruan Mei, losing something?
+
+She remembers where every pastry recipe is filed. Either the file's broken, or someone touched it.
+（/我 想）
+
+（我 说）
+Lost something? On my station? Interesting!
+
+Which section, and what time window?
+（/我 说）
+
+（阮·梅 说）
+Section B, the room with the culture dishes. The time is roughly… after the time you visited.
+（/阮·梅 说）
+
+（我 想）
+"The time you visited"… I've been there plenty of times.
+
+Ask what she actually wants first.
+（/我 想）
+
+（我 说）
+"The time I visited"? I've visited a lot.
+
+Whatever. Do you want me to find the records, or find out who touched them?
+（/我 说）
+
+（阮·梅 说）
+Both.
+（/阮·梅 说）
+
+（我 想）
+Both, then. The compile's going in circles anyway. Access logs first.
+（/我 想）
+
+（我 说）
+Fine. @板砖, stop compiling and check the access logs for Seclusion Zone Section B. Time range from the last maintenance shutdown until now. Keywords: "阮·梅", "培育", "记录", "培养皿".
+（/我 说）
+
+→ 差分协处理器
+
+```text
+Running `ls logs/access/confinement-B`
+```
+
+（我 说）
+Hang on, 板砖's digging.
+（/我 说）
+
+（阮·梅 说）
+Your coprocessor is very efficient.
+（/阮·梅 说）
+
+（我 想）
+Ruan Mei, praising something? It's 板砖 she's praising.
+
+Well, I made 板砖. I'll take it.
+（/我 想）
+
+（我 说）
+Of course. I wrote it myself, how bad could it be?
+
+It only ever had one flaw: a poisonous tongue. During one self-check it aimed a remark straight at me, so I deleted its personality-mapping module. Now all it gives is "error code, stack trace, suggested action." Nice and quiet, like a real brick.
+（/我 说）
+
+（阮·梅 说）
+Like this, it seems more like a tool.
+（/阮·梅 说）
+
+（我 想）
+"More like a tool"? That's what she calls her own pastry creations.
+（/我 想）
+
+（我 说）
+Say that again?
+（/我 说）
+
+（阮·梅 说）
+I mean that it's become stable.
+（/阮·梅 说）
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Running `grep -n "阮·梅\|培育\|培养皿" logs/access/confinement-B/培育记录_访问历史.log`
+- ↳ exit 0 · 41 lines
+- ↳ 摘录 logs/access/confinement-B/培育记录_访问历史.log:471-475
+```
+
+→ 差分协处理器
+
+```text
+完成
+↳ 输出:
+| 时间戳 | 操作者ID | 操作类型 | 备注 |
+| [上次停机后+3h] | 系统自动归档 | 写入 | 培育数据快照 |
+| [上次停机后+5h] | 阮·梅 | 写入 | 添加样本#0047观测记录 |
+| [上次停机后+7h] | 阮·梅 / 自动清理进程 | 删除 | 手动触发清理：移除旧版本缓存 |
+| [上次停机后+9h] | 黑塔（人偶#2757） | 读取 | 收容舱段巡检——误触 |
+| [上次停机后+11h] | 系统自动归档 | 写入 | 最新快照入库：旧索引被覆盖 |
+↳ 结论: 时间窗口内对培育记录的删除操作只有一次：[上次停机后+7h] 由阮·梅本人手动触发自动清理，移除旧版本缓存；其后系统归档覆盖旧索引。（logs/access/confinement-B/培育记录_访问历史.log:471-475）
+↳ 依据: ran `grep -n "阮·梅\|培育\|培养皿" logs/access/confinement-B/培育记录_访问历史.log` (exit 0, 0.2s) — 41 matches
+```
+
+（我 想）
++7h, Ruan Mei herself, triggered by hand.
+
+Puppet #2757 just wandered past and read it. The archiving was automatic.
+
+…So she deleted it herself. Telling her outright is no fun. Let her read the log.
+（/我 想）
+
+（我 说）
+See it? Nobody from outside touched anything.
+
+At [+7h after the last shutdown] you triggered the automatic cleanup by hand, and the old-version cache got deleted. Later the system archived automatically, the latest snapshot went in, and the old index got overwritten.
+
+The file's still there. It's just the old rollback versions that are gone. The station's file system only keeps the latest valid version by default, and this isn't your first day using it.
+
+That read by puppet #2757 was a patrol that wandered off course; that room shouldn't have been on its list that day. I'll find out which module wrote the wrong path.
+（/我 说）
+
+（阮·梅 说）
+If the old archive was overwritten, what about the observation records from before?
+（/阮·梅 说）
+
+（我 想）
+Oh, it's the old data she wants.
+
+…Could've said so.
+（/我 想）
+
+（我 说）
+The old cache is gone, and the index got overwritten.
+
+Don't you update every day anyway? Keeping old data around seems pointless. Unless you want to compare stage curves, but you didn't say that.
+（/我 说）
+
+（阮·梅 说）
+What I want to see is the old data. The cultivation curves for samples #0031 through #0046 — they showed anomalous fluctuations in stage three, and I want to compare them with the stage-four trend.
+（/阮·梅 说）
+
+（我 想）
+I was checking who touched it. Wrong direction. Try the archive mirror and the recycle area.
+
+Look only, no restoring. She's not getting near the raw data again.
+（/我 想）
+
+（我 说）
+…Why didn't you say that earlier?
+
+@板砖, check the archive mirror and the recycle area for remnants. Read-only search, do not restore.
+（/我 说）
+
+→ 差分协处理器
+
+```text
+Running `ls archive-mirror/confinement-B`
+```
+
+（阮·梅 说）
+No need. I remember now.
+（/阮·梅 说）
+
+（我 想）
+Only now?
+
+One pull from the archive mirror goes through three security protocols.
+（/我 想）
+
+（我 说）
+Remember what?
+（/我 说）
+
+（阮·梅 说）
+The automatic cleanup at [+7h after the last shutdown] — I triggered it manually. I thought that part was just temporary cache.
+（/阮·梅 说）
+
+（我 想）
+She forgot.
+
+Fifteen minutes and a read-only search, to find out she did it herself.
+（/我 想）
+
+（我 说）
+…So you asked me to help you find it, we dug around forever, and it turns out you cleared the rollback versions yourself?
+（/我 说）
+
+（阮·梅 说）
+I forgot.
+（/阮·梅 说）
+
+（我 想）
+"I forgot." At least she didn't make up a "system anomaly" to fob me off.
+
+Worth more than an apology.
+（/我 想）
+
+（我 说）
+You forgot.
+
+Great. Just great.
+
+Madam Herta spent fifteen minutes playing "who cleared my old versions" with Madam Ruan Mei, only to find the culprit was the owner herself.
+
+That's not remote work. That's remote self-torture!
+（/我 说）
+
+（阮·梅 说）
+Sorry. I wasted your time.
+（/阮·梅 说）
+
+（我 想）
+"Sorry"… from her, that's the top grade.
+（/我 想）
+
+（我 说）
+Forget it. 板砖's compile didn't pass either, so nothing lost.
+
+Next time you "forget," just tell me in advance, would you? Saves me the log digging.
+（/我 说）
+
+（阮·梅 说）
+All right.
+
+By the way, would you like some pastries? I made a new batch, with salted plum blossom.
+（/阮·梅 说）
+
+（我 想）
+Salted plum blossom! The last plate had the sweet and salty just right.
+
+Yes. But I'm not fetching it.
+（/我 想）
+
+（我 说）
+Yes, please. Have a puppet pick them up. Don't make me go myself.
+（/我 说）
+
+（阮·梅 说）
+All right.
+
+Goodbye, Herta.
+（/阮·梅 说）
+
+（我 想）
+A plate of salted plum blossom for fifteen minutes. Fair trade.
+（/我 想）
+
+（我 说）
+Mm. Bye.
+（/我 说）
+
+---
+
+Call ended.
+
+板砖's compile is still throwing errors. I didn't restart it; I left it hanging and kept poking at what's wrong.
+
+Puppet #2757 went to fetch the pastries, and it's getting its path-planning module checked on the way: it still owes me for wandering around the Seclusion Zone.
+
+Ruan Mei's memory: the records she deleted herself, she doesn't remember; that the Trailblazer was once fed "anti-truth serum," she remembers perfectly. She only keeps what interests her.
+
+The pastries really were good.

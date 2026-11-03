@@ -54,4 +54,5 @@ export type { SessionSearchHit } from "./session-search.js";
 export type * from "./types.js";
 export type { PendingUserInput, UserInputAnswer } from "./user-input.js";
 export type * from "./round-summary.js";
+export type { WorkspaceOperationRequest, WorkspaceOperationContext } from "./workspace-operation.js";
 export { desktopPersonaIdentity } from "./desktop-persona.js";

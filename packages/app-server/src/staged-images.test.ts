@@ -1,4 +1,11 @@
-import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -340,5 +347,75 @@ describe("StagedImageStore", () => {
     expect(store.list().map((i) => i.name)).toEqual(["a.png"]);
     await store.unstage(a.image.id);
     expect(store.list()).toEqual([]);
+  });
+});
+
+describe("StagedImageStore — cancel (R118)", () => {
+  it("a stage whose signal is aborted keeps no copy, records nothing and asks for no caption", async () => {
+    const asked: string[] = [];
+    const store = makeStore(async () => {
+      asked.push("caption");
+      return "x";
+    });
+    const controller = new AbortController();
+    controller.abort();
+    const r = await store.stage({
+      bytes: makePng(8, 8),
+      displayName: "a.png",
+      signal: controller.signal,
+    });
+    expect(r).toEqual({ ok: false, reason: "cancelled" });
+    expect(store.size).toBe(0);
+    expect(
+      existsSync(join(ws, ".herta", "attachments", "s1"))
+        ? readdirSync(join(ws, ".herta", "attachments", "s1"))
+        : [],
+    ).toEqual([]);
+    expect(asked).toEqual([]);
+  });
+
+  it("a path read is aborted with the stage", async () => {
+    const store = makeStore();
+    const source = join(ws, "big.png");
+    writeFileSync(source, makePng(64, 64));
+    const controller = new AbortController();
+    const pending = store.stage({
+      sourcePath: source,
+      displayName: "big.png",
+      signal: controller.signal,
+    });
+    controller.abort();
+    expect(await pending).toEqual({ ok: false, reason: "cancelled" });
+    expect(store.size).toBe(0);
+  });
+
+  it("unstage and clear abort the caption still running", async () => {
+    const signals: AbortSignal[] = [];
+    const store = makeStore((_request, signal) => {
+      signals.push(signal);
+      return new Promise<string>(() => {});
+    });
+    const a = await store.stage({ bytes: makePng(8, 8), displayName: "a.png" });
+    const b = await store.stage({ bytes: makePng(9, 9), displayName: "b.png" });
+    if (!a.ok || !b.ok) throw new Error("not staged");
+    expect(signals.map((s) => s.aborted)).toEqual([false, false]);
+    await store.unstage(a.image.id);
+    expect(signals.map((s) => s.aborted)).toEqual([true, false]);
+    await store.clear();
+    expect(signals.map((s) => s.aborted)).toEqual([true, true]);
+  });
+
+  it("a sent picture's caption is not aborted", async () => {
+    const signals: AbortSignal[] = [];
+    const store = makeStore(async (_request, signal) => {
+      signals.push(signal);
+      return "一张图。";
+    });
+    const a = await store.stage({ bytes: makePng(8, 8), displayName: "a.png" });
+    if (!a.ok) throw new Error("not staged");
+    const [block] = await store.commit([a.image.id]);
+    await store.clear();
+    expect(block?.body).toContain("一张图。");
+    expect(signals[0]?.aborted).toBe(false);
   });
 });

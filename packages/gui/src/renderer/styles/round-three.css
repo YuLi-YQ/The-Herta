@@ -65,18 +65,30 @@
   margin: 16px 0;
 }
 .herta-r3 .herta-task-title {
+  margin: 0;
+  font: inherit;
   min-width: 0;
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .herta-r3 .herta-status {
   flex-shrink: 0;
 }
+/* Inside the transcript scroller since R44: sticky at its foot, so showing
+   the button no longer shrinks the transcript under the reader. */
 .herta-r3 .herta-latest {
-  align-self: center;
-  flex-shrink: 0;
-  margin: 4px 0;
+  position: sticky;
+  bottom: 8px;
+  z-index: 2;
+  display: block;
+  width: fit-content;
+  margin: 8px auto 0;
   border-color: var(--herta-border);
+  border-radius: 999px;
   font-size: 12px;
+  box-shadow: 0 6px 18px #0004;
 }
 .herta-r3 button[aria-current="page"] {
   border-color: var(--herta-accent);
@@ -195,6 +207,17 @@
   margin: 10px 0;
 }
 
+/* A short status after an action sits in the same column as the cards and the
+   transcript, not at the content area's edge (R79). */
+.herta-r3 .herta-notice {
+  flex: 0 0 auto;
+  width: calc(100% - 2 * var(--herta-content-gutter));
+  max-width: var(--herta-content-width);
+  margin: 8px auto;
+  color: var(--herta-secondary);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
 /* One content column for transcript, intervention cards, and input. */
 .herta-r3 .herta-error-card {
   flex: 0 0 auto;
@@ -417,4 +440,95 @@
   margin-left: auto;
   border-radius: 14px;
   padding: 10px 16px;
+}
+
+/* R45: the approval card leads with the decision (risk, reason, command);
+   IDs and the rule's own wording sit under 诊断信息. */
+.herta-r3 .herta-approval h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.herta-r3 .herta-approval-risk {
+  padding: 1px 8px;
+  border: 1px solid var(--herta-gold);
+  border-radius: 999px;
+  color: var(--herta-gold);
+  font-size: 12px;
+  font-weight: 500;
+}
+.herta-r3 .herta-approval-risk.is-danger {
+  border-color: var(--herta-error);
+  color: var(--herta-error);
+}
+.herta-r3 .herta-approval-body > p {
+  margin: 0 0 8px;
+}
+.herta-r3 .herta-approval-body > pre {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--herta-bg);
+}
+.herta-r3 .herta-approval-note {
+  color: var(--herta-gold);
+}
+.herta-r3 .herta-approval-diagnostics {
+  font-size: 12px;
+  color: var(--herta-muted);
+}
+.herta-r3 .herta-approval-diagnostics > summary {
+  width: fit-content;
+  cursor: pointer;
+}
+.herta-r3 .herta-approval-body::-webkit-scrollbar {
+  width: 8px;
+}
+.herta-r3 .herta-approval-body::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: var(--herta-border);
+}
+/* R45: the full-access confirmation reads as a warning card above the box. */
+.herta-r3 .herta-permission-confirm {
+  margin: 0 0 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--herta-gold);
+  border-radius: 12px;
+  background: var(--herta-panel);
+}
+.herta-r3 .herta-permission-confirm > p {
+  margin: 0 0 8px;
+}
+.herta-r3 .herta-permission-confirm .herta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
+/* R45: the shell's generic 36px bordered button also caught the settings
+   switch and close button, turning a 42x24 pill into a bordered square. */
+.herta-shell .settings-toggle,
+.herta-shell .settings-toggle:hover:not(:disabled) {
+  min-height: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--track);
+}
+.herta-shell .settings-toggle[aria-checked="true"],
+.herta-shell .settings-toggle[aria-checked="true"]:hover:not(:disabled) {
+  background: var(--banzhuan-led);
+}
+.herta-shell .settings-close {
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+}
+/* R45: one pane height for every section, so switching sections no longer
+   resizes the card (the appearance pane outgrew the shared 630px floor). */
+.herta-shell .settings-content {
+  min-height: 0;
+  height: min(700px, calc(100vh - 98px));
 }

@@ -14,12 +14,27 @@ function subscribe<T>(channel: string, cb: (e: T) => void): () => void {
 }
 
 const bridge: HertaBridge = {
+  promptPlugins: (input) => ipcRenderer.invoke(CMD.promptPlugins, input),
+  executablePlugins: (input) => ipcRenderer.invoke(CMD.executablePlugins, input),
   readHertaChatImage: (chatId, messageId, index) => ipcRenderer.invoke("herta-chat:image", chatId, messageId, index),
   getHertaChat: () => ipcRenderer.invoke("herta-chat:snapshot"),
   sendHertaChat: (input) => ipcRenderer.invoke("herta-chat:send", input),
   stopHertaChat: () => ipcRenderer.invoke("herta-chat:stop"),
   manageHertaChat: (action) => ipcRenderer.invoke("herta-chat:manage", action),
-  parseChatFile: (name, bytes) => ipcRenderer.invoke("herta-chat:parse-file", name, bytes),
+  draftChatContext: (input) => ipcRenderer.invoke(CMD.draftChatContext, input),
+  cancelChatContextDraft: (input) => ipcRenderer.invoke(CMD.cancelChatContextDraft, input),
+  getSessionCompact: (id) => ipcRenderer.invoke(CMD.getSessionCompact, id),
+  updateSessionCompact: (id, revision, action) => ipcRenderer.invoke(CMD.updateSessionCompact, id, revision, action),
+  getSessionGoal: (id) => ipcRenderer.invoke(CMD.getSessionGoal, id),
+  getSessionPlan: (id) => ipcRenderer.invoke(CMD.getSessionPlan, id),
+  updateSessionPlan: (id, revision, action) =>
+    ipcRenderer.invoke(CMD.updateSessionPlan, id, revision, action),
+  updateSessionGoal: (id, revision, action) => ipcRenderer.invoke(CMD.updateSessionGoal, id, revision, action),
+  getChatGoal: (id) => ipcRenderer.invoke(CMD.getChatGoal, id),
+  updateChatGoal: (id, revision, action) => ipcRenderer.invoke(CMD.updateChatGoal, id, revision, action),
+  parseChatFile: (name, bytes, job) =>
+    ipcRenderer.invoke("herta-chat:parse-file", name, bytes, job),
+  cancelChatFile: (job) => ipcRenderer.invoke("herta-chat:cancel-file", job),
   saveChatFile: (name, content) => ipcRenderer.invoke("herta-chat:save-file", name, content),
   getProjectNavigation: () => ipcRenderer.invoke(CMD.getProjectNavigation),
   updateProjectNavigation: (input) =>
@@ -43,13 +58,14 @@ const bridge: HertaBridge = {
     ipcRenderer.invoke(CMD.discoverProviderModels, input),
   validateProviderModel: (input) =>
     ipcRenderer.invoke(CMD.validateProviderModel, input),
+  resetImageChecks: () => ipcRenderer.invoke(CMD.resetImageChecks),
   saveProvider: (input) => ipcRenderer.invoke(CMD.saveProvider, input),
   deleteProvider: (id) => ipcRenderer.invoke(CMD.deleteProvider, id),
   setProviderBindings: (input) =>
     ipcRenderer.invoke(CMD.setProviderBindings, input),
   platform: process.platform,
-  submitText: (text, stagedImageIds) =>
-    ipcRenderer.invoke(CMD.submitText, text, stagedImageIds),
+  submitText: (text, stagedImageIds, expectedSessionId) =>
+    ipcRenderer.invoke(CMD.submitText, text, stagedImageIds, expectedSessionId),
   interrupt: (turnId) => ipcRenderer.invoke(CMD.interrupt, turnId),
   steerText: (text) => ipcRenderer.invoke(CMD.steerText, text),
   continueInterrupted: () => ipcRenderer.invoke(CMD.continueInterrupted),
@@ -84,6 +100,7 @@ const bridge: HertaBridge = {
   restartAndInstall: () => ipcRenderer.invoke(CMD.updateRestart),
   getUpdateState: () => ipcRenderer.invoke(CMD.updateStatus),
   getAppVersion: () => ipcRenderer.invoke(CMD.appVersion),
+  getSystemInfo: () => ipcRenderer.invoke(CMD.systemInfo),
   onUpdate: (cb) => subscribe(EVT.update, cb),
   pickWorkspace: () => ipcRenderer.invoke(CMD.pickWorkspace),
   setWorkspace: (sessionId, path) =>
@@ -91,14 +108,22 @@ const bridge: HertaBridge = {
   resetWorkspace: (sessionId) =>
     ipcRenderer.invoke(CMD.resetWorkspace, sessionId),
   pickAttachments: () => ipcRenderer.invoke(CMD.pickAttachments),
-  attachFiles: (sessionId, paths) =>
-    ipcRenderer.invoke(CMD.attachFiles, sessionId, paths),
+  attachFiles: (sessionId, paths, options) =>
+    ipcRenderer.invoke(CMD.attachFiles, sessionId, paths, options),
   removeAttachment: (sessionId, path) =>
     ipcRenderer.invoke(CMD.removeAttachment, sessionId, path),
-  stageImages: (sessionId, inputs) =>
-    ipcRenderer.invoke(CMD.stageImages, sessionId, inputs),
+  setPictureModelUse: (sessionId, targets, use) =>
+    ipcRenderer.invoke(CMD.setPictureModelUse, sessionId, targets, use),
+  stageImages: (sessionId, inputs, job) =>
+    ipcRenderer.invoke(CMD.stageImages, sessionId, inputs, job),
+  cancelStaging: (sessionId, job) =>
+    ipcRenderer.invoke(CMD.cancelStaging, sessionId, job),
   unstageImage: (sessionId, id) =>
     ipcRenderer.invoke(CMD.unstageImage, sessionId, id),
+  resetPendingImages: (sessionId) =>
+    ipcRenderer.invoke(CMD.resetPendingImages, sessionId),
+  prepareStagedImages: (sessionId, ids) =>
+    ipcRenderer.invoke(CMD.prepareStagedImages, sessionId, ids),
   readWorkspaceFile: (sessionId, path) =>
     ipcRenderer.invoke(CMD.readWorkspaceFile, sessionId, path),
   listWorkspaceFiles: (sessionId) =>
@@ -195,3 +220,4 @@ const bridge: HertaBridge = {
 };
 
 contextBridge.exposeInMainWorld("herta", bridge);
+

@@ -1,11 +1,14 @@
 import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { redactSecrets } from "@herta/tools";
 
 /**
- * Save a session's Markdown export (ADR 0072 §3). The renderer builds the
- * text — the localized row wording lives there — and main only asks where
- * to put it and writes it: the path is the user's pick in the save dialog,
- * so nothing the renderer sends can name a place on disk.
+ * Save a session's Markdown export (ADR 0072 §3), and since R124 the chat's
+ * (F09 `/export`). The renderer builds the text — the localized row wording
+ * lives there — and main only asks where to put it and writes it: the path is
+ * the user's pick in the save dialog, so nothing the renderer sends can name
+ * a place on disk. Secret-shaped text is masked here, for either export,
+ * before anything is written.
  */
 
 /** Longest file-name stem an export suggests, in characters. */
@@ -80,7 +83,8 @@ export function createExportSaver(
     const r = await deps.showSaveDialog({
       defaultPath: join(
         lastDir ?? deps.documentsDir(),
-        exportFileName(suggestedName),
+        // The name too (R126): a task's title can be its first message, key and all.
+        exportFileName(redactSecrets(suggestedName)),
       ),
       filters: [{ name: "Markdown", extensions: ["md"] }],
     });
@@ -88,7 +92,9 @@ export function createExportSaver(
       return { saved: false };
     }
     try {
-      await write(r.filePath, markdown);
+      // The masking of command output and attached documents (@herta/tools):
+      // keys, tokens and private-key blocks never reach the file.
+      await write(r.filePath, redactSecrets(markdown));
     } catch (err) {
       // Never the path: it can carry the user's name.
       log(

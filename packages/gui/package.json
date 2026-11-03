@@ -5,7 +5,7 @@
   "license": "MIT",
   "productName": "The Herta",
   "desktopName": "HertaAtelier.desktop",
-  "description": "The Herta — personal Windows desktop coding assistant baseline",
+  "description": "The Herta — Windows desktop coding assistant",
   "author": "PersonaCLI",
   "type": "module",
   "main": "./out/main/index.js",
@@ -16,18 +16,9 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run",
-    "checkvoice": "node scripts/check-voice-payload.mjs",
-    "checksigning": "node scripts/check-signing-env.mjs",
-    "stagetts": "node scripts/stage-tts.mjs",
-    "checktts": "node scripts/check-tts-payload.mjs",
     "notices": "node scripts/third-party-notices.mjs",
     "checknotices": "node scripts/third-party-notices.mjs --check",
     "dist": "electron-vite build && node scripts/third-party-notices.mjs --check && node scripts/check-personal-payload.mjs && electron-builder --config electron-builder.personal.yml --win --x64 --publish never",
-    "dist:mac": "node scripts/check-voice-payload.mjs && node scripts/stage-tts.mjs --mac && node scripts/check-tts-payload.mjs --expect sherpa-onnx-darwin-arm64,sherpa-onnx-darwin-x64 && electron-vite build && node scripts/third-party-notices.mjs --check && npx electron-builder --mac --publish never",
-    "dist:linux": "node scripts/check-voice-payload.mjs --warn && node scripts/stage-tts.mjs --linux && node scripts/check-tts-payload.mjs --expect sherpa-onnx-linux-x64 && electron-vite build && node scripts/third-party-notices.mjs --check && npx electron-builder --linux --x64 --publish never",
-    "dist:release": "node scripts/check-voice-payload.mjs && node scripts/check-signing-env.mjs win && node scripts/stage-tts.mjs --win && node scripts/check-tts-payload.mjs --expect sherpa-onnx-win-x64 && electron-vite build && node scripts/third-party-notices.mjs --check && npx electron-builder --win --publish never -c.win.forceCodeSigning=true",
-    "dist:release:mac": "node scripts/check-voice-payload.mjs && node scripts/check-signing-env.mjs mac && node scripts/stage-tts.mjs --mac && node scripts/check-tts-payload.mjs --expect sherpa-onnx-darwin-arm64,sherpa-onnx-darwin-x64 && electron-vite build && node scripts/third-party-notices.mjs --check && npx electron-builder --mac --publish never -c.mac.hardenedRuntime=true -c.mac.notarize=true",
-    "dist:release:linux": "node scripts/check-voice-payload.mjs && node scripts/stage-tts.mjs --linux && node scripts/check-tts-payload.mjs --strict --expect sherpa-onnx-linux-x64 && electron-vite build && node scripts/third-party-notices.mjs --check && npx electron-builder --linux --x64 --publish never",
     "dist:personal": "electron-vite build && node scripts/third-party-notices.mjs --check && node scripts/check-personal-payload.mjs && electron-builder --config electron-builder.personal.yml --win --x64 --publish never"
   },
   "dependencies": {
@@ -39,6 +30,7 @@
     "@herta/core": "workspace:*",
     "@herta/providers": "workspace:*",
     "@herta/tools": "workspace:*",
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
     "@testing-library/dom": "^10.0.0",
     "@testing-library/jest-dom": "^6.5.0",
     "@testing-library/react": "^16.0.1",
@@ -54,12 +46,14 @@
     "electron-updater": "^6.8.9",
     "electron-vite": "^5.0.0",
     "fflate": "^0.8.3",
+    "gsap": "3.15.0",
     "highlight.js": "^11.12.0",
     "jsdom": "^26.0.0",
     "jszip": "^3.10.1",
     "marked": "^18.0.11",
     "mermaid": "^11.17.2",
     "pdfjs-dist": "^6.2.108",
+    "quickjs-emscripten-core": "0.32.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "three": "0.185.1",
@@ -68,5 +62,3 @@
     "vitest": "^3.2.6"
   }
 }
-
-

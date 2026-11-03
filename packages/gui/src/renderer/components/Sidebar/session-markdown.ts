@@ -126,18 +126,22 @@ export type ExportOutcome = "saved" | "cancelled" | "failed";
 /**
  * Export one session: read it (main), write the Markdown in the session's
  * own language (here, where the row wording lives), save it (main's dialog).
- * Null when the bridge lacks the surface.
+ * Null when the bridge lacks the surface. An abort while it reads (the
+ * composer's `/export` moved to another task, R124) ends it before the
+ * dialog opens, as `cancelled`.
  */
 export async function runSessionExport(
   bridge: Pick<HertaBridge, "readSessionForExport" | "saveSessionExport">,
   sessionId: string,
   now: () => Date = () => new Date(),
+  signal?: AbortSignal,
 ): Promise<ExportOutcome | null> {
   const read = bridge.readSessionForExport;
   const save = bridge.saveSessionExport;
   if (read === undefined || save === undefined) return null;
   try {
     const src = await read(sessionId);
+    if (signal?.aborted === true) return "cancelled";
     if (src === null) return "failed";
     const t = makeT(src.lang);
     const markdown = buildSessionMarkdown(src, t, { now: now() });

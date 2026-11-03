@@ -584,6 +584,8 @@ async function ingestDocument(opts: {
       case "unsupported":
         return notStored(displayName, "unsupported", doc);
       case "parse_error":
+      // No signal is passed here, so this one cannot happen; listed for the switch.
+      case "cancelled":
         return notStored(displayName, "read_error", doc);
     }
   }
@@ -947,6 +949,8 @@ export async function captionStoredImage(
     readonly lang: PageMarkerLang;
     readonly caption: ImageCaptioner | null;
     readonly signal?: AbortSignal;
+    /** No instrument because the picture itself is sent (`deliverImages`): not unread. */
+    readonly deliver?: boolean;
   },
 ): Promise<IngestedAttachment> {
   const block = (
@@ -966,7 +970,8 @@ export async function captionStoredImage(
     ...(unreadable !== undefined ? { unreadable } : {}),
   });
 
-  if (opts.caption === null) return block("no_caption");
+  if (opts.caption === null)
+    return opts.deliver === true ? block() : block("no_caption");
   if (stored.bytes.length > MAX_CAPTION_IMAGE_BYTES) return block("too_large");
 
   const prompt = captionPrompt(opts.lang);
@@ -996,7 +1001,16 @@ export type StageImageResult =
    *  §4). The rest are refusals the user must be told about. */
   | {
       readonly ok: false;
-      readonly reason: "not_image" | "denied" | "too_large" | "read_error";
+      /** `not_saved`: the source was read, but its copy could not be written
+       *  (a full disk, a permission) — not a read failure (R100). */
+      readonly reason:
+        | "not_image"
+        | "denied"
+        | "too_large"
+        | "read_error"
+        | "not_saved"
+        /** `signal` was aborted before a copy was written (R118). */
+        | "cancelled";
     };
 
 /**
@@ -1016,6 +1030,10 @@ export async function stageImageSource(opts: {
   /** Per-copy uniqueness — the staged id, so unstage/clear can only ever
    *  delete the one file this copy owns (see safeStoredName). */
   readonly disambiguator?: string;
+  /** The person cancelled the card (R118): the read is aborted, and nothing
+   *  is written once it has been. A copy already written is the caller's to
+   *  delete — it owns the id the name carries. */
+  readonly signal?: AbortSignal;
 }): Promise<StageImageResult> {
   // Same guard, same place, same reason as the ordinary attach: the display
   // name is renderer-supplied and the path is arbitrary, so both are checked
@@ -1040,8 +1058,13 @@ export async function stageImageSource(opts: {
       if ((await stat(opts.sourcePath)).size > MAX_ATTACHMENT_STORE_BYTES) {
         return { ok: false, reason: "too_large" };
       }
-      bytes = await readFile(opts.sourcePath);
+      bytes = await readFile(
+        opts.sourcePath,
+        opts.signal ? { signal: opts.signal } : {},
+      );
     } catch {
+      if (opts.signal?.aborted === true)
+        return { ok: false, reason: "cancelled" };
       return { ok: false, reason: "read_error" };
     }
   } else {
@@ -1050,6 +1073,7 @@ export async function stageImageSource(opts: {
 
   const image = sniffImage(bytes);
   if (image === null) return { ok: false, reason: "not_image" };
+  if (opts.signal?.aborted === true) return { ok: false, reason: "cancelled" };
 
   const result = await storeImage({
     image,
@@ -1061,7 +1085,7 @@ export async function stageImageSource(opts: {
       ? { disambiguator: opts.disambiguator }
       : {}),
   });
-  return result.ok ? result : { ok: false, reason: "read_error" };
+  return result.ok ? result : { ok: false, reason: "not_saved" };
 }
 
 /** Both phases, back to back — the direct (non-staged) attach path. */
@@ -1073,12 +1097,14 @@ async function ingestImage(opts: {
   readonly sessionId: string;
   readonly lang: PageMarkerLang;
   readonly caption: ImageCaptioner | null;
+  readonly deliver: boolean;
 }): Promise<IngestedAttachment> {
   const result = await storeImage(opts);
   if (!result.ok) return result.failed;
   return captionStoredImage(result.stored, {
     lang: opts.lang,
     caption: opts.caption,
+    deliver: opts.deliver,
   });
 }
 
@@ -1150,6 +1176,9 @@ export async function ingestAttachment(opts: {
    *  reading them — the state under test, without a key, and whenever the
    *  call fails. */
   readonly captionImage?: ImageCaptioner | null;
+  /** The picture itself goes to the model with the message (the desktop's own connections,
+   *  R77), so an image without a caption is not "unread" — the row just names it. */
+  readonly deliverImages?: boolean;
   /** Whether a PDF's pictures go to the instrument for transcription
    *  (2026-10-01, the user's switch; default on). Off, they are still stored
    *  and cited — each line says it was not transcribed and names the file
@@ -1237,6 +1266,7 @@ export async function ingestAttachment(opts: {
       sessionId: opts.sessionId,
       lang: opts.lang ?? "zh",
       caption: opts.captionImage ?? null,
+      deliver: opts.deliverImages === true,
     });
   }
 

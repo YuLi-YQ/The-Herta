@@ -1,0 +1,46 @@
+{
+  "manifest": {
+    "schemaVersion": 2,
+    "apiVersion": 1,
+    "id": "herta.example.workspace-lines",
+    "name": "文件行数",
+    "version": "1.0.0",
+    "description": "读取当前工作区的 UTF-8 文本，统计行数和原始字节数并准备草稿。不调用模型，也不修改文件。",
+    "entry": "main.js",
+    "capabilities": [
+      {
+        "name": "workspace.readText"
+      },
+      {
+        "name": "draft.append"
+      }
+    ],
+    "actions": [
+      {
+        "id": "count-lines",
+        "title": "统计文件行数",
+        "scope": "workbench",
+        "export": "run",
+        "inputs": [
+          {
+            "id": "path",
+            "label": "项目内文件路径",
+            "type": "text",
+            "required": true,
+            "maxLength": 1024
+          }
+        ],
+        "capabilities": [
+          "workspace.readText",
+          "draft.append"
+        ]
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "main.js",
+      "source": "export async function run(input, api) {\n  const file = await api.workspace.readText({ path: input.path, maxBytes: 65536 });\n  if (!file || typeof file.text !== 'string' || !Number.isSafeInteger(file.bytes) || file.bytes < 0) {\n    throw new Error('invalid-file-result');\n  }\n  const parts = file.text.split(/\\r\\n|\\n|\\r/);\n  const lines = file.text.length === 0 ? 0 : parts.length - (parts[parts.length - 1] === '' ? 1 : 0);\n  const proposal = [\n    '文件：' + input.path,\n    '文本行数：' + lines + '（CRLF、LF、CR 均计为换行；文件末尾的换行符不额外增加空行）',\n    '原始文件字节数：' + file.bytes + ' B',\n    '这是实际文本统计，不包含模型分析。'\n  ].join('\\n');\n  await api.draft.append({ text: proposal });\n  return { path: input.path, lines, bytes: file.bytes, summary: '统计已完成，草稿尚未加入编辑区。' };\n}\n"
+    }
+  ]
+}

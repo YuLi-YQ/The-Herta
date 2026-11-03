@@ -1,0 +1,103 @@
+{
+  "manifest": {
+    "schemaVersion": 2,
+    "apiVersion": 1,
+    "id": "herta.example.reviewed-files",
+    "name": "文件与修改提案",
+    "version": "1.0.0",
+    "description": "在本地保存输入文本，或为指定文件创建修改提案。创建提案不会改项目，应用遵守当前权限。不调用模型，不自动添加附件或发送消息。",
+    "entry": "main.js",
+    "capabilities": [
+      {
+        "name": "artifacts.create"
+      },
+      {
+        "name": "workspace.readText"
+      },
+      {
+        "name": "workspace.proposePatch"
+      }
+    ],
+    "actions": [
+      {
+        "id": "create-text-file",
+        "title": "生成文本文件",
+        "scope": "both",
+        "export": "createTextFile",
+        "capabilities": [
+          "artifacts.create"
+        ],
+        "inputs": [
+          {
+            "id": "name",
+            "label": "文件名",
+            "type": "text",
+            "required": true,
+            "maxLength": 160
+          },
+          {
+            "id": "mime",
+            "label": "文件类型",
+            "type": "select",
+            "required": false,
+            "default": "text/plain",
+            "options": [
+              "text/plain",
+              "text/markdown",
+              "text/csv",
+              "application/json"
+            ]
+          },
+          {
+            "id": "text",
+            "label": "文件内容",
+            "type": "text",
+            "required": false,
+            "default": "",
+            "maxLength": 8000
+          }
+        ]
+      },
+      {
+        "id": "propose-file-change",
+        "title": "提出文件修改",
+        "scope": "workbench",
+        "export": "proposeFileChange",
+        "capabilities": [
+          "workspace.readText",
+          "workspace.proposePatch"
+        ],
+        "inputs": [
+          {
+            "id": "path",
+            "label": "项目内相对路径",
+            "type": "text",
+            "required": true,
+            "maxLength": 512
+          },
+          {
+            "id": "new_file",
+            "label": "新建文件（仅限尚不存在的路径）",
+            "type": "boolean",
+            "required": false,
+            "default": false
+          },
+          {
+            "id": "content",
+            "label": "修改后的完整内容",
+            "type": "text",
+            "required": false,
+            "default": "",
+            "maxLength": 8000
+          }
+        ]
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "main.js",
+      "source": "export async function createTextFile(input, api) {\n  const saved = await api.artifacts.create({ name: input.name, mime: input.mime, text: input.text });\n  if (!saved || saved.saved !== true || typeof saved.artifactId !== 'string' || !saved.artifactId) {\n    throw new Error('artifact-not-confirmed');\n  }\n  return '文件已保存到本会话的“插件文件”，可以在那里查看或另存。';\n}\n\nexport async function proposeFileChange(input, api) {\n  let baseHash = null;\n  if (!input.new_file) {\n    const existing = await api.workspace.readText({ path: input.path, maxBytes: 131072 });\n    if (!existing || typeof existing.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(existing.sha256)) {\n      throw new Error('file-hash-not-confirmed');\n    }\n    baseHash = existing.sha256;\n  }\n  const proposed = await api.workspace.proposePatch({ path: input.path, baseHash, content: input.content });\n  if (!proposed || proposed.status !== 'pending' || typeof proposed.proposalId !== 'string' || !proposed.proposalId) {\n    throw new Error('proposal-not-confirmed');\n  }\n  return '修改提案已创建，项目文件尚未改动。到“插件文件”检查差分后再应用；应用遵守当前权限。';\n}\n"
+    }
+  ]
+}

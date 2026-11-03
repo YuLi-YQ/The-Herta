@@ -80,6 +80,7 @@ export async function checkReaderArgvPaths(
   workspaceRoot: string,
   effectiveCwd: string,
   argv: readonly string[],
+  options: { allowHarnessPaths?: boolean } = {},
 ): Promise<SafePathDenied | null> {
   const candidates = readerPathCandidates(argv);
   if (candidates === null) return null;
@@ -103,7 +104,8 @@ export async function checkReaderArgvPaths(
     // `real` is an existing canonical path; resolveSafePath re-realpaths it
     // (idempotent) and applies the SAME workspace-prefix + credential
     // denylist that guards read_file, inheriting its Windows case handling.
-    const r = await resolveSafePath(workspaceRoot, real, READER_CARVE_OUTS);
+    const r = await resolveSafePath(workspaceRoot, real,
+      options.allowHarnessPaths === false ? {} : READER_CARVE_OUTS);
     if (!r.ok) {
       return {
         ok: false,

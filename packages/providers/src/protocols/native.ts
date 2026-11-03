@@ -3,8 +3,10 @@ import type { ToolCallRequest } from "@herta/core";
 import type {
   ModelRequest,
   NativeContext,
+  NeutralMessage,
   ProviderConfig,
 } from "../contracts.js";
+import type { MessageImage } from "../images.js";
 import { failure, object } from "./common.js";
 
 interface NativeTurn {
@@ -31,6 +33,32 @@ function hash(value: unknown): string {
   return createHash("sha256")
     .update(JSON.stringify(stable(value)))
     .digest("hex");
+}
+/** A picture enters a history fingerprint as the digest of its bytes, worked out once per picture
+ *  object (F02): an executor run carries its pictures on every step and checks every earlier step's
+ *  history again each time, which hashed the same megabytes over and over on the main thread. The
+ *  digest still covers the content, and base64 has no ":", so a digest never passes for data. */
+const pictureDigests = new WeakMap<
+  MessageImage,
+  { readonly data: string; readonly digest: string }
+>();
+function pictureDigest(image: MessageImage): MessageImage {
+  let known = pictureDigests.get(image);
+  if (known?.data !== image.data) {
+    known = {
+      data: image.data,
+      digest: `sha256:${createHash("sha256").update(image.data).digest("hex")}`,
+    };
+    pictureDigests.set(image, known);
+  }
+  return { mimeType: image.mimeType, data: known.digest };
+}
+function history(messages: readonly NeutralMessage[]): NeutralMessage[] {
+  return messages.map((m) =>
+    m.role === "user" && m.images?.length
+      ? { ...m, images: m.images.map(pictureDigest) }
+      : m,
+  );
 }
 function turns(request: ModelRequest): NativeTurn[] {
   if (!request.nativeContext) return [];
@@ -61,7 +89,8 @@ export function nativeOverrides(request: ModelRequest): Map<number, unknown> {
   for (const turn of turns(request)) {
     if (
       request.messages[turn.index]?.role !== "assistant" ||
-      hash(request.messages.slice(0, turn.index)) !== turn.historyHash ||
+      hash(history(request.messages.slice(0, turn.index))) !==
+        turn.historyHash ||
       hash(request.messages[turn.index]) !== turn.assistantHash
     )
       throw failure("Private context does not match this transcript");
@@ -81,7 +110,7 @@ export function completedNative(
   const prior = turns(request);
   const next: NativeTurn = {
     index: request.messages.length,
-    historyHash: hash(request.messages),
+    historyHash: hash(history(request.messages)),
     assistantHash: hash({ role: "assistant", text, toolCalls: calls }),
     wire,
   };

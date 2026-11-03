@@ -1769,3 +1769,20 @@ describe("SessionStore — turn-failure status (official DeepSeek codes)", () =>
     store.dispose();
   });
 });
+
+describe("R98 pending-picture manifest reset", () => {
+  it("clears the notice only for the session that was reset", () => {
+    const mock = createMockHertaBridge();
+    const store = new SessionStore();
+    store.connect(mock.bridge);
+    const reset = (sessionId: string) => mock.emitReset({ sessionId, workspaceRoot: "/r", record: [], overlay: null, backendWorkspace: "/r", backendWorkspaceIsDefault: true, stagedImageError: "清单无法读取" });
+    reset("a");
+    store.clearStagedImageError("other");
+    expect(store.getSnapshot().stagedImageError).toBe("清单无法读取");
+    store.clearStagedImageError("a");
+    expect(store.getSnapshot().stagedImageError).toBeNull();
+    reset("b");
+    store.clearStagedImageError("a");
+    expect(store.getSnapshot().stagedImageError).toBe("清单无法读取");
+  });
+});

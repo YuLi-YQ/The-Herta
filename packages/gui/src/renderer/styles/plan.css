@@ -1,0 +1,113 @@
+/* R130: plan mode extends the existing dialog vocabulary, without new motion. */
+.herta-plan-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  min-width: 0;
+  border-bottom: 1px solid var(--herta-border);
+}
+.herta-plan-strip strong {
+  font-weight: 500;
+  color: var(--herta-muted);
+  overflow-wrap: anywhere;
+}
+.herta-plan-strip button {
+  flex: none;
+}
+dialog.herta-plan {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 20px 24px;
+  border: 1px solid var(--herta-border);
+  border-radius: 16px;
+  background: var(--herta-panel);
+  color: var(--herta-text);
+}
+dialog.herta-plan::backdrop {
+  background: rgb(0 0 0 / 40%);
+}
+dialog.herta-plan header,
+.herta-plan-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+dialog.herta-plan header {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+dialog.herta-plan p {
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+dialog.herta-plan label {
+  display: block;
+}
+dialog.herta-plan small {
+  display: block;
+  margin: 6px 0 10px;
+  color: var(--herta-muted);
+  overflow-wrap: anywhere;
+}
+dialog.herta-plan textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: min(260px, 40vh);
+  max-height: none;
+  margin-top: 6px;
+  padding: 10px 12px;
+  resize: vertical;
+  font: inherit;
+  border: 1px solid var(--herta-control);
+  border-radius: 8px;
+  background: var(--herta-bg);
+  color: var(--herta-text);
+}
+dialog.herta-plan [role="alert"] {
+  color: var(--herta-error);
+}
+.herta-plan-actions {
+  margin: 10px 0;
+}
+.herta-plan-history {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--herta-border);
+}
+.herta-plan-history summary {
+  cursor: pointer;
+}
+.herta-plan-history pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.herta-plan-history article {
+  border-bottom: 1px solid var(--herta-border);
+  padding: 8px 0;
+}
+dialog.herta-plan .herta-plan-reset {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+}
+dialog.herta-plan .herta-permission-confirm {
+  min-width: 0;
+  margin-top: 12px;
+}
+@media (max-width: 520px) {
+  dialog.herta-plan {
+    padding: 16px;
+  }
+  .herta-plan-strip {
+    flex-wrap: wrap;
+  }
+}

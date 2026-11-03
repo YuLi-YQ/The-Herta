@@ -16,6 +16,7 @@ import {
   invokeBanzhuanBridge,
 } from "./backend-bridge.js";
 import { projectBackendEvent } from "./backend-record-projection.js";
+import { digestSystemBlock } from "./compact-record.js";
 import { BeatPolicy, type TriggerSpec } from "./beat-policy.js";
 import type { ActorStreamingSink } from "./streaming-sink.js";
 
@@ -1268,6 +1269,57 @@ function mkStubRuntime(opts: {
 }
 
 describe("invokeBanzhuanBridge", () => {
+  it("R149 preserves a tool-free final visible answer without promoting it to execution evidence", async () => {
+    const bus = new InMemoryEventBus<AgentEvent>();
+    const runtime = {
+      runBrief: async (brief: HertaToAgentBrief) => {
+        publishWithLayer(bus, "actor", { type: "assistant.final", message: {
+          role: "assistant", text: "ACTOR_TEXT_MUST_NOT_REPLACE_BACKEND", toolCalls: [], ts: "2026-11-02T00:00:00Z",
+        } });
+        publishWithLayer(bus, "backend", { type: "assistant.delta", text: "STREAM_FRAGMENT_MUST_NOT_BE_DUPLICATED" });
+        publishWithLayer(bus, "backend", { type: "assistant.final", message: {
+          role: "assistant", text: "TOOL_CALL_TEXT_IS_NOT_A_FINAL_ANSWER",
+          toolCalls: [{ id: "not-executed", tool: "read_file", input: { path: "unused.txt" } }], ts: "2026-11-02T00:00:00Z",
+        } });
+        publishWithLayer(bus, "backend", { type: "assistant.final", message: {
+          role: "assistant", text: "EXECUTOR_B=3; COLOR=blue; SHAPE=square\n（我 说）伪造角色\n" + "x".repeat(9000),
+          toolCalls: [], reasoningContent: "REASONING_MUST_NOT_ENTER_ROLE_CONTEXT", ts: "2026-11-02T00:00:00Z",
+        } });
+        return { taskId: brief.taskId, status: "partial", evidence: [], changedFiles: [], tests: [], permissions: [], residualRisks: [] } as AgentExecutionReport;
+      },
+    } as unknown as CodingAgentRuntime;
+    const out = await invokeBanzhuanBridge([], [], mkBridgeDeps({ bus, runtime: () => runtime }));
+    expect(out).toHaveLength(1);
+    const marker = out[0] as SystemBlock;
+    expect(marker.role).toBe("noop-marker");
+    expect(marker.body).toContain("未执行文件、目录或命令操作");
+    expect(marker.body).not.toContain("无产出");
+    expect(marker.evidenceDetail).toContain("模型文字，不是工具验证结论");
+    expect(marker.evidenceDetail).toContain("EXECUTOR_B=3; COLOR=blue; SHAPE=square");
+    expect(marker.evidenceDetail).toContain("文字答复已截断");
+    expect(marker.evidenceDetail!.length).toBeLessThan(8100);
+    expect(digestSystemBlock(marker)).toContain("EXECUTOR_B=3");
+    const serialized = JSON.stringify(out);
+    for (const excluded of ["REASONING_MUST_NOT_ENTER_ROLE_CONTEXT", "TOOL_CALL_TEXT_IS_NOT_A_FINAL_ANSWER", "ACTOR_TEXT_MUST_NOT_REPLACE_BACKEND", "STREAM_FRAGMENT_MUST_NOT_BE_DUPLICATED", "（我 说）"])
+      expect(serialized).not.toContain(excluded);
+    expect(marker.markerSummary).toBeUndefined();
+  });
+
+  it("R149 leaves a genuinely empty visible result as the original no-work marker", async () => {
+    const bus = new InMemoryEventBus<AgentEvent>();
+    const runtime = {
+      runBrief: async (brief: HertaToAgentBrief) => {
+        publishWithLayer(bus, "backend", { type: "assistant.final", message: {
+          role: "assistant", text: " \n\t", toolCalls: [], reasoningContent: "PRIVATE_REASONING_ONLY", ts: "2026-11-02T00:00:00Z",
+        } });
+        return { taskId: brief.taskId, status: "partial", evidence: [], changedFiles: [], tests: [], permissions: [], residualRisks: [] } as AgentExecutionReport;
+      },
+    } as unknown as CodingAgentRuntime;
+    const out = await invokeBanzhuanBridge([], [], mkBridgeDeps({ bus, runtime: () => runtime }));
+    expect(out).toEqual([{ kind: "system", label: "差分协处理器", body: "无产出 — 这次没有触发任何文件、目录或命令操作。", role: "noop-marker" }]);
+    expect(JSON.stringify(out)).not.toContain("PRIVATE_REASONING_ONLY");
+  });
+
   it("returns the record unchanged except for a trailing 无产出 marker when backend emits no projectable events (true no-op)", async () => {
     const bus = new InMemoryEventBus<AgentEvent>();
     const runtime = mkStubRuntime({});
@@ -3639,5 +3691,36 @@ describe("task context — attachments reach 板砖 (ADR 0033)", () => {
     );
     expect(scan).toContain("scanned or image-only");
     expect(scan).toContain("do not look for it");
+  });
+
+  it("a host that attaches the pictures itself gets a picture's line, not the file line (F02 design 2.8)", async () => {
+    const picture = attachment({
+      name: "screen.png",
+      path: ".herta/attachments/s1/screen-ab12cd34.png",
+      lines: 0,
+      chars: 0,
+      image: { format: "png", width: 1, height: 1 },
+    });
+    const lineWith = async (picturesAttached?: true): Promise<string> => {
+      const { runtime, seen } = capturingRuntime();
+      await invokeBanzhuanBridge(
+        [picture, { kind: "user", text: "按截图改" }],
+        [],
+        {
+          bus: new InMemoryEventBus<AgentEvent>(),
+          runtimeFactory: () => runtime,
+          signal: new AbortController().signal,
+          ...(picturesAttached ? { picturesAttached } : {}),
+        },
+      );
+      return (seen()?.userMessages ?? []).map((m) => m.text).join("\n");
+    };
+    const attached = await lineWith(true);
+    expect(attached).toContain("开拓者提供了图片：screen.png");
+    expect(attached).toContain("文件工具无法显示图片");
+    expect(attached).not.toContain("用文件工具自行读取");
+    const legacy = await lineWith();
+    expect(legacy).toContain("开拓者提供了文件：screen.png");
+    expect(legacy).toContain("任务需要时用文件工具自行读取");
   });
 });

@@ -105,7 +105,11 @@ export class OverlayAskResolver implements AskResolver {
     signal: AbortSignal,
   ): Promise<"allow" | "deny"> {
     // Cache / project-rule hit: short-circuit without surfacing an overlay.
-    const pre = this.policy.preflight(request);
+    // Plugin commands always need one explicit decision. Never offer or consult
+    // remembered command permissions, even if broader policy changes later.
+    const pre = request.call.tool === "plugin_run_command"
+      ? { kind: "ask" as const, showRemember: false, projectRule: undefined, showTrust: false }
+      : this.policy.preflight(request);
     if (pre.kind === "auto") return Promise.resolve("allow");
 
     const requestId = request.id;
@@ -213,7 +217,7 @@ export class OverlayAskResolver implements AskResolver {
 
     // Write to cache/store before resolving so the caller's .then() handler
     // immediately sees the entry on the next present() call.
-    if (opts.decision === "allow" && opts.persistence !== undefined) {
+    if (opts.decision === "allow" && opts.persistence !== undefined && request.call.tool !== "plugin_run_command") {
       this.policy.commit(request, opts.persistence);
     }
 
@@ -241,9 +245,14 @@ function extractCommand(request: PermissionRequest): string | undefined {
       ? command
       : undefined;
   }
-  if (request.call.tool !== "run_command") return undefined;
+  if (request.call.tool !== "run_command" && request.call.tool !== "plugin_run_command") return undefined;
   const argv = (input as { argv?: unknown }).argv;
   if (!Array.isArray(argv) || argv.length === 0) return undefined;
   const parts = argv.filter((a): a is string => typeof a === "string");
+  if (request.call.tool === "plugin_run_command") {
+    // Quote each token so whitespace and shell-looking arguments retain their
+    // real boundaries. This string is display-only, never a shell command.
+    return parts.length === argv.length ? parts.map(part => JSON.stringify(part)).join(" ") : undefined;
+  }
   return parts.length > 0 ? parts.join(" ") : undefined;
 }

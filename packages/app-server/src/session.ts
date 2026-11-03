@@ -17,13 +17,27 @@ import { join } from "node:path";
 import {
   type AgentEvent,
   type ApprovalOverlayState,
+  type CompactAction,
+  type CompactReply,
+  capturePlan,
+  changePlan,
   defaultWorkspaceFor,
   dispatchJournalPath,
   type EventBus,
+  emptyPlanState,
+  type GoalAction,
+  type GoalReply,
   isAbortError,
   type LastTurnEnd,
+  type PermissionMode,
+  type PermissionModeState,
+  type PlanAction,
+  type PlanReply,
+  type PlanView,
   type ProjectCommandRuleStore,
   type ProviderAdapter,
+  parsePlanAction,
+  planContext,
   type RepoContextSnapshot,
   readDispatchJournal,
   resumableRun,
@@ -71,7 +85,12 @@ import {
   watchGitDir,
 } from "./repo-watch.js";
 import { SessionAttachments } from "./session-attachments.js";
+import { SessionCompactController } from "./session-compact.js";
 import { SessionEventProjector } from "./session-event-projector.js";
+import { SessionGoalStore } from "./session-goal-store.js";
+import { SessionPlanStore } from "./session-plan-store.js";
+import { WorkspaceOperationGate, type WorkspaceOperationContext, type WorkspaceOperationRequest } from "./workspace-operation.js";
+
 import {
   createTitleProvider,
   loadSessionTitleState,
@@ -96,14 +115,17 @@ import type {
   AttachResult,
   ContinueInterruptedResult,
   OverlayEvent,
+  PictureTarget,
   RecordEvent,
   RemoveAttachmentResult,
   RepoEvent,
+  ResetPendingImagesResult,
   ResolveApprovalOpts,
   ResumeEvent,
   RewindResult,
   Session,
   SessionAgentEvent,
+  SetPictureModelUseResult,
   SpeechControlEvent,
   StageImagesResult,
   SteerTextResult,
@@ -114,6 +136,17 @@ import type {
   WorkspaceSetResult,
   WorkspaceTrustState,
 } from "./types.js";
+
+function checkedPlanPermission(
+  state: PermissionModeState,
+): PermissionModeState {
+  return state &&
+    ["read-only", "workspace-edit", "full-access"].includes(state.mode) &&
+    Number.isSafeInteger(state.revision) &&
+    state.revision >= 1
+    ? state
+    : { mode: "read-only", revision: 1 };
+}
 
 /**
  * True when a withdrawn span includes a backend (板砖) done-marker that reports
@@ -436,6 +469,7 @@ export class SessionImpl implements Session {
      *  (audit 2026-07-10, finding 14). */
     readonly settled: Promise<void>;
   } | null = null;
+  private readonly workspaceOperations: WorkspaceOperationGate;
 
   /** The steer channel (ADR 0063): text sent while 板砖 works, drained by
    *  the backend loop at its next head. Created in `create` BEFORE the
@@ -470,6 +504,15 @@ export class SessionImpl implements Session {
   /** The session's documents and pictures — ingest, take-back, the composer's
    *  staged images, the rewind GC (session-attachments.ts). */
   private readonly attachments: SessionAttachments;
+  private readonly goals: SessionGoalStore;
+  private goalClosed = false;
+  private turnGoalContext: string | null = null;
+  private readonly plans: SessionPlanStore;
+  private readonly compact: SessionCompactController;
+  private readonly permissionMode: AppServerConfig["getPermissionMode"];
+  private readonly restorePermissionMode: AppServerConfig["restorePermissionMode"];
+  private turnPlanLocked = false;
+  private planSaveError: PlanView["saveError"];
 
   private constructor(opts: {
     sessionId: string;
@@ -517,6 +560,8 @@ export class SessionImpl implements Session {
     lastTurnEnd?: LastTurnEnd;
     pendingContractNote: string | null;
     captionImage: ImageCaptioner | null;
+    /** Pictures go to the model with the message (neutral connections, R77). */
+    deliverImages?: boolean;
     /** The user's PDF-picture transcription switch, live (2026-10-01). */
     transcribePdfPictures: () => boolean;
     steer: SteerChannel;
@@ -529,6 +574,9 @@ export class SessionImpl implements Session {
     /** The contract this session's backend runs (ADR 0040): an interrupted
      *  run that started under another cannot be continued here. */
     contract: string;
+    permissionMode?: AppServerConfig["getPermissionMode"];
+    restorePermissionMode?: AppServerConfig["restorePermissionMode"];
+    compact: SessionCompactController;
   }) {
     this.contract = opts.contract;
     this.steer = opts.steer;
@@ -538,6 +586,11 @@ export class SessionImpl implements Session {
     this.lastTurnEnd = opts.lastTurnEnd;
     this.sessionId = opts.sessionId;
     this.workspaceRoot = opts.workspaceRoot;
+    this.goals = new SessionGoalStore(opts.workspaceRoot, opts.sessionId);
+    this.plans = new SessionPlanStore(opts.workspaceRoot, opts.sessionId);
+    this.compact = opts.compact;
+    this.permissionMode = opts.permissionMode;
+    this.restorePermissionMode = opts.restorePermissionMode;
     this.wsHolder = opts.wsHolder;
     this.wsIsDefault = opts.isDefaultWorkspace;
     this.repoDescriber = opts.repoDescriber;
@@ -555,6 +608,14 @@ export class SessionImpl implements Session {
     this._record = opts.driver.getRecord();
     this.projector = opts.projector;
     this.overlayResolver = opts.overlayResolver;
+    this.workspaceOperations = new WorkspaceOperationGate({
+      state: () => {
+        const plan = this.plans.read();
+        return { closed: this.goalClosed, busy: this.currentTurn !== null, workspaceRoot: this.backendWorkspace,
+          permission: this.permissionMode?.(this.sessionId, this.backendWorkspace), planLocked: this.turnPlanLocked || !plan.ok || plan.view.locked };
+      },
+      ask: (request, signal) => this.overlayResolver.present(request, signal),
+    });
     this.commandRules = opts.commandRules;
     this.transcriptDir = opts.transcriptDir;
     this.titler = opts.titler;
@@ -565,10 +626,12 @@ export class SessionImpl implements Session {
     this.lang = opts.lang;
     this.pendingContractNote = opts.pendingContractNote;
     this.attachments = new SessionAttachments({
+      ...(opts.deliverImages ? { pendingImageJournalPath: join(opts.transcriptDir, "pending-images", `${opts.sessionId}.json`) } : {}),
       sessionId: opts.sessionId,
       lang: opts.lang,
       wsHolder: this.wsHolder,
       captionImage: opts.captionImage,
+      deliverImages: opts.deliverImages === true,
       transcribePdfPictures: opts.transcribePdfPictures,
       turnInFlight: () => this.currentTurn !== null,
       driver: this.driver,
@@ -636,8 +699,10 @@ export class SessionImpl implements Session {
       readonly onFinished?: () => void;
       readonly onFailed?: (err: unknown) => void;
       readonly rethrow: boolean;
+      readonly capturePlan?: boolean;
     },
   ): Promise<string> {
+    this.workspaceOperations.assertIdle();
     const turnId = randomUUID();
     const abortController = new AbortController();
     let settleTurn: () => void = () => {};
@@ -646,7 +711,28 @@ export class SessionImpl implements Session {
     });
     this.currentTurn = { turnId, abortController, settled };
     this.projector.emitTurnLifecycle({ kind: "started", turnId });
+    const beforeRecordLength = this.driver.getRecord().length;
     try {
+      // Validate and capture before consuming staged attachments or appending the user turn.
+      // Drivers reuse this snapshot, so a later disk change cannot fail after commitStaged.
+      const plan = this.plans.read();
+      this.turnPlanLocked = !plan.ok || plan.view.locked;
+      const planState = plan.ok && !plan.view.damaged ? plan.view.state : null;
+      const planningContext = this.turnPlanLocked
+        ? planContext(
+            planState?.active
+              ? planState
+              : {
+                  ...emptyPlanState(),
+                  active: true,
+                  previousMode: "read-only",
+                },
+            this.lang,
+          )
+        : "";
+      this.turnGoalContext = [this.goals.context(this.lang), planningContext]
+        .filter(Boolean)
+        .join("\n\n");
       await body(abortController.signal);
       // Voiced speech (ADR 0042): a beat still sounding must not outlive its
       // turn. Land its text, stop its audio, and release the record events it
@@ -658,6 +744,41 @@ export class SessionImpl implements Session {
       this.sink.settleVoice();
       this._record = this.driver.getRecord();
       hooks.onFinished?.();
+      if (
+        planState?.active &&
+        hooks.capturePlan !== false &&
+        !abortController.signal.aborted &&
+        !this.getPendingUserInput()
+      ) {
+        const speech = this._record
+          .slice(beforeRecordLength)
+          .reverse()
+          .find(
+            (block) =>
+              block.kind === "herta" &&
+              block.surface === "speech" &&
+              block.text.trim(),
+          );
+        if (speech?.kind === "herta") {
+          const captured = capturePlan(
+            planState,
+            planState.revision,
+            speech.text,
+            turnId,
+            new Date().toISOString(),
+          );
+          const stored = captured.ok
+            ? this.plans.commit(planState.revision, captured.view.state)
+            : captured;
+          this.planSaveError = stored.ok
+            ? undefined
+            : stored.reason === "conflict" ||
+                stored.reason === "history_full" ||
+                stored.reason === "invalid"
+              ? stored.reason
+              : "storage";
+        }
+      }
       this.projector.emitTurnLifecycle({ kind: "finished", turnId });
     } catch (err) {
       // Same reason as the success path above, and the same ordering: the
@@ -703,7 +824,11 @@ export class SessionImpl implements Session {
       // Clear the per-turn state only if this turn still owns it. (A second
       // entry replacing `currentTurn` mid-turn is what the callers' gates
       // forbid; the check keeps a wrong release impossible regardless.)
-      if (this.currentTurn?.turnId === turnId) this.currentTurn = null;
+      if (this.currentTurn?.turnId === turnId) {
+        this.currentTurn = null;
+        this.turnGoalContext = null;
+        this.turnPlanLocked = false;
+      }
       // A dispatch, a Stop or a 继续 may have changed what can be continued
       // (ADR 0071 §1.4).
       void this.refreshResumable();
@@ -758,8 +883,14 @@ export class SessionImpl implements Session {
       readonly bytes?: Uint8Array;
       readonly name?: string;
     }[],
+    opts?: { readonly job?: string },
   ): Promise<StageImagesResult> {
-    return this.attachments.stageImages(inputs);
+    return this.attachments.stageImages(inputs, opts);
+  }
+
+  /** Stop a staging call by the composer card's job id (R118). */
+  cancelStaging(job: string): boolean {
+    return this.attachments.cancelStaging(job);
   }
 
   /** Drop a staged image and delete its stored copy. */
@@ -767,8 +898,20 @@ export class SessionImpl implements Session {
     return this.attachments.unstageImage(id);
   }
 
+  /** Set an unreadable pending-picture manifest aside (R98). */
+  async resetPendingImages(): Promise<ResetPendingImagesResult> {
+    return this.attachments.resetPendingImages();
+  }
+
+  /** Read restored pending pictures at send, before the documents go in (R98). */
+  prepareStagedImages(ids: readonly string[]): Promise<readonly string[]> {
+    return this.attachments.prepareStaged(ids);
+  }
+
   /** What is currently waiting in the composer — for a renderer that
    *  reconnects (reload, session switch) and needs to redraw the strip. */
+  get stagedImageError(): string | null { return this.attachments.stagedImageError; }
+
   get stagedImageList(): readonly StagedImage[] {
     return this.attachments.stagedImageList;
   }
@@ -928,6 +1071,7 @@ export class SessionImpl implements Session {
     text: string,
     opts: { readonly stagedImageIds?: readonly string[] } = {},
   ): Promise<{ readonly turnId: string } | { readonly needsKey: true }> {
+    this.workspaceOperations.assertIdle();
     if (this.getPendingUserInput())
       throw new Error("请先回答或取消当前补充信息请求");
     // No DeepSeek key yet (first run, or it was cleared): don't run the turn —
@@ -1135,7 +1279,7 @@ export class SessionImpl implements Session {
         ),
       // Not rethrown — fire-and-forget; the seed is durable on disk and shows
       // as instant history on the next resume.
-      { rethrow: false },
+      { rethrow: false, capturePlan: false },
     );
     // After the opening settles (success, skip, or failure — the seed is
     // durable either way): the contract-fallback note follows it into the
@@ -1383,6 +1527,10 @@ export class SessionImpl implements Session {
     });
   }
 
+  runWorkspaceOperation<T>(request: WorkspaceOperationRequest, work: (context: WorkspaceOperationContext) => Promise<T>): Promise<T> {
+    return this.workspaceOperations.run(request, work);
+  }
+
   /**
    * Set the effective backend (板砖) workspace. Mutates the shared wsHolder
    * (so the runtimeFactory picks it up on its next dispatch), persists a
@@ -1396,7 +1544,29 @@ export class SessionImpl implements Session {
    * so enforce it here rather than trusting the renderer.
    */
   async setWorkspace(workspace: string): Promise<WorkspaceSetResult> {
-    if (this.currentTurn !== null) {
+    return this.movingAttachments(() => this.setWorkspaceInner(workspace));
+  }
+
+  /** A workspace change moves the attachment directory. A copy written
+   *  meanwhile could be orphaned under the old root or lost with it, so the
+   *  change is refused while one is in flight, and staging/attaching is
+   *  refused while the move runs (R100). */
+  private async movingAttachments(
+    change: () => Promise<WorkspaceSetResult>,
+  ): Promise<WorkspaceSetResult> {
+    if (this.workspaceOperations.busy) return { ok: false, reason: "turn_in_progress" };
+    if (!this.attachments.beginWorkspaceMove()) {
+      return { ok: false, reason: "attachments_in_progress" };
+    }
+    try {
+      return await change();
+    } finally {
+      this.attachments.endWorkspaceMove();
+    }
+  }
+
+  private async setWorkspaceInner(workspace: string): Promise<WorkspaceSetResult> {
+    if (this.currentTurn !== null || this.workspaceOperations.busy) {
       return { ok: false, reason: "turn_in_progress" };
     }
     // Attachments follow the session, not the folder (owner 2026-08-10). The
@@ -1415,7 +1585,7 @@ export class SessionImpl implements Session {
     // in-flight dispatch a half-switched holder. Refuse — and move the files
     // BACK first, because a refusal that leaves them under the new root while
     // the holder stays old would break every citation in the record.
-    if (this.currentTurn !== null) {
+    if (this.currentTurn !== null || this.workspaceOperations.busy) {
       await migrateAttachments({
         fromRoot: workspace,
         toRoot: fromRoot,
@@ -1446,8 +1616,9 @@ export class SessionImpl implements Session {
   async attachFiles(
     paths: readonly string[],
     onProgress?: (progress: AttachProgress) => void,
+    opts?: { readonly requireAll?: boolean },
   ): Promise<AttachResult> {
-    const result = await this.attachments.attachFiles(paths, onProgress);
+    const result = await this.attachments.attachFiles(paths, onProgress, opts);
     // The first readable document mounts `digest_document` for the next
     // brief (ADR 0067); later ones find it already there.
     if (result.ok && result.files.some((f) => f.unreadable === undefined)) {
@@ -1462,6 +1633,145 @@ export class SessionImpl implements Session {
     return this.attachments.removeAttachment(path);
   }
 
+  /** F04: stop sending pictures to the models, or send them again — see
+   *  SessionAttachments.setPictureModelUse. */
+  getGoal(): GoalReply {
+    return this.goalClosed
+      ? { ok: false, reason: "no_target" }
+      : this.goals.read();
+  }
+
+  getCompact(): CompactReply {
+    if (this.goalClosed) return { ok: false, reason: "no_target" };
+    try {
+      return { ok: true, view: this.compact.view() };
+    } catch {
+      return { ok: false, reason: "unavailable" };
+    }
+  }
+
+  updateCompact(expectedRevision: number, action: CompactAction): CompactReply {
+    if (this.goalClosed) return { ok: false, reason: "no_target" };
+    if (this.turnInFlight || this.getPendingUserInput())
+      return { ok: false, reason: "busy" };
+    try {
+      return this.compact.update(expectedRevision, action);
+    } catch {
+      return { ok: false, reason: "unavailable" };
+    }
+  }
+
+  updateGoal(expectedRevision: number, action: GoalAction): GoalReply {
+    if (this.goalClosed) return { ok: false, reason: "no_target" };
+    if (this.turnInFlight) return { ok: false, reason: "busy" };
+    return this.goals.update(expectedRevision, action);
+  }
+
+  /** Plan views are pure state reads; do not call the host permission getter here (it may consult this view). */
+  getPlan(): PlanReply {
+    if (this.goalClosed) return { ok: false, reason: "no_target" };
+    const result = this.plans.read();
+    const view = result.view
+      ? {
+          ...result.view,
+          locked: result.view.locked || this.turnPlanLocked,
+          ...(this.planSaveError ? { saveError: this.planSaveError } : {}),
+        }
+      : undefined;
+    if (!this.permissionMode)
+      return { ok: false, reason: "unavailable", ...(view ? { view } : {}) };
+    return { ...result, ...(view ? { view } : {}) };
+  }
+
+  updatePlan(expectedRevision: number, input: PlanAction): PlanReply {
+    if (this.goalClosed) return { ok: false, reason: "no_target" };
+    if (!this.permissionMode) return { ok: false, reason: "unavailable" };
+    const current = this.plans.read();
+    if (this.turnInFlight)
+      return {
+        ok: false,
+        reason: "busy",
+        ...(current.view ? { view: current.view } : {}),
+      };
+    const action = parsePlanAction(input);
+    if (
+      !action ||
+      !Number.isSafeInteger(expectedRevision) ||
+      expectedRevision < 0
+    )
+      return {
+        ok: false,
+        reason: "invalid",
+        ...(current.view ? { view: current.view } : {}),
+      };
+    if (!current.ok) return current;
+    if (expectedRevision !== current.view.state.revision)
+      return { ok: false, reason: "conflict", view: current.view };
+    if (action.type === "reset") {
+      const result = this.plans.reset(expectedRevision);
+      if (result.ok) this.planSaveError = undefined;
+      return result;
+    }
+    if (current.view.damaged)
+      return { ok: false, reason: "damaged", view: current.view };
+    let trustedMode: PermissionMode | undefined;
+    try {
+      if (action.type === "exit") {
+        if (!current.view.state.active || !current.view.state.previousMode)
+          return { ok: false, reason: "invalid", view: current.view };
+        const previous = current.view.state.previousMode;
+        if (this.restorePermissionMode)
+          trustedMode = this.restorePermissionMode(
+            this.sessionId,
+            this.backendWorkspace,
+            previous,
+            action.confirmFullAccess === true,
+          );
+        else {
+          const raw = checkedPlanPermission(
+            this.permissionMode(this.sessionId, this.backendWorkspace),
+          );
+          if (raw.mode !== previous)
+            return { ok: false, reason: "unavailable", view: current.view };
+          trustedMode = raw.mode;
+        }
+      } else if (action.type === "enter")
+        trustedMode = checkedPlanPermission(
+          this.permissionMode(this.sessionId, this.backendWorkspace),
+        ).mode;
+    } catch (error) {
+      const code = (error as { code?: unknown })?.code;
+      const reason =
+        code === "confirmation_required" ||
+        code === "no_target" ||
+        code === "busy" ||
+        code === "invalid"
+          ? code
+          : "storage";
+      return { ok: false, reason, view: current.view };
+    }
+    const next = changePlan(
+      current.view.state,
+      expectedRevision,
+      action,
+      new Date().toISOString(),
+      trustedMode,
+    );
+    if (!next.ok) return next;
+    const stored = this.plans.commit(expectedRevision, next.view.state);
+    if (stored.ok) this.planSaveError = undefined;
+    return stored.ok && action.type === "exit" && trustedMode
+      ? { ...stored, restoredMode: trustedMode }
+      : stored;
+  }
+
+  setPictureModelUse(
+    targets: readonly PictureTarget[],
+    use: "stop" | "send",
+  ): Promise<SetPictureModelUseResult> {
+    return Promise.resolve(this.attachments.setPictureModelUse(targets, use));
+  }
+
   /**
    * Restore the managed-sandbox default backend workspace
    * (`~/.herta/workspaces/<sessionId>`). Persists it as a `workspace_set`
@@ -1469,7 +1779,11 @@ export class SessionImpl implements Session {
    * Idle-only, same guard and rationale as setWorkspace (finding 13).
    */
   async resetWorkspace(): Promise<WorkspaceSetResult> {
-    if (this.currentTurn !== null) {
+    return this.movingAttachments(() => this.resetWorkspaceInner());
+  }
+
+  private async resetWorkspaceInner(): Promise<WorkspaceSetResult> {
+    if (this.currentTurn !== null || this.workspaceOperations.busy) {
       return { ok: false, reason: "turn_in_progress" };
     }
     const def = defaultWorkspaceFor(homedir(), this.sessionId);
@@ -1482,7 +1796,7 @@ export class SessionImpl implements Session {
     });
     // Same far-side re-check as setWorkspace (review 2026-08-10) — and the
     // same move-back on refusal, so the citations keep resolving.
-    if (this.currentTurn !== null) {
+    if (this.currentTurn !== null || this.workspaceOperations.busy) {
       await migrateAttachments({
         fromRoot: def,
         toRoot: resetFrom,
@@ -1695,6 +2009,8 @@ export class SessionImpl implements Session {
   }
 
   async close(): Promise<void> {
+    this.goalClosed = true;
+    const workspaceInFlight = this.workspaceOperations.close();
     // The repository watcher first: nothing below should be able to start
     // a probe against a session that is going away.
     this.stopRepoTracking();
@@ -1715,23 +2031,23 @@ export class SessionImpl implements Session {
     // unlistable zombie that half-undid the delete. Bounded so a
     // pathologically hung turn can never wedge app quit (the before-quit
     // session-flush hold awaits close()).
-    if (inFlight !== null) {
+    if (inFlight !== null || workspaceInFlight !== null) {
       let timer: NodeJS.Timeout | undefined;
       const cap = new Promise<void>((resolve) => {
         timer = setTimeout(resolve, CLOSE_SETTLE_CAP_MS);
       });
       try {
-        await Promise.race([inFlight, cap]);
+        await Promise.race([Promise.all([inFlight, workspaceInFlight]), cap]);
       } finally {
         if (timer !== undefined) clearTimeout(timer);
       }
     }
 
-    // Pictures still sitting in the composer never became part of anything:
-    // no record block ever mentioned them, so their stored copies are pure
-    // orphans (ADR 0048 §4). Best-effort — a copy that survives is a stray
-    // file, never a broken session.
-    await this.attachments.clearStaged();
+    // Neutral sessions preserve pending pictures via their private journal;
+    // legacy sessions retain transient staging. suspend never removes a copy
+    // owned by a durable pending manifest or an already committed record.
+    // Clear/unstage remain explicit abandonment operations.
+    await this.attachments.suspendStaged();
 
     // Give the turn loop one event-loop tick to observe the AbortSignal and
     // emit turn.failed before we close the projector (which would close all
@@ -1794,6 +2110,66 @@ export class SessionImpl implements Session {
     // between the runtimeFactory closure (read fresh per dispatch) and the
     // SessionImpl instance, so a future setWorkspace mutates both at once.
     const wsHolder = { current: opts.effectiveWorkspace };
+    const goalStore = new SessionGoalStore(workspaceRoot, sessionId);
+    const planStore = new SessionPlanStore(workspaceRoot, sessionId);
+    const getGoalContext = () =>
+      sessionHolder.session?.turnGoalContext ??
+      [
+        goalStore.context(lang),
+        (() => {
+          const plan = planStore.read();
+          if (plan.ok && !plan.view.locked) return "";
+          return planContext(
+            plan.ok && !plan.view.damaged
+              ? plan.view.state
+              : {
+                  ...emptyPlanState(),
+                  active: true,
+                  previousMode: "read-only",
+                },
+            lang,
+          );
+        })(),
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+    const initialPlan = planStore.read();
+    const protectPlan =
+      Boolean(getPermissionMode) || !initialPlan.ok || initialPlan.view.locked;
+    let permissionSignature = "";
+    let permissionEpoch = 0;
+    const effectivePermission = (): PermissionModeState => {
+      const plan = planStore.read();
+      let raw: PermissionModeState = { mode: "read-only", revision: 0 };
+      let failed = false;
+      try {
+        if (getPermissionMode)
+          raw = checkedPlanPermission(
+            getPermissionMode(sessionId, wsHolder.current),
+          );
+      } catch {
+        failed = true;
+      }
+      const locked =
+        sessionHolder.session?.turnPlanLocked ||
+        failed ||
+        !plan.ok ||
+        plan.view.locked ||
+        !getPermissionMode;
+      const mode = locked ? "read-only" : raw.mode;
+      const signature = JSON.stringify([
+        mode,
+        raw.revision,
+        plan.view?.state.revision ?? -1,
+        plan.view?.damaged === true,
+        locked,
+      ]);
+      if (signature !== permissionSignature) {
+        permissionSignature = signature;
+        permissionEpoch++;
+      }
+      return { mode, revision: permissionEpoch };
+    };
 
     // Live key: prefer the host-provided getter (updated when the user sets the
     // key in Settings / onboarding) so a new key takes effect on the next turn
@@ -1845,12 +2221,7 @@ export class SessionImpl implements Session {
       sessionId,
       permissionProtectedPaths: config.permissionProtectedPaths,
       wsHolder,
-      ...(getPermissionMode
-        ? {
-            getPermissionMode: () =>
-              getPermissionMode(sessionId, wsHolder.current),
-          }
-        : {}),
+      ...(protectPlan ? { getPermissionMode: effectivePermission } : {}),
       workspaceOnly: Boolean(config.neutralProviders),
       workspaceRoot,
       lang,
@@ -1871,7 +2242,31 @@ export class SessionImpl implements Session {
           b.digest?.kind === "attachment" &&
           b.digest.unreadable !== "removed",
       ),
-      backendProvider,
+      backendProvider: {
+        streamChat(frame, signal) {
+          const currentPlan = planStore.read();
+          const locked =
+            sessionHolder.session?.turnPlanLocked ||
+            !currentPlan.ok ||
+            currentPlan.view.locked;
+          if (!locked || !("backendSystem" in frame))
+            return backendProvider.streamChat(frame, signal);
+          // Dynamic trailer also covers a resumed dispatch; the static execution prefix stays stable.
+          const instruction = planContext(
+            { ...emptyPlanState(), active: true, previousMode: "read-only" },
+            lang,
+          );
+          return backendProvider.streamChat(
+            {
+              ...frame,
+              trailingState: [frame.trailingState, instruction]
+                .filter(Boolean)
+                .join("\n\n"),
+            },
+            signal,
+          );
+        },
+      },
       // ADR 0048 §5: the stack mounts `view_image` only when this model can
       // actually see (isVisionModel, one rule for both hosts).
       backendModel: config.neutralProviders
@@ -2114,15 +2509,32 @@ export class SessionImpl implements Session {
     //     supervisor reference disables the supervisor; the two-phase
     //     rhythm is unconditional. The per-turn AbortSignal is threaded by
     //     submitText into driver.runTurn so interrupt() can cancel.
+    const compact = new SessionCompactController(
+      actor.recap,
+      () => sessionHolder.session?.driver.getRecord() ?? initialRecord,
+      lang,
+    );
     const driver: SessionDriver =
       config.neutralProviders && neutralBackend
         ? new NeutralDriver({
             sessionId,
+            recap: compact.runtime,
+            consumeCompactRequest: compact.consume,
+            goalContext: getGoalContext,
             workspace: () => wsHolder.current,
             journalPath: dispatchJournalPath(config.transcriptDir, sessionId),
             turnId: () =>
               sessionHolder.session?.currentTurn?.turnId ?? randomUUID(),
             resolveTurn: config.neutralProviders.resolveTurn,
+            ...(config.neutralProviders.prepareImage
+              ? { prepareImage: config.neutralProviders.prepareImage }
+              : {}),
+            ...(config.neutralProviders.onImageRequestRefused
+              ? {
+                  onImageRequestRefused:
+                    config.neutralProviders.onImageRequestRefused,
+                }
+              : {}),
             backendProvider: neutralBackend,
             runtimeFactory,
             bus,
@@ -2135,6 +2547,7 @@ export class SessionImpl implements Session {
           })
         : new V2ActorDriver({
             provider: actor.actorProvider,
+            goalContext: getGoalContext,
             model: config.providers.actorModel,
             staticPrefix: actor.staticPrefix,
             bus,
@@ -2158,7 +2571,8 @@ export class SessionImpl implements Session {
             supervisorReference: actor.supervisorReference,
             supervisorRevision: actor.supervisorRevision,
             speculativeThought: actor.speculativeThought,
-            recap: actor.recap,
+            recap: compact.runtime,
+            consumeCompactRequest: compact.consume,
             // ADR 0069 §1: the prefix follows the corpus at a fold and after a
             // dream pass (the host marks it stale), never per turn.
             ...(actor.rebuildStaticPrefix !== undefined
@@ -2253,6 +2667,9 @@ export class SessionImpl implements Session {
         !config.neutralProviders && deps.providerOverrides === undefined
           ? deepseekVisionCaptioner({ apiKey, ...baseUrl })
           : null,
+      // The desktop's own connections have no captioner: the NeutralDriver sends each picture
+      // itself, as an image block, to a model that can read it (R77).
+      deliverImages: config.neutralProviders !== undefined,
       transcribePdfPictures: opts.transcribePdfPictures ?? (() => true),
       repoDescriber: deps.repoDescriber ?? describeRepoOutcome,
       repoWatcher: deps.repoWatcher ?? watchGitDir,
@@ -2262,6 +2679,9 @@ export class SessionImpl implements Session {
       logDescriber: deps.logDescriber ?? describeLog,
       branchesDescriber: deps.branchesDescriber ?? describeBranches,
       contract: backend.contract,
+      permissionMode: getPermissionMode,
+      compact,
+      restorePermissionMode: config.restorePermissionMode,
     });
     sessionHolder.session = session;
     session.neutralMode = config.neutralProviders !== undefined;
@@ -2276,3 +2696,5 @@ export class SessionImpl implements Session {
     return session;
   }
 }
+
+

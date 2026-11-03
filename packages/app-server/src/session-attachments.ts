@@ -1,5 +1,7 @@
-import { rm } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { PendingImageJournal } from "./pending-image-journal.js";
+import { restoreStagedImage } from "./restore-staged-image.js";
 import type { SystemBlock, TerminalRecord } from "@herta/core";
 import type { PromptLang, V2ActorDriver } from "@herta/herta";
 import { digestSidecarFor } from "@herta/tools";
@@ -10,6 +12,7 @@ import {
   MAX_ATTACHMENTS_PER_ACTION,
   storedPicturesOf,
 } from "./attachments.js";
+import { imageRowOf } from "./neutral-images.js";
 import {
   MAX_STAGED_IMAGES,
   type StagedImage,
@@ -19,9 +22,30 @@ import type {
   AttachedFile,
   AttachProgress,
   AttachResult,
+  PictureTarget,
   RemoveAttachmentResult,
+  ResetPendingImagesResult,
+  SetPictureModelUseResult,
   StageImagesResult,
 } from "./types.js";
+
+/** F04: pictures one `setPictureModelUse` may change. A message holds at most 5 staged pictures
+ *  and an attach at most 10 files. R128 writes the whole choice batch atomically. */
+export const MAX_PICTURE_TARGETS = 32;
+
+/** A target as the renderer handed it over: data, checked before any row is looked up. */
+function isPictureTarget(t: unknown): t is PictureTarget {
+  if (typeof t !== "object" || t === null) return false;
+  const { index, path } = t as Record<string, unknown>;
+  return (
+    typeof index === "number" &&
+    Number.isSafeInteger(index) &&
+    index >= 0 &&
+    typeof path === "string" &&
+    path.length > 0 &&
+    path.length <= 4096
+  );
+}
 
 /**
  * The session's documents and pictures (extracted from session.ts,
@@ -39,6 +63,7 @@ import type {
  * snapshot; this module asks for both through `deps`.
  */
 export interface SessionAttachmentsDeps {
+  readonly pendingImageJournalPath?: string;
   readonly sessionId: string;
   readonly lang: PromptLang;
   /** The EFFECTIVE backend workspace holder, read fresh per operation: the
@@ -49,6 +74,9 @@ export interface SessionAttachmentsDeps {
   /** The image-captioning instrument (ADR 0048); null = images are stored
    *  but not read (no key, tests, a failed call). */
   readonly captionImage: ImageCaptioner | null;
+  /** Pictures go to the model themselves (neutral connections, R77), so a picture without a
+   *  caption is stored as a plain image row, not `no_caption`. */
+  readonly deliverImages?: boolean;
   /** Whether an attached PDF's pictures are transcribed (the user's switch,
    *  2026-10-01), read at each attach so a change applies to the next one.
    *  Absent = on. */
@@ -56,7 +84,7 @@ export interface SessionAttachmentsDeps {
   readonly turnInFlight: () => boolean;
   readonly driver: Pick<
     V2ActorDriver,
-    "getRecord" | "appendSystemBlock" | "replaceBlockAt"
+    "getRecord" | "appendSystemBlock" | "replaceBlockAt" | "replaceBlocksAt"
   >;
   /** Blocks were APPENDED between turns: refresh the session's snapshot. */
   readonly onAppended: () => void;
@@ -69,6 +97,24 @@ export class SessionAttachments {
   /** Pictures waiting in the composer (ADR 0048 §4) — stored and captioning,
    *  but not in the record until the message they belong to is sent. */
   private readonly staged: StagedImageStore;
+  /** Copies being written now (staging, attaching) and a move of the
+   *  attachment directory to a new workspace exclude each other (R100): a
+   *  copy written under the old root after the move is orphaned there, and
+   *  one written mid-move can go with the old directory. */
+  private copying = 0;
+  private moving = false;
+  /** Staging calls the composer may still cancel, by the card's job id (R118). */
+  private readonly stagingJobs = new Map<string, AbortController>();
+
+  /** For setWorkspace/resetWorkspace: refused while copies are being written. */
+  beginWorkspaceMove(): boolean {
+    if (this.copying > 0 || this.moving) return false;
+    this.moving = true;
+    return true;
+  }
+  endWorkspaceMove(): void {
+    this.moving = false;
+  }
 
   constructor(private readonly deps: SessionAttachmentsDeps) {
     this.staged = new StagedImageStore({
@@ -78,6 +124,14 @@ export class SessionAttachments {
       sessionId: deps.sessionId,
       lang: deps.lang,
       caption: () => deps.captionImage,
+      deliver: deps.deliverImages === true,
+      ...(deps.pendingImageJournalPath ? { pending: {
+        journal: new PendingImageJournal(deps.pendingImageJournalPath, deps.sessionId),
+        committedPaths: () => new Set(deps.driver.getRecord().flatMap((block) =>
+          block.kind === "system" && block.digest?.kind === "attachment" && block.digest.image
+            ? [block.digest.path] : [])),
+        restoreBlock: (image) => restoreStagedImage(deps.wsHolder.current, deps.sessionId, image, deps.lang),
+      } } : {}),
     });
   }
 
@@ -99,6 +153,12 @@ export class SessionAttachments {
       readonly bytes?: Uint8Array;
       readonly name?: string;
     }[],
+    opts?: {
+      /** The composer card's id (R118): `cancelStaging(job)` stops this
+       *  call's reads, and a picture it had not yet kept comes back
+       *  `cancelled` with no copy left behind. */
+      readonly job?: string;
+    },
   ): Promise<StageImagesResult> {
     if (this.deps.turnInFlight()) {
       return { ok: false, reason: "turn_in_progress" };
@@ -110,26 +170,58 @@ export class SessionAttachments {
     if (inputs.length + this.staged.size > MAX_STAGED_IMAGES) {
       return { ok: false, reason: "too_many_images" };
     }
+    if (this.moving) return { ok: false, reason: "workspace_changing" };
     const staged: StagedImage[] = [];
     const rejected: { readonly name: string; readonly reason: string }[] = [];
-    for (const input of inputs) {
-      const displayName =
-        input.name ?? (input.path !== undefined ? basename(input.path) : "");
-      if (displayName === "") {
-        rejected.push({ name: "", reason: "read_error" });
-        continue;
+    const job = opts?.job;
+    // A job id already running is a renderer bug; the later call simply
+    // cannot be cancelled by it rather than taking over the first one's.
+    const controller =
+      job !== undefined && !this.stagingJobs.has(job)
+        ? new AbortController()
+        : undefined;
+    if (job !== undefined && controller !== undefined)
+      this.stagingJobs.set(job, controller);
+    this.copying += 1;
+    try {
+      for (const input of inputs) {
+        const displayName =
+          input.name ?? (input.path !== undefined ? basename(input.path) : "");
+        if (displayName === "") {
+          rejected.push({ name: "", reason: "read_error" });
+          continue;
+        }
+        if (controller?.signal.aborted === true) {
+          rejected.push({ name: displayName, reason: "cancelled" });
+          continue;
+        }
+        const result = await this.staged.stage({
+          ...(input.path !== undefined ? { sourcePath: input.path } : {}),
+          ...(input.bytes !== undefined
+            ? { bytes: Buffer.from(input.bytes) }
+            : {}),
+          displayName,
+          ...(controller !== undefined ? { signal: controller.signal } : {}),
+        });
+        if (result.ok) staged.push(result.image);
+        else rejected.push({ name: displayName, reason: result.reason });
       }
-      const result = await this.staged.stage({
-        ...(input.path !== undefined ? { sourcePath: input.path } : {}),
-        ...(input.bytes !== undefined
-          ? { bytes: Buffer.from(input.bytes) }
-          : {}),
-        displayName,
-      });
-      if (result.ok) staged.push(result.image);
-      else rejected.push({ name: displayName, reason: result.reason });
+    } finally {
+      this.copying -= 1;
+      if (job !== undefined && this.stagingJobs.get(job) === controller)
+        this.stagingJobs.delete(job);
     }
     return { ok: true, staged, rejected };
+  }
+
+  /** Stop a staging call by its job id (R118). False when no such call is
+   *  running — it already finished, or never started; a picture it kept is
+   *  then the caller's to unstage. */
+  cancelStaging(job: string): boolean {
+    const controller = this.stagingJobs.get(job);
+    if (controller === undefined) return false;
+    controller.abort();
+    return true;
   }
 
   /** Drop a staged image and delete its stored copy. Nothing reached the
@@ -143,6 +235,20 @@ export class SessionAttachments {
   get stagedImageList(): readonly StagedImage[] {
     return this.staged.list();
   }
+  get stagedImageError(): string | null { return this.staged.recoveryError; }
+  suspendStaged(): Promise<void> { return this.staged.suspend(); }
+
+  /** Set an unreadable pending-picture manifest aside, on the user's say-so
+   *  (R98). Idle-only like staging: the next message is what it unblocks. */
+  resetPendingImages(): ResetPendingImagesResult {
+    if (this.deps.turnInFlight()) return { ok: false, reason: "turn_in_progress" };
+    if (this.staged.recoveryError === null) return { ok: false, reason: "nothing_to_reset" };
+    try {
+      return { ok: true, backup: this.staged.resetRecovery() };
+    } catch {
+      return { ok: false, reason: "failed" };
+    }
+  }
 
   /** Take the staged pictures for the message being sent (ADR 0048 §4):
    *  their blocks go in right after the user block. `commit` awaits the
@@ -150,6 +256,12 @@ export class SessionAttachments {
    *  user's typing. */
   commitStaged(ids: readonly string[]): Promise<readonly SystemBlock[]> {
     return this.staged.commit(ids);
+  }
+
+  /** Read restored pending pictures before the message's documents go in
+   *  (R98); returns the ids that could not be read. */
+  prepareStaged(ids: readonly string[]): Promise<readonly string[]> {
+    return this.staged.prepare(ids);
   }
 
   /** Pictures still sitting in the composer at close never became part of
@@ -169,6 +281,37 @@ export class SessionAttachments {
    * finding 13): `appendSystemBlock` is only safe between turns.
    */
   async attachFiles(
+    paths: readonly string[],
+    onProgress?: (progress: AttachProgress) => void,
+    opts?: {
+      /** The composer's send (R100): every source must still be a readable
+       *  file, or nothing is ingested and the missing ones come back — a
+       *  document moved since it was queued must not ride the message as an
+       *  unreadable row the user never sees. */
+      readonly requireAll?: boolean;
+    },
+  ): Promise<AttachResult> {
+    if (this.moving) return { ok: false, reason: "workspace_changing" };
+    this.copying += 1;
+    try {
+      if (opts?.requireAll === true && paths.length > 0 && paths.length <= MAX_ATTACHMENTS_PER_ACTION) {
+        const missing: string[] = [];
+        for (const path of paths) {
+          try {
+            if (!(await stat(path)).isFile()) missing.push(path);
+          } catch {
+            missing.push(path);
+          }
+        }
+        if (missing.length > 0) return { ok: false, reason: "missing", missing };
+      }
+      return await this.ingestAndAppend(paths, onProgress);
+    } finally {
+      this.copying -= 1;
+    }
+  }
+
+  private async ingestAndAppend(
     paths: readonly string[],
     onProgress?: (progress: AttachProgress) => void,
   ): Promise<AttachResult> {
@@ -215,6 +358,7 @@ export class SessionAttachments {
           sessionId: this.deps.sessionId,
           lang: this.deps.lang,
           captionImage: this.deps.captionImage,
+          deliverImages: this.deps.deliverImages === true,
           transcribePdfPictures,
           onProgress: (p) => report({ index, ...p }),
         }),
@@ -369,6 +513,80 @@ export class SessionAttachments {
     // pushes the corrected record to the renderer.
     this.deps.onReplaced();
     return { ok: true, removed: targets.length };
+  }
+
+  /**
+   * Stop sending pictures to the models, or send them again (F04, R115). Only
+   * the rows' `modelUse` changes — the rows, their stored copies and previews
+   * stay — so the next request's plan (neutral-images.ts) leaves a picture out
+   * for the persona, the executor and an answered question's continuation
+   * alike, and says why.
+   *
+   * A target names a row as the workbench saw it: its record index AND its
+   * stored path. One that is not a picture with a stored copy (`imageRowOf`),
+   * or cites another path (a rewind since), refuses the whole request with
+   * nothing changed. The path is only compared, never opened. Every picture
+   * row citing the same stored copy changes with it: the same file must not
+   * still go through another row.
+   *
+   * Idle-only, like every other out-of-turn record write; nothing is awaited
+   * after the check, so no turn can start in between.
+   */
+  setPictureModelUse(
+    targets: readonly PictureTarget[],
+    use: "stop" | "send",
+  ): SetPictureModelUseResult {
+    if (
+      !Array.isArray(targets) ||
+      targets.length === 0 ||
+      targets.length > MAX_PICTURE_TARGETS ||
+      (use !== "stop" && use !== "send") ||
+      !targets.every(isPictureTarget)
+    )
+      return { ok: false, reason: "invalid" };
+    if (this.deps.turnInFlight()) {
+      return { ok: false, reason: "turn_in_progress" };
+    }
+    const record = this.deps.driver.getRecord();
+    const paths = new Set<string>();
+    for (const t of targets) {
+      const block = record[t.index];
+      const row = block === undefined ? null : imageRowOf(block, t.index);
+      if (row === null || row.path !== t.path)
+        return { ok: false, reason: "not_found" };
+      paths.add(row.path);
+    }
+    const stop = use === "stop";
+    const changes: { index: number; block: SystemBlock }[] = record.flatMap(
+      (block, index) => {
+        const row = imageRowOf(block, index);
+        if (
+          row === null ||
+          !paths.has(row.path) ||
+          row.stopped === stop ||
+          block.kind !== "system" ||
+          block.digest?.kind !== "attachment"
+        )
+          return [];
+        const { modelUse: _m, ...digest } = block.digest;
+        return [
+          {
+            index,
+            block: {
+              ...block,
+              digest: stop ? { ...digest, modelUse: "stopped" } : digest,
+            },
+          },
+        ];
+      },
+    );
+    // One durable change: an error cannot leave some pictures toggled while
+    // the renderer still shows the old batch. Drivers update memory only after disk.
+    if (changes.length > 0 && !this.deps.driver.replaceBlocksAt(changes))
+      return { ok: false, reason: "not_found" };
+    // Same as a take-back: re-seed the sink and push the record to the renderer.
+    if (changes.length > 0) this.deps.onReplaced();
+    return { ok: true, changed: changes.length };
   }
 
   /**

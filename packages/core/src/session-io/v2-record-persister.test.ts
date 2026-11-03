@@ -2,6 +2,7 @@ import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as atomicWrite from "../atomic-write.js";
 import { readSessionFile, SessionFileError } from "./read-session-file.js";
 import { V2RecordPersister } from "./v2-record-persister.js";
 
@@ -274,6 +275,125 @@ describe("V2RecordPersister.replaceBlockAt (ADR 0033 removal)", () => {
     p.appendBlock({ kind: "herta", surface: "speech", text: "three" });
     return p;
   }
+
+  it("replaces a batch with one atomic write, preserving other lines and original times", () => {
+    const p = seeded();
+    const before = readFileSync(p.sessionFile, "utf8").split("\n");
+    const write = vi.spyOn(atomicWrite, "writeFileAtomicSync");
+    try {
+      expect(
+        p.replaceBlocksAt([
+          { index: 1, block: { kind: "system", label: "系统", body: "FIRST" } },
+          {
+            index: 2,
+            block: { kind: "system", label: "系统", body: "SECOND" },
+          },
+        ]),
+      ).toBe(true);
+      expect(write).toHaveBeenCalledTimes(1);
+      const after = readFileSync(p.sessionFile, "utf8").split("\n");
+      expect(after.slice(0, 3)).toEqual(before.slice(0, 3));
+      expect(JSON.parse(after[3]!).at).toBe(JSON.parse(before[3]!).at);
+      expect(JSON.parse(after[4]!).at).toBe(JSON.parse(before[4]!).at);
+      expect(readSessionFile(p.sessionFile).record.slice(1)).toMatchObject([
+        { body: "FIRST" },
+        { body: "SECOND" },
+      ]);
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("leaves the entire transcript unchanged when a batch write fails", () => {
+    const p = seeded();
+    const before = readFileSync(p.sessionFile, "utf8");
+    const write = vi
+      .spyOn(atomicWrite, "writeFileAtomicSync")
+      .mockImplementation(() => {
+        throw Object.assign(new Error("disk full"), { code: "ENOSPC" });
+      });
+    try {
+      expect(() =>
+        p.replaceBlocksAt([
+          { index: 0, block: { kind: "user", text: "changed one" } },
+          { index: 2, block: { kind: "user", text: "changed two" } },
+        ]),
+      ).toThrow("disk full");
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(readFileSync(p.sessionFile, "utf8")).toBe(before);
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("refuses an incomplete or duplicate batch without writing any of its targets", () => {
+    const p = seeded();
+    const before = readFileSync(p.sessionFile, "utf8");
+    const write = vi.spyOn(atomicWrite, "writeFileAtomicSync");
+    const block = { kind: "user", text: "replacement" } as const;
+    try {
+      for (const indexes of [
+        [0, 99],
+        [1, 1],
+        [0, -1],
+        [0, 1.5],
+      ])
+        expect(
+          p.replaceBlocksAt(indexes.map((index) => ({ index, block }))),
+        ).toBe(false);
+      expect(write).not.toHaveBeenCalled();
+      expect(readFileSync(p.sessionFile, "utf8")).toBe(before);
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("preserves an unterminated partial tail when replacing an earlier block", () => {
+    const p = seeded();
+    const tail = '{"kind":"user","text":"unfinished';
+    appendFileSync(p.sessionFile, tail);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(readSessionFile(p.sessionFile).record).toHaveLength(3);
+      expect(
+        p.replaceBlocksAt([
+          {
+            index: 1,
+            block: { kind: "system", label: "系统", body: "changed" },
+          },
+        ]),
+      ).toBe(true);
+      expect(readFileSync(p.sessionFile, "utf8").endsWith(tail)).toBe(true);
+      expect(readSessionFile(p.sessionFile).record).toHaveLength(3);
+      expect(readSessionFile(p.sessionFile).record[1]).toMatchObject({
+        body: "changed",
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("refuses the entire batch when a requested block lies beyond a corrupt line", () => {
+    const p = seeded();
+    const lines = readFileSync(p.sessionFile, "utf8").split("\n");
+    lines.splice(4, 0, '{"broken":');
+    const before = lines.join("\n");
+    // The malformed line stands between block 1 and block 2.
+    atomicWrite.writeFileAtomicSync(p.sessionFile, before);
+    const write = vi.spyOn(atomicWrite, "writeFileAtomicSync");
+    try {
+      expect(
+        p.replaceBlocksAt([
+          { index: 0, block: { kind: "user", text: "changed" } },
+          { index: 2, block: { kind: "user", text: "beyond corruption" } },
+        ]),
+      ).toBe(false);
+      expect(write).not.toHaveBeenCalled();
+      expect(readFileSync(p.sessionFile, "utf8")).toBe(before);
+    } finally {
+      write.mockRestore();
+    }
+  });
 
   it("replaces the addressed block and leaves every other line intact", () => {
     const p = seeded();

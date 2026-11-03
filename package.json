@@ -17,7 +17,7 @@
     "test:branch": "vitest run --changed origin/main",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "typecheck:apps": "pnpm --filter @herta/gui typecheck && pnpm --filter @herta/website typecheck",
+    "typecheck:apps": "pnpm --filter @herta/gui typecheck",
     "check": "pnpm build && pnpm typecheck:apps && pnpm lint && pnpm test",
     "dev:gui": "pnpm --filter @herta/gui dev",
     "build:gui": "pnpm --filter @herta/gui build",

@@ -1,23 +1,11 @@
-import { useSyncExternalStore } from "react";
-export type Appearance = "classic" | "observatory";
-const key = "the-herta.appearance.v1";
-const event = "herta-appearance-change";
+export type Appearance = "observatory";
+
+/** R133: one visual system for both workspaces. Older localStorage values no
+ * longer select a separate UI; no stored theme, font or motion setting changes. */
 export function appearance(): Appearance {
-  try { return localStorage.getItem(key) === "classic" ? "classic" : "observatory"; }
-  catch { return "classic"; }
+  return "observatory";
 }
+
 export function initializeAppearance() {
   document.documentElement.dataset.appearance = appearance();
 }
-export function setAppearance(value: Appearance) {
-  if (!["classic", "observatory"].includes(value)) return;
-  // A failed write leaves both the current view and preference unchanged.
-  localStorage.setItem(key, value);
-  document.documentElement.dataset.appearance = value;
-  window.dispatchEvent(new Event(event));
-}
-function subscribe(change: () => void) {
-  window.addEventListener(event, change);
-  return () => window.removeEventListener(event, change);
-}
-export const useAppearance = () => useSyncExternalStore(subscribe, appearance, () => "classic" as Appearance);

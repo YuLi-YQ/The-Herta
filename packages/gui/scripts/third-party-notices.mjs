@@ -170,6 +170,14 @@ function licenseFiles(root) {
     }));
 }
 
+/** Packages whose declared license is not a standard text and which ship no
+ *  license file, mapped to the text kept by hand in resources/licenses.
+ *  gsap (R46): package.json declares the "Standard 'no charge' license" by
+ *  URL only; the terms are copied from that page, retrieval date inside. */
+const HAND_KEPT_LICENSES = {
+  gsap: "gsap-standard-license.txt",
+};
+
 /** Fallback when a package declares a license but ships no text. Only the
  *  MIT/ISC shapes are anticipated; anything else is reported and stops the
  *  run rather than being papered over. */
@@ -196,6 +204,15 @@ const entries = [...packages.values()]
     const pj = readJson(join(e.root, "package.json")) ?? {};
     const files = licenseFiles(e.root);
     const id = licenseId(pj);
+    const kept = HAND_KEPT_LICENSES[e.name];
+    if (files.length === 0 && kept) {
+      files.push({
+        name: `${kept} (resources/licenses; the package ships no license file)`,
+        text: readFileSync(resolve(HERE, `../resources/licenses/${kept}`), "utf8")
+          .replace(/\r\n?/g, "\n")
+          .trim(),
+      });
+    }
     if (files.length === 0) {
       if (id !== "MIT") {
         console.error(

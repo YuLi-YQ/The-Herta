@@ -6,12 +6,15 @@ import type {
   ProjectNavigationView,
 } from "../../shared/workbench-ipc.js";
 import "./project-sidebar.css";
+import { playEntrance, useAppendEntrance } from "../lib/gsap-motion.js";
+import { Icon } from "./Icon.js";
 
 export interface ProjectSidebarProps {
   view: ProjectNavigationView;
   sessions: readonly SessionMetadata[];
   activeSessionId: string | null;
   busy: boolean;
+  visible?: boolean;
   onOpen: (sessionId: string) => void;
   onCreate: (project: { projectId: string; path: string | null }) => void;
   onRenameTask: (sessionId: string, title: string) => Promise<unknown>;
@@ -26,6 +29,7 @@ export function ProjectSidebar({
   sessions,
   activeSessionId,
   busy,
+  visible = true,
   onOpen,
   onCreate,
   onRenameTask,
@@ -33,6 +37,41 @@ export function ProjectSidebar({
   onRelocateProject,
 }: ProjectSidebarProps) {
   const navigation = useRef<HTMLElement>(null);
+  // Row menus are native <details>; play their entrance as each one opens
+  // (toggle does not bubble, so listen in the capture phase) (R46).
+  useEffect(() => {
+    const root = navigation.current;
+    if (!root || !visible) return;
+    // The running entrance ends when another menu opens or the sidebar
+    // unmounts, so no tween outlives its menu (R54, as R51 did for messages).
+    let entrance: ReturnType<typeof playEntrance> = null;
+    let activeMenu: HTMLDetailsElement | null = null;
+    const opened = (event: Event) => {
+      const menu = event.target;
+      if (
+        menu instanceof HTMLDetailsElement &&
+        menu.classList.contains("herta-nav-actions")
+      ) {
+        if (!menu.open) {
+          if (menu === activeMenu) {
+            entrance?.revert();
+            entrance = null;
+            activeMenu = null;
+          }
+          return;
+        }
+        const panel = menu.querySelector<HTMLElement>(".herta-nav-menu");
+        entrance?.revert();
+        activeMenu = menu;
+        entrance = panel ? playEntrance(panel, "popover-down") : null;
+      }
+    };
+    root.addEventListener("toggle", opened, true);
+    return () => {
+      root.removeEventListener("toggle", opened, true);
+      entrance?.revert();
+    };
+  }, [visible]);
   useEffect(() => {
     const root = navigation.current;
     if (!root) return;
@@ -43,6 +82,10 @@ export function ProjectSidebar({
         if (menu !== except) menu.open = false;
       }
     };
+    if (!visible) {
+      close();
+      return;
+    }
     const outside = (event: Event) => {
       const target = event.target;
       close(
@@ -51,14 +94,16 @@ export function ProjectSidebar({
     };
     const blur = () => close();
     const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || event.isComposing || event.keyCode === 229) return;
       const menu = root.querySelector<HTMLDetailsElement>(
         ".herta-nav-actions[open]",
       );
       if (!menu) return;
       event.preventDefault();
       close();
-      menu.querySelector<HTMLElement>("summary")?.focus();
+      menu
+        .querySelector<HTMLElement>("summary")
+        ?.focus({ preventScroll: true });
     };
     document.addEventListener("pointerdown", outside, true);
     document.addEventListener("focusin", outside, true);
@@ -70,7 +115,7 @@ export function ProjectSidebar({
       document.removeEventListener("keydown", dismissOnEscape);
       window.removeEventListener("blur", blur);
     };
-  }, []);
+  }, [visible]);
   const [edit, setEdit] = useState<Edit | null>(null);
   const [name, setName] = useState("");
   const [recycle, setRecycle] = useState(false);
@@ -111,6 +156,24 @@ export function ProjectSidebar({
         (a, b) =>
           Number(b.pinned) - Number(a.pinned) || a.pinOrder - b.pinOrder,
       );
+  // A project opened or a task created while the list is shown slides in, as
+  // a new chat does in the chat list (R74). Keys cover collapsed projects'
+  // tasks too, so expanding a project never replays its rows, and pinning
+  // only moves them; the list shown on load never animates.
+  useAppendEntrance(
+    navigation,
+    [
+      ...view.projects
+        .filter((p) => !p.removed)
+        .map((p) => `project:${p.projectId}`),
+      ...view.tasks
+        .filter((t) => !t.recycled)
+        .map((t) => `task:${t.sessionId}`),
+    ],
+    "navigation",
+    "row",
+    visible,
+  );
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: delegated cleanup handles clicks from native keyboard-accessible buttons and summaries.
     <nav
@@ -131,7 +194,9 @@ export function ProjectSidebar({
           if (other !== menu) other.open = false;
         }
         menu.open = true;
-        menu.querySelector<HTMLElement>("summary")?.focus();
+        menu
+          .querySelector<HTMLElement>("summary")
+          ?.focus({ preventScroll: true });
       }}
       onClick={(event) => {
         const trigger = (event.target as Element).closest(
@@ -164,7 +229,11 @@ export function ProjectSidebar({
               {pinned ? "置顶" : "项目"}
             </h2>
             {group.map((project) => (
-              <section key={project.projectId} className="herta-nav-project">
+              <section
+                key={project.projectId}
+                className="herta-nav-project"
+                data-entrance={`project:${project.projectId}`}
+              >
                 <div className="herta-nav-project-row">
                   <button
                     type="button"
@@ -199,7 +268,7 @@ export function ProjectSidebar({
                       {project.alias || project.name}
                     </span>
                     <span className="herta-nav-chevron" aria-hidden="true">
-                      {project.expanded ? "⌄" : "›"}
+                      ›
                     </span>
                     {project.pinned && (
                       <span
@@ -207,7 +276,7 @@ export function ProjectSidebar({
                         role="img"
                         aria-label="已置顶"
                       >
-                        ◆
+                        <Icon name="spark" className="herta-pin-mark" />
                       </span>
                     )}
                   </button>
@@ -223,13 +292,13 @@ export function ProjectSidebar({
                     }
                     disabled={locked}
                   >
-                    ＋
+                    <Icon name="plus" />
                   </button>
                   <details className="herta-nav-actions">
                     <summary
                       aria-label={`${project.alias || project.name}项目菜单`}
                     >
-                      ···
+                      <Icon name="more" />
                     </summary>
                     <div className="herta-nav-menu">
                       <button
@@ -305,6 +374,7 @@ export function ProjectSidebar({
                     {taskList(project).map((task) => (
                       <div
                         className={`herta-nav-task${activeSessionId === task.sessionId ? " is-active" : ""}`}
+                        data-entrance={`task:${task.sessionId}`}
                         key={task.sessionId}
                       >
                         <button
@@ -325,7 +395,7 @@ export function ProjectSidebar({
                               role="img"
                               aria-label="已置顶"
                             >
-                              ◆
+                              <Icon name="spark" className="herta-pin-mark" />
                             </span>
                           )}
                           <span>{taskName(task.sessionId)}</span>
@@ -334,7 +404,7 @@ export function ProjectSidebar({
                           <summary
                             aria-label={`${taskName(task.sessionId)}任务菜单`}
                           >
-                            ···
+                            <Icon name="more" />
                           </summary>
                           <div className="herta-nav-menu">
                             <button
@@ -426,7 +496,7 @@ export function ProjectSidebar({
         >
           {edit.kind === "remove" ? (
             <>
-              <p>移除「{edit.name}」的导航。磁盘上的项目文件不会删除。</p>
+              <p>从导航中移除「{edit.name}」？磁盘上的项目文件不会删除。</p>
               <label className="herta-nav-checkbox">
                 <input
                   type="checkbox"
@@ -436,7 +506,6 @@ export function ProjectSidebar({
                 />
                 <span>同时移除 {edit.count} 个任务</span>
               </label>
-              <p className="herta-nav-hint">移除后不再显示；项目中的磁盘文件保留。</p>
             </>
           ) : (
             <label>

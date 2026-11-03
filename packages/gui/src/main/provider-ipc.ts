@@ -1,4 +1,5 @@
 import { CMD } from "../preload/channels.js";
+import { quarantineImageChecks } from "./provider-image-checks.js";
 import {
   discoverProviderModels,
   validateProviderModel,
@@ -26,6 +27,11 @@ export function registerProviderHandlers(
   handle(CMD.validateProviderModel, (_event, input) =>
     validateProviderModel(input),
   );
+  // R109 (F06): takes no input; refuses a readable file.
+  handle(CMD.resetImageChecks, () => {
+    const preserved = quarantineImageChecks();
+    return { view: getProviderSettings(), preserved };
+  });
   handle(CMD.saveProvider, (_event, input) => saveProvider(input));
   handle(CMD.deleteProvider, (_event, id) => deleteProvider(id));
   handle(CMD.setProviderBindings, (_event, input) =>

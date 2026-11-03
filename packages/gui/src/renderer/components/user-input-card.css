@@ -77,6 +77,23 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+/* R45: on short windows the card scrolls; its actions stay pinned to the
+   card's foot instead of scrolling out of view, and the bar is slim. */
+.herta-question-card form > footer {
+  position: sticky;
+  bottom: -16px;
+  margin: 0 -16px -16px;
+  padding: 10px 16px 16px;
+  border-top: 1px solid var(--herta-border);
+  background: var(--herta-panel);
+}
+.herta-question-card::-webkit-scrollbar {
+  width: 8px;
+}
+.herta-question-card::-webkit-scrollbar-thumb {
+  border-radius: 8px;
+  background: var(--herta-border);
+}
 .herta-question-card footer button:first-child {
   border-color: var(--herta-accent);
 }

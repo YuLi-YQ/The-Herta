@@ -26,6 +26,8 @@ export interface SessionActivationDeps {
 export interface SessionActivation {
   /** The session the window shows — the one whose forwarders run. */
   readonly pointed: Session | null;
+  /** Monotonic owner epoch, including A→B→A and in-flight activation requests. */
+  readonly revision: number;
   pointAt(session: Session): void;
   /** The window shows nothing: the connect screen. */
   pointNowhere(): void;
@@ -65,8 +67,10 @@ export function createSessionActivation(
   let stopForwarders: (() => void) | null = null;
   let pointed: Session | null = null;
   let activationSeq = 0;
+  let ownerSeq = 0;
 
   function pointAt(session: Session): void {
+    ownerSeq++;
     stopForwarders?.();
     stopForwarders = deps.startForwarders(session, deps.send);
     pointed = session;
@@ -74,6 +78,7 @@ export function createSessionActivation(
   }
 
   function release(): void {
+    ownerSeq++;
     stopForwarders?.();
     stopForwarders = null;
     pointed = null;
@@ -205,6 +210,7 @@ export function createSessionActivation(
   }
 
   return {
+    get revision() { return activationSeq + ownerSeq; },
     get pointed() {
       return pointed;
     },

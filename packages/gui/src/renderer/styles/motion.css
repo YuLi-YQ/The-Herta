@@ -1,29 +1,103 @@
 /* Project-owned feedback layer; classic appearance has no new entrance effects.
    Lucian #039 keeps its original timings; the preference only disables motion. */
 @keyframes herta-panel-reveal { from { opacity: 0; } to { opacity: 1; } }
+@keyframes herta-dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes herta-text-rise {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
 @media (prefers-reduced-motion: no-preference) {
-  :root[data-appearance="observatory"]:not([data-motion="off"])
-    :is(.herta-nav-menu, .composer-model-popover, .round-reader, .round-hover-preview) {
+  /* The chat's native dialogs (storage, memory) enter like the settings card
+     and the backdrop fades, so all three modal panels arrive the same way
+     (R54). Closing stays instant. Opacity only: focus moves in on frame one. */
+  :root[data-appearance="observatory"]:not([data-motion="off"]) dialog.herta-chat-memory[open] {
+    animation: herta-dialog-in 200ms var(--ease-signature, cubic-bezier(0.2, 0.85, 0.2, 1));
+  }
+  :root[data-appearance="observatory"]:not([data-motion="off"]) dialog.herta-chat-memory[open]::backdrop {
     animation: herta-panel-reveal 160ms var(--herta-ui-ease, ease-out);
+  }
+  /* Menus and pickers enter through GSAP (lib/gsap-motion.ts, R46); these
+     two keep the CSS fade. */
+  :root[data-appearance="observatory"]:not([data-motion="off"])
+    :is(.round-reader, .round-hover-preview) {
+    animation: herta-panel-reveal 160ms var(--herta-ui-ease, ease-out);
+  }
+  /* Press feedback on the primary actions of both surfaces (R46): a short
+     give on press, never on hover, under the same switches as all motion. */
+  :root[data-appearance="observatory"]:not([data-motion="off"])
+    :is(.herta-send-action, .herta-chat-send, .herta-chat-stop, .herta-chat-new, .herta-sidebar > button:first-child) {
+    transition:
+      transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color var(--herta-ui-fast, 120ms) var(--herta-ui-ease, ease),
+      border-color var(--herta-ui-fast, 120ms) var(--herta-ui-ease, ease);
+  }
+  :root[data-appearance="observatory"]:not([data-motion="off"])
+    :is(.herta-send-action, .herta-chat-send, .herta-chat-stop, .herta-chat-new, .herta-sidebar > button:first-child):active:not(:disabled) {
+    transform: scale(0.96);
   }
   :root[data-appearance="observatory"]:not([data-motion="off"])
     .round-tool > details[open] > .round-tool-detail {
     animation: herta-panel-reveal 120ms var(--herta-ui-ease, ease-out);
   }
+  /* Text surfacing (R71). Blocks a streaming reply adds (paragraphs,
+     headings, code, quotes, list items, table rows) rise in as they arrive.
+     The block still growing stays the same element (positional keys), so
+     only arrivals move; the text itself is never held back, and a settled
+     reply has no animation at all. Lists and tables enter by their items. */
+  :root[data-appearance="observatory"]:not([data-motion="off"])
+    .message-content[data-streaming]
+    :is(.message-content__body > :not(ul, ol, .message-content__table), .message-content__body li) {
+    animation: herta-text-rise 280ms var(--herta-ui-ease, ease-out) backwards;
+  }
+  :root[data-appearance="observatory"]:not([data-motion="off"])
+    .message-content[data-streaming] .message-content__table tr {
+    animation: herta-panel-reveal 240ms var(--herta-ui-ease, ease-out) backwards;
+  }
+  /* The empty chat's greeting and the workbench welcome surface line by line
+     each time they come into view; the portrait fades in once with them. */
+  :root[data-appearance="observatory"]:not([data-motion="off"])
+    :is(.herta-chat-empty, .herta-welcome-copy) > * {
+    animation: herta-text-rise 420ms var(--ease-signature, cubic-bezier(0.2, 0.85, 0.2, 1)) backwards;
+  }
+  :root[data-appearance="observatory"]:not([data-motion="off"])
+    :is(.herta-chat-empty, .herta-welcome-copy) > :nth-child(2) {
+    animation-delay: 60ms;
+  }
+  :root[data-appearance="observatory"]:not([data-motion="off"])
+    :is(.herta-chat-empty, .herta-welcome-copy) > :nth-child(3) {
+    animation-delay: 120ms;
+  }
+  :root[data-appearance="observatory"]:not([data-motion="off"])
+    .herta-welcome-copy > :nth-child(4) {
+    animation-delay: 180ms;
+  }
+  :root[data-appearance="observatory"]:not([data-motion="off"])
+    .herta-welcome-copy > :nth-child(n + 5) {
+    animation-delay: 240ms;
+  }
+  :root[data-appearance="observatory"]:not([data-motion="off"])
+    .herta-welcome-art img {
+    animation: herta-panel-reveal 600ms var(--herta-ui-ease, ease-out) backwards;
+  }
 }
-:root[data-motion="off"] :is(.herta-shell, .settings-card, .round-hover-preview),
-:root[data-motion="off"] :is(.herta-shell, .settings-card, .round-hover-preview) *,
-:root[data-motion="off"] :is(.herta-shell, .settings-card, .round-hover-preview) *::before,
-:root[data-motion="off"] :is(.herta-shell, .settings-card, .round-hover-preview) *::after {
+/* Overlays portaled to <body> sit outside .herta-shell and are listed by name:
+   the hover preview, and since R54 the image viewer (chat and workbench). */
+:root[data-motion="off"] :is(.herta-shell, .settings-card, .round-hover-preview, .lightbox-backdrop),
+:root[data-motion="off"] :is(.herta-shell, .settings-card, .round-hover-preview, .lightbox-backdrop) *,
+:root[data-motion="off"] :is(.herta-shell, .settings-card, .round-hover-preview, .lightbox-backdrop) *::before,
+:root[data-motion="off"] :is(.herta-shell, .settings-card, .round-hover-preview, .lightbox-backdrop) *::after {
   animation: none !important;
   transition-duration: 0s !important;
   scroll-behavior: auto !important;
 }
 @media (prefers-reduced-motion: reduce) {
-  :is(.herta-shell, .settings-card, .round-hover-preview),
-  :is(.herta-shell, .settings-card, .round-hover-preview) *,
-  :is(.herta-shell, .settings-card, .round-hover-preview) *::before,
-  :is(.herta-shell, .settings-card, .round-hover-preview) *::after {
+  :is(.herta-shell, .settings-card, .round-hover-preview, .lightbox-backdrop),
+  :is(.herta-shell, .settings-card, .round-hover-preview, .lightbox-backdrop) *,
+  :is(.herta-shell, .settings-card, .round-hover-preview, .lightbox-backdrop) *::before,
+  :is(.herta-shell, .settings-card, .round-hover-preview, .lightbox-backdrop) *::after {
     animation: none !important;
     transition-duration: 0s !important;
     scroll-behavior: auto !important;

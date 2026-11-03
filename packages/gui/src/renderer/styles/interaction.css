@@ -1,0 +1,31 @@
+/* Editing should not need a resize gesture. Chromium sizes content natively,
+   keeping the selection/IME node intact; the fixed-height rule remains a
+   fallback for other hosts. Width stays fixed and long drafts scroll at a cap. */
+@supports (field-sizing: content) {
+  :root[data-appearance="observatory"] :is(.herta-composer-box, .herta-chat-composer) > textarea {
+    field-sizing: content;
+    height: auto;
+    min-height: var(--herta-composer-height);
+    max-height: min(25vh, 240px);
+    resize: none;
+    overflow-y: auto;
+  }
+}
+
+/* Reading gets a quieter action row without hidden keyboard stops. Touch
+   surfaces, focused controls and copy/save feedback keep full visibility. */
+@media (hover: hover) and (pointer: fine) {
+  :root[data-appearance="observatory"] .message-content:not([data-streaming]) .message-content__actions {
+    opacity: 0.8;
+  }
+  :root[data-appearance="observatory"] .message-content:hover .message-content__actions,
+  :root[data-appearance="observatory"] .message-content .message-content__actions:focus-within,
+  :root[data-appearance="observatory"] .message-content .message-content__actions:has([role="status"]:not(:empty)) {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-appearance="observatory"]:not([data-motion="off"]) .message-content__actions {
+    transition: opacity 120ms var(--herta-ui-ease, ease-out);
+  }
+}

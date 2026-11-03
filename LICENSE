@@ -26,6 +26,19 @@ commercial use by this license:
   - data/voice/**                  voice audio (not distributed in this
                                    repository; see README)
 
+Clarification for the assets distributed by this fork: the directory scopes
+above describe upstream character-related material. The original geometric
+icons listed in assets/ASSET_MANIFEST.md have a separate MIT license in
+packages/gui/resources/licenses/atelier-geometric-LICENSE.txt. Bundled fonts
+are covered by their own SIL OFL 1.1 notices. These exceptions do not license
+any character likeness, dialogue or voice under the code grant.
+
+The welcome illustration was generated from an author-drawn reference and
+approved by that author for distribution with this project. The reference
+image itself is not distributed. The welcome illustration remains outside
+the code MIT grant; the approval does not transfer the underlying character
+IP or grant unrestricted redistribution or commercial rights.
+
 If you fork or reuse this project, the code is yours to use under MIT — the
 character, artwork, dialogue, and voice are not ours to give.
 

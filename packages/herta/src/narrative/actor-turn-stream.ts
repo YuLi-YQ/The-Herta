@@ -437,7 +437,10 @@ export async function recoverEmptyThought(opts: {
  *  speculative first thought below and the ordinary call in `runPhaseTwo`
  *  cannot drift apart — adoption compares their output byte for byte. */
 function buildPhaseTwoPrompt(o: {
-  deps: Pick<ActorTurnDeps, "staticPrefix" | "attachedMetaThink" | "lang">;
+  deps: Pick<
+    ActorTurnDeps,
+    "staticPrefix" | "attachedMetaThink" | "lang" | "goalContext"
+  >;
   record: TerminalRecord;
   priorTurnLength: number;
   surface: Surface;
@@ -454,6 +457,7 @@ function buildPhaseTwoPrompt(o: {
     attachedMetaThink: o.deps.attachedMetaThink,
     metaThinkSurface: o.surface,
     formatHint: o.formatHint,
+    ...(o.deps.goalContext ? { goalContext: o.deps.goalContext } : {}),
     openTag: o.surface === "thought" ? "（我 想）" : "（我 说）",
     ...(o.bodySeed !== undefined ? { openTagSuffix: o.bodySeed } : {}),
     ...(o.vetoedSpeech !== undefined
@@ -490,6 +494,7 @@ export function startThoughtSpeculation(o: {
     | "provider"
     | "model"
     | "staticPrefix"
+    | "goalContext"
     | "attachedMetaThink"
     | "lang"
     | "hints"

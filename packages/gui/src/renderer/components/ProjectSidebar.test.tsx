@@ -1,10 +1,12 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
+import { gsap } from "gsap";
 import { describe, expect, it, vi } from "vitest";
 import type { ProjectNavigationView } from "../../shared/workbench-ipc.js";
 import { ProjectSidebar, type ProjectSidebarProps } from "./ProjectSidebar.js";
@@ -126,6 +128,34 @@ describe("project sidebar pure navigation interactions", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(panel).not.toHaveAttribute("open");
     expect(trigger).toHaveFocus();
+  });
+  it("does not dismiss a menu when Escape belongs to an IME composition", () => {
+    render(<ProjectSidebar {...fixture()} />);
+    const trigger = screen.getAllByLabelText("same项目菜单")[0]!;
+    fireEvent.click(trigger);
+    const menu = trigger.parentElement!;
+    fireEvent.keyDown(document, { key: "Escape", isComposing: true });
+    expect(menu).toHaveAttribute("open");
+    fireEvent.keyDown(document, { key: "Escape", keyCode: 229 });
+    expect(menu).toHaveAttribute("open");
+  });
+  it("reverts the menu entrance immediately when its details closes", async () => {
+    document.documentElement.dataset.appearance = "observatory";
+    document.documentElement.dataset.motion = "system";
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    const view = render(<ProjectSidebar {...fixture()} />);
+    const trigger = screen.getAllByLabelText("same项目菜单")[0]!;
+    const details = trigger.parentElement as HTMLDetailsElement;
+    const panel = details.querySelector<HTMLElement>(".herta-nav-menu")!;
+    await act(async () => { details.open = true; fireEvent(details, new Event("toggle")); });
+    expect(gsap.getTweensOf(panel)).toHaveLength(1);
+    await act(async () => { details.open = false; fireEvent(details, new Event("toggle")); });
+    expect(gsap.getTweensOf(panel)).toHaveLength(0);
+    expect(panel.style.transform).toBe("");
+    view.unmount();
+    vi.unstubAllGlobals();
+    delete document.documentElement.dataset.appearance;
+    delete document.documentElement.dataset.motion;
   });
   it("keeps only one menu open and closes after selecting an action", async () => {
     const props = fixture();
@@ -298,3 +328,97 @@ describe("project sidebar pure navigation interactions", () => {
   });
 });
 
+
+describe("project sidebar menu motion (R54)", () => {
+  it("ends a menu's running entrance when the sidebar unmounts", () => {
+    document.documentElement.dataset.appearance = "observatory";
+    document.documentElement.dataset.motion = "system";
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("no-preference"),
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    try {
+      const view = render(<ProjectSidebar {...fixture()} />);
+      const project = screen.getByTitle("C:\\a\\same");
+      const details = project
+        .closest(".herta-nav-project-row")!
+        .querySelector("details")!;
+      fireEvent.contextMenu(project);
+      expect(details).toHaveAttribute("open");
+      // jsdom may not queue the native toggle event; the listener is the same either way.
+      details.dispatchEvent(new Event("toggle"));
+      const panel = details.querySelector<HTMLElement>(".herta-nav-menu")!;
+      expect(gsap.getTweensOf(panel)).toHaveLength(1);
+      view.unmount();
+      expect(gsap.getTweensOf(panel)).toHaveLength(0);
+      expect(panel.style.opacity).toBe("");
+    } finally {
+      vi.unstubAllGlobals();
+      delete document.documentElement.dataset.appearance;
+      delete document.documentElement.dataset.motion;
+    }
+  });
+});
+
+describe("project sidebar row entrance (R74)", () => {
+  it("slides in a new task or project, never the list on load, an expansion or a pin", () => {
+    document.documentElement.dataset.appearance = "observatory";
+    document.documentElement.dataset.motion = "system";
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("no-preference"),
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    const from = vi.spyOn(gsap, "from");
+    const rows = () =>
+      from.mock.calls
+        .filter(([targets]) => Array.isArray(targets))
+        .map(([targets]) =>
+          (targets as HTMLElement[]).map((el) => el.dataset.entrance),
+        );
+    try {
+      const props = fixture();
+      const view = render(<ProjectSidebar {...props} />);
+      expect(rows()).toEqual([]);
+      const withTask = {
+        ...props.view,
+        tasks: [
+          ...props.view.tasks,
+          { sessionId: "s3", projectId: "p1", pinned: false, pinOrder: 2, recycled: false, permissionMode: null },
+        ],
+      };
+      view.rerender(<ProjectSidebar {...props} view={withTask} />);
+      expect(rows()).toEqual([["task:s3"]]);
+      const collapsed = {
+        ...withTask,
+        projects: withTask.projects.map((p) => (p.projectId === "p1" ? { ...p, expanded: false } : p)),
+      };
+      view.rerender(<ProjectSidebar {...props} view={collapsed} />);
+      view.rerender(<ProjectSidebar {...props} view={withTask} />);
+      const pinned = {
+        ...withTask,
+        tasks: withTask.tasks.map((t) => (t.sessionId === "s1" ? { ...t, pinned: true } : t)),
+      };
+      view.rerender(<ProjectSidebar {...props} view={pinned} />);
+      expect(rows()).toEqual([["task:s3"]]);
+      const withProject = {
+        ...pinned,
+        projects: [
+          ...pinned.projects,
+          { projectId: "p3", path: "C:\c\new", name: "new", alias: null, pinned: false, pinOrder: 2, expanded: true, removed: false, permissionMode: "workspace-edit" as const },
+        ],
+      };
+      view.rerender(<ProjectSidebar {...props} view={withProject} />);
+      expect(rows()).toEqual([["task:s3"], ["project:p3"]]);
+      view.unmount();
+    } finally {
+      from.mockRestore();
+      vi.unstubAllGlobals();
+      delete document.documentElement.dataset.appearance;
+      delete document.documentElement.dataset.motion;
+    }
+  });
+});

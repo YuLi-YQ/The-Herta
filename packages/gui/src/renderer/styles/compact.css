@@ -1,0 +1,59 @@
+.herta-compact-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--herta-border);
+  color: var(--herta-muted);
+  overflow-wrap: anywhere;
+}
+.herta-compact-strip > div {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+dialog.herta-compact {
+  width: min(680px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 20px 24px;
+  border: 1px solid var(--herta-border);
+  border-radius: 16px;
+  background: var(--herta-panel);
+  color: var(--herta-text);
+}
+dialog.herta-compact::backdrop {
+  background: rgb(0 0 0 / 40%);
+}
+dialog.herta-compact header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+dialog.herta-compact p {
+  margin: 10px 0;
+  overflow-wrap: anywhere;
+}
+dialog.herta-compact small {
+  display: block;
+  color: var(--herta-muted);
+  margin: 12px 0;
+}
+dialog.herta-compact [role="alert"],
+.herta-compact-strip [role="alert"] {
+  color: var(--herta-error);
+}
+.herta-compact-text {
+  overflow-wrap: anywhere;
+  padding: 12px 0;
+  border-top: 1px solid var(--herta-border);
+}
+@media (max-width: 520px) {
+  dialog.herta-compact {
+    padding: 16px;
+  }
+}

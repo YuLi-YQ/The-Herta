@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "local.herta-review",
+  "name": "黑塔的代码检查",
+  "version": "1.0.0",
+  "description": "把检查要求整理为工作台草稿。",
+  "actions": [
+    {
+      "id": "review",
+      "title": "检查当前问题",
+      "scope": "workbench",
+      "prompt": "请检查以下问题，先说明发现，再给出必要修改。区分已验证结果和仍需确认的内容。\n\n{{request}}",
+      "inputs": [
+        {
+          "id": "request",
+          "label": "需要检查什么？",
+          "type": "text",
+          "required": true
+        }
+      ]
+    }
+  ]
+}

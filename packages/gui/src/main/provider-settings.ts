@@ -25,6 +25,8 @@ import type {
   SaveProviderInput,
   SetProviderBindingsInput,
 } from "../shared/provider-settings-ipc.js";
+import type { ImageRequestRefused } from "@herta/providers/images";
+import { imageCheckViews, recordImageReview } from "./provider-image-checks.js";
 
 const activeProviders = new Map<string, number>();
 const protocols = new Set([
@@ -270,10 +272,23 @@ function view(settings: ProviderSettings): ProviderSettingsView {
       settings.providers.map((p) => [p.id, status(p)]),
     ),
     runtimeActive: true,
+    // R109 (F06): image result dates live beside this file; older versions never read them.
+    ...imageCheckViews(settings),
   };
 }
 export function getProviderSettings(): ProviderSettingsView {
   return view(load());
+}
+/** R110 (F06): the chat or the workbench saw a request with pictures refused. Marks the model for
+ *  an image re-check against the settings as they are now; never changes them and never throws. */
+export function recordImageRequestRefused(refused: ImageRequestRefused): boolean {
+  let settings: ProviderSettings;
+  try {
+    settings = load();
+  } catch {
+    return false;
+  }
+  return recordImageReview(settings, refused);
 }
 function persist(settings: ProviderSettings): ProviderSettingsView {
   atomicWrite(configPath(), `${JSON.stringify(settings, null, 2)}\n`);
@@ -337,20 +352,52 @@ export function saveProvider(
   )
     throw new Error("请至少手填一个模型，最多 500 个。");
   const revision = (old?.revision ?? 0) + 1;
+  // R83: a model's test results (text/tools validation and the capabilities they found, including
+  // images) belong to the CONNECTION they were measured on, not to every save. Renaming, picking
+  // another default model, adding models or changing the timeout keeps them and moves them to the
+  // new revision; a different protocol, address, authentication or key resets them. Before, every
+  // save reset them all, so the save-and-verify that followed restored text/tools but dropped a
+  // passed image check.
+  const credentialAction = String(object(raw.credential).action);
+  const connectionKept =
+    old !== undefined &&
+    old.protocol === protocol &&
+    old.baseURL === baseURL &&
+    old.authentication === raw.authentication &&
+    old.allowRemoteHTTP === raw.allowRemoteHTTP &&
+    (raw.authentication === "none" || credentialAction === "keep");
   const models = raw.models.map((item) => {
     const m = object(item);
-    const previous = old?.models.find((entry) => entry.id === m.id);
-    const previousSuccessful =
-      previous &&
-      (["text-available", "tools-available"].includes(
-        previous.validation.state,
-      ) ||
+    const id = text(m.id, "模型 ID");
+    const alias =
+      m.alias === undefined || m.alias === ""
+        ? {}
+        : { alias: text(m.alias, "模型别名") };
+    const previous = old?.models.find((entry) => entry.id === id);
+    if (previous && connectionKept) {
+      const current =
+        previous.validation.providerRevision === old.revision &&
+        previous.validation.protocol === protocol;
+      return {
+        id,
+        ...alias,
+        source: "manual" as const,
+        capabilities: previous.capabilities,
+        // A result for an earlier connection stays marked as such ("连接已修改，请重新验证").
+        validation: current
+          ? { ...previous.validation, providerRevision: revision }
+          : previous.validation,
+      };
+    }
+    // New model, or the connection changed: nothing measured so far applies. A model that had
+    // been checked keeps its old revision so the settings say it needs checking again.
+    const checked =
+      previous !== undefined &&
+      (["text-available", "tools-available"].includes(previous.validation.state) ||
         previous.validation.providerRevision < (old?.revision ?? revision));
     return {
-      id: text(m.id, "模型 ID"),
-      ...(m.alias === undefined || m.alias === ""
-        ? {}
-        : { alias: text(m.alias, "模型别名") }),
+      id,
+      ...alias,
       source: "manual" as const,
       capabilities: {
         streaming: "unknown" as const,
@@ -360,10 +407,8 @@ export function saveProvider(
       },
       validation: {
         state: "unverified" as const,
-        protocol: previousSuccessful ? previous.validation.protocol : protocol,
-        providerRevision: previousSuccessful
-          ? previous.validation.providerRevision
-          : revision,
+        protocol: checked ? previous.validation.protocol : protocol,
+        providerRevision: checked ? previous.validation.providerRevision : revision,
       },
     };
   });

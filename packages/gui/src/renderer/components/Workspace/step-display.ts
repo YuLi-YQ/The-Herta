@@ -177,28 +177,31 @@ export function stepDisplayBody(
               ),
             ]
           : [];
+      // R83: "no caption" and "over the caption ceiling" were about captioning. Since R77 the
+      // picture itself goes to a model that passed the image probe (rescaled when needed), and a
+      // picture that cannot be sent is reported by that turn, so the row only says what it is.
+      if (
+        d.image !== undefined &&
+        (d.unreadable === "no_caption" || d.unreadable === "too_large")
+      ) {
+        return head;
+      }
       if (d.unreadable !== undefined) {
         const isDoc = d.format !== undefined;
-        const isImage = d.image !== undefined;
         const stored = d.path.length > 0;
         const why =
           d.unreadable === "binary"
             ? t("activity.attachment.unreadable.binary")
-            : d.unreadable === "no_caption"
-              ? t("activity.attachment.unreadable.noCaption")
-              : d.unreadable === "too_large"
-                ? // Four meanings by context (mirrors app-server's reasonFor):
-                  // an image over the caption ceiling, stored but unread; a
-                  // stored text file over the excerpt cap; a PDF over the page
-                  // cap, refused whole; an extracted document whose text is
-                  // over the char cap, stored in full.
-                  isImage
-                  ? t("activity.attachment.unreadable.imageTooLarge")
-                  : !isDoc
-                    ? t("activity.attachment.unreadable.tooLarge")
-                    : stored
-                      ? t("activity.attachment.unreadable.textTooLong")
-                      : t("activity.attachment.unreadable.tooManyPages")
+            : d.unreadable === "too_large"
+              ? // Three meanings by context (mirrors app-server's reasonFor; the
+                // image one is handled above): a stored text file over the
+                // excerpt cap; a PDF over the page cap, refused whole; an
+                // extracted document whose text is over the char cap, stored in full.
+                !isDoc
+                ? t("activity.attachment.unreadable.tooLarge")
+                : stored
+                  ? t("activity.attachment.unreadable.textTooLong")
+                  : t("activity.attachment.unreadable.tooManyPages")
                 : d.unreadable === "empty"
                   ? d.format === "pdf"
                     ? t("activity.attachment.unreadable.scanned")

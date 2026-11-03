@@ -167,6 +167,8 @@ export function selectBoundary(
 }
 
 export interface RecapCache {
+  /** Absent on legacy sidecars; never substitute the file modification time. */
+  readonly generatedAt?: string;
   readonly boundaryIndex: number;
   readonly recapText: string;
   /** Interaction language the recap prose was authored in. A cache whose

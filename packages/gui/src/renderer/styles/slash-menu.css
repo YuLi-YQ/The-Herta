@@ -1,0 +1,66 @@
+/* A composer's / menu (R80): above the composer it belongs to, scrolling inside
+   itself so a short window never pushes it off screen or over the send controls. */
+.herta-chat-composer,
+.herta-composer-box {
+  position: relative;
+}
+.herta-slash-menu {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: calc(100% + 6px);
+  z-index: 40;
+  max-height: min(320px, 50vh);
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--herta-border);
+  border-radius: 12px;
+  background: var(--herta-panel);
+  color: var(--herta-text);
+  box-shadow: 0 8px 28px #0004;
+  font-size: 13px;
+}
+.herta-slash-group {
+  margin: 6px 10px 2px;
+  font-size: 11px;
+  color: var(--herta-secondary);
+}
+.herta-slash-option {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.herta-slash-option[aria-selected="true"] {
+  background: var(--herta-hover);
+}
+.herta-slash-option[aria-disabled="true"] {
+  color: var(--herta-secondary);
+  cursor: not-allowed;
+}
+.herta-slash-alias {
+  color: var(--herta-secondary);
+  font-family: "Maple Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+}
+.herta-slash-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--herta-secondary);
+}
+.herta-slash-empty {
+  margin: 6px 10px;
+  color: var(--herta-secondary);
+}
+/* Why a command did not run, or why the prompt actions could not be listed (R123). */
+.herta-slash-notice {
+  margin: 6px 10px;
+  color: var(--herta-error);
+  overflow-wrap: anywhere;
+}

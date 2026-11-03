@@ -67,7 +67,7 @@ export const en = {
     "When the window is in the background, a notification appears if something needs you or a longer reply finishes.",
   "window.keepAwake": "Keep awake during runs",
   "window.keepAwakeDesc":
-    "Keeps the computer from sleeping while Brick runs; the display may still turn off.",
+    "Keeps the computer from sleeping while the executor runs; the display may still turn off.",
   "window.minimize": "Minimize",
   "window.maximize": "Maximize",
   "window.restore": "Restore",
@@ -323,6 +323,16 @@ export const en = {
     "Changes system settings or drives other apps — asked every time",
   "approval.reason.commandHarnessState":
     "May reach .herta, the application's own state, in a way the line does not show — asked every time",
+  "approval.reason.commandInterpreterInline":
+    "An interpreter runs inline code — review the code first",
+  "approval.reason.commandEnv":
+    "Changes the command's environment (such as environment variables) — review it",
+  "approval.reason.commandLocalExec":
+    "Runs a program from the workspace — make sure you trust it",
+  "approval.reason.commandOutside":
+    "Touches a path outside the workspace — check the path",
+  "approval.reason.commandScript": "Runs a project script — check what it does",
+  "approval.reason.outsideWorkspace": "Accesses a path outside the workspace",
   "approval.alsoClasses": "Also: {list}",
   "approval.consequence.discardsUncommitted":
     "Note: discards uncommitted changes — they cannot be recovered.",
@@ -480,8 +490,6 @@ export const en = {
   // Images (ADR 0048). `{f}` is the format token (PNG/JPEG) — data, not
   // chrome, so it is substituted rather than translated.
   "activity.attachment.image": "image {f}",
-  "activity.attachment.unreadable.imageTooLarge": "too large to read",
-  "activity.attachment.unreadable.noCaption": "stored, not read",
   "activity.attachment.pages": "pages",
   "activity.attachment.extracted": "text extracted",
   "activity.attachment.outline": "outline · {n} entries",

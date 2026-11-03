@@ -155,6 +155,8 @@ export type { MemorySaveInput } from "./memory-save/schema.js";
 // a test rather than a shared assumption.
 export type { ResolveSafePathOpts, SafePathResult } from "./path-safety.js";
 export { resolveSafePath } from "./path-safety.js";
+export { runApprovedPluginCommand, PluginCommandFault } from "./plugin-command.js";
+export type { PluginCommandInput, PluginCommandContext, PluginCommandPreview, PluginCommandResult, PluginCommandFaultCode } from "./plugin-command.js";
 export {
   killProcesses,
   listProcesses,

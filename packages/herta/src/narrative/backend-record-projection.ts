@@ -918,15 +918,35 @@ export function buildDoneMarker(
  * backend produced no file/directory/command work (e.g. Herta delegated
  * chitchat / public-data / out-of-scope). Emitting a concrete marker (instead
  * of a bare 完成) gives the next iteration's prompt something to react to,
- * preventing the duplicate-speech bug (2026-05-23). The `body` starts with
- * 无产出 so compact-record.ts digests it to （板砖无产出）. Carries
+ * preventing the duplicate-speech bug (2026-05-23). With no visible answer the
+ * body starts with 无产出 and compacts to （板砖无产出）. A visible text-only
+ * answer instead carries an explicitly model-authored detail and text digest;
+ * absence of tool work must not be confused with absence of an answer. Carries
  * `role: "noop-marker"` so the synthesized block is structurally identifiable
  * (like the done-marker) and compaction can key on the role rather than the
  * body prefix. It is NOT a `role: "done-marker"` — this is not a completion
  * roll-up, so the compaction lifecycle folds it into the summary rather than
  * passing it through verbatim.
  */
-export function buildNoopMarker(): SystemBlock {
+export function buildNoopMarker(visibleAnswer?: string): SystemBlock {
+  const answer = visibleAnswer?.trim();
+  if (answer) {
+    // This is a model's visible answer, not proof of a tool action or a
+    // completed file change. Preserve the no-work terminal role and report
+    // counters; a text digest keeps a bounded hint when history is compacted.
+    const limit = 8000;
+    const text = answer.length > limit
+      ? `${answer.slice(0, limit).replace(/[\uD800-\uDBFF]$/, "")}\n…（文字答复已截断）`
+      : answer;
+    return {
+      kind: "system",
+      label: "差分协处理器",
+      body: "已返回文字答复 — 本次未执行文件、目录或命令操作。",
+      role: "noop-marker",
+      evidenceDetail: `执行器答复（模型文字，不是工具验证结论）：\n${text}`,
+      digest: { kind: "text", text: `执行器文字答复（非工具验证）：${text}` },
+    };
+  }
   return {
     kind: "system",
     label: "差分协处理器",

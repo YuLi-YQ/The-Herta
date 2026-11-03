@@ -25,6 +25,14 @@
  * Paths are relative to `packages/gui/`.
  */
 export const DOM_FREE_TESTS = [
+  "src/main/plugins/plugin-network-egress.test.ts",
+  "src/main/plugins/plugin-network-settings-store.test.ts",
+  "src/main/plugins/plugin-workshop-controller.test.ts",
+  "src/main/plugins/plugin-generator.test.ts",
+  "src/main/plugins/plugin-trial-service.test.ts",
+  "src/main/plugins/plugin-workshop-store.test.ts",
+  "src/main/plugins/plugin-storage-coordinator.test.ts",
+  "src/main/plugins/plugin-network-service.test.ts",
   // Main process — no DOM by construction (window-state.test.ts is the one
   // exception: it asserts on bounds objects shaped like a browser's).
   "src/main/app-global-settings.test.ts",
@@ -54,6 +62,19 @@ export const DOM_FREE_TESTS = [
   // Shared between main and renderer — pure functions.
   "src/shared/agent-event-wire.test.ts",
   "src/shared/dead-transcoder.test.ts",
+  "src/shared/executable-plugins.test.ts",
+  "src/shared/plugin-runtime.test.ts",
+  "src/shared/plugin-view.test.ts",
+  "src/main/plugins/capability-broker.test.ts",
+  "src/main/plugins/plugin-runtime-service.test.ts",
+  "src/main/plugins/quickjs-runtime.test.ts",
+  "src/main/plugins/executable-plugin-store.test.ts",
+  "src/main/plugins/executable-plugin-controller.test.ts",
+  "src/main/plugins/plugin-host-services.test.ts",
+  "src/main/plugins/plugin-artifact-store.test.ts",
+  "src/main/plugins/plugin-artifact-save.test.ts",
+  "src/main/plugins/plugin-patch-service.test.ts",
+  "src/main/plugins/plugin-deliverable-controller.test.ts",
   "src/shared/links.test.ts",
   // The live views' fold and the partial-JSON scanner under it (ADR 0073).
   "src/shared/live-tool-feed.test.ts",

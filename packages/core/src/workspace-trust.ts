@@ -71,3 +71,8 @@ export function trustCovers(request: PermissionRequest): boolean {
   if (codes.length === 0) return false;
   return codes.every((c) => WORKSPACE_TRUST_CODES.has(c));
 }
+
+/** Shared tier decision for an already classified, validated permission request. */
+export function permissionModeCoversRequest(mode: "read-only" | "workspace-edit" | "full-access" | undefined, request: PermissionRequest): boolean {
+  return mode === "full-access" || (mode === "workspace-edit" && trustCovers(request));
+}

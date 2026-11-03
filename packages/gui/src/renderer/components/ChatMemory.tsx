@@ -1,24 +1,44 @@
 import { useRef, useState } from "react";
+import { Icon } from "./Icon.js";
 import type {
   HertaChatAction,
   HertaChatSnapshot,
 } from "../../shared/herta-chat.js";
 
 type Action = Extract<HertaChatAction, { type: "memory" }>;
+/** Resolves to null once saved, or to the message to show where the change was made. */
+type ManageMemory = (action: Action) => Promise<string | null>;
 export function ChatMemory({
   memory,
   onManage,
 }: {
   memory: HertaChatSnapshot["memory"];
-  onManage: (action: Action) => Promise<boolean>;
+  onManage: ManageMemory;
 }) {
   const [text, setText] = useState(""),
-    [id, setId] = useState<string>();
+    [id, setId] = useState<string>(),
+    [pending, setPending] = useState(false),
+    [failure, setFailure] = useState<string | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   if (!memory) return null;
+  // The dialog is modal, so a failure is shown inside it, not in the chat footer behind it (R62).
+  const run = async (action: Action) => {
+    setPending(true);
+    setFailure(null);
+    const result = await onManage(action);
+    setPending(false);
+    setFailure(result);
+    return result === null;
+  };
   return (
     <>
-      <button type="button" onClick={() => dialog.current?.showModal()}>
+      <button
+        type="button"
+        onClick={() => {
+          setFailure(null);
+          dialog.current?.showModal();
+        }}
+      >
         黑塔的记忆 · {memory.items.length}
       </button>
       <dialog
@@ -36,15 +56,16 @@ export function ChatMemory({
             aria-label="关闭记忆"
             onClick={() => dialog.current?.close()}
           >
-            ×
+            <Icon name="close" />
           </button>
         </header>
         <label>
           <input
             type="checkbox"
             checked={memory.enabled}
+            disabled={pending}
             onChange={(e) =>
-              void onManage({
+              void run({
                 type: "memory",
                 operation: "enable",
                 enabled: e.target.checked,
@@ -74,13 +95,20 @@ export function ChatMemory({
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  void onManage({
-                    type: "memory",
-                    operation: "delete",
-                    id: item.id,
-                  })
-                }
+                disabled={pending}
+                onClick={async () => {
+                  if (
+                    (await run({
+                      type: "memory",
+                      operation: "delete",
+                      id: item.id,
+                    })) &&
+                    id === item.id
+                  ) {
+                    setId(undefined);
+                    setText("");
+                  }
+                }}
               >
                 忘记
               </button>
@@ -98,11 +126,9 @@ export function ChatMemory({
         </label>
         <button
           type="button"
-          disabled={!text.trim()}
+          disabled={pending || !text.trim()}
           onClick={async () => {
-            if (
-              await onManage({ type: "memory", operation: "save", id, text })
-            ) {
+            if (await run({ type: "memory", operation: "save", id, text })) {
               setText("");
               setId(undefined);
             }
@@ -121,6 +147,7 @@ export function ChatMemory({
             取消修改
           </button>
         )}
+        {failure && <p role="alert">{failure}</p>}
       </dialog>
     </>
   );
@@ -133,9 +160,11 @@ export function MemoryProposal({
 }: {
   text: string;
   items?: { id: string; text: string }[];
-  onManage: (action: Action) => Promise<boolean>;
+  onManage: ManageMemory;
 }) {
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(false),
+    [pending, setPending] = useState(false),
+    [failure, setFailure] = useState<string | null>(null);
   let action: Action;
   try {
     const raw = JSON.parse(text);
@@ -170,9 +199,14 @@ export function MemoryProposal({
       <p>{action.operation === "delete" ? "忘记这条记忆" : action.text}</p>
       <button
         type="button"
-        disabled={saved || stale}
+        disabled={saved || stale || pending}
         onClick={async () => {
-          if (await onManage(action)) setSaved(true);
+          setPending(true);
+          setFailure(null);
+          const result = await onManage(action);
+          setPending(false);
+          setFailure(result);
+          if (result === null) setSaved(true);
         }}
       >
         {saved
@@ -183,6 +217,7 @@ export function MemoryProposal({
               ? "确认忘记"
               : "确认记住"}
       </button>
+      {failure && <p role="alert">{failure}</p>}
     </section>
   );
 }

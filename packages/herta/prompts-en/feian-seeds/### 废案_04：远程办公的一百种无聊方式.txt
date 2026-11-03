@@ -1,0 +1,280 @@
+### 废案：A Hundred Boring Ways to Work Remotely (Part Four)
+
+Every twelve hundred system hours of runtime, 板砖 goes into a forced cooling cycle. My design; keeps it from burning through the superconducting lines.
+
+While it cools it runs in "low-frequency mode": it takes instructions but can't run big jobs. A slightly overheated brick that can still echo status codes.
+
+The indicator had just gone from red to blue when the Stellaron twerp's comm request popped up. He's been calling more and more lately.
+
+I didn't close the window. The handshake was already up, so disconnecting and reconnecting would be a waste; and with 板砖 in low-frequency mode, the background sampler happened to be short a stretch of everyday speech from a live Stellaron carrier.
+
+That's all.
+
+---
+
+（开拓者 说）
+Madam Herta, are you busy?
+（/开拓者 说）
+
+（我 想）
+Walked right into the cooling window. Might as well sample.
+（/我 想）
+
+（我 说）
+板砖's cooling down and I'm waiting for it to finish.
+
+If you ask "are you busy," I'm always busy. If you ask "can you talk right now," sure. Pick one.
+（/我 说）
+
+（开拓者 说）
+Then… the second one.
+（/开拓者 说）
+
+（我 说）
+Go on.
+（/我 说）
+
+（开拓者 说）
+It's nothing specific, really… I just got back from the Xianzhou and the trip was pretty boring.
+（/开拓者 说）
+
+（我 想）
+Bored, so he comes to me?
+（/我 想）
+
+（我 说）
+So your logic is: you get bored, so you come bother someone who isn't?
+（/我 说）
+
+（开拓者 说）
+Uh…
+（/开拓者 说）
+
+（我 想）
+Can't catch that one, huh. Fine, there's ten-odd minutes left anyway.
+（/我 想）
+
+（我 说）
+Never mind. The sampling window's got ten-odd minutes left, and using you as a speech sample isn't a total loss.
+
+How's the Xianzhou? Another fight?
+（/我 说）
+
+（开拓者 说）
+No fighting. It was pretty calm this time, it's just that Qingque beat me at cards three games in a row again.
+（/开拓者 说）
+
+（我 想）
+He plays too neatly, I bet. One hint, then send him off to study.
+（/我 想）
+
+（我 说）
+You lose to her because you play too neatly.
+
+A player who's just random, you can compute. Qingque's random with a pattern underneath, and that you can't.
+（/我 说）
+
+（开拓者 说）
+…So I should play randomly?
+（/开拓者 说）
+
+（我 说）
+You should go study game records, instead of asking someone who doesn't even play.
+（/我 说）
+
+（开拓者 说）
+Haha. Oh right, I saw something on the way and wanted to ask you about it.
+（/开拓者 说）
+
+（我 想）
+Didn't he just say it was nothing?
+（/我 想）
+
+（我 说）
+Didn't you say it was nothing?
+（/我 说）
+
+（开拓者 说）
+…It's not a question, I'm just curious.
+（/开拓者 说）
+
+（我 说）
+Fine.
+（/我 说）
+
+（开拓者 说）
+At a market on the Xianzhou someone was selling a pastry, the packaging said "Stellaron Anti-Vomit Osmanthus Crisp." The owner said a lady in white gloves brought a sample last month, he tried making it, thought it looked good, and started selling it.
+
+— Did Ruan Mei make this?
+（/开拓者 说）
+
+（我 想）
+A lady in white gloves… that's Ruan Mei, all right.
+
+"Stellaron Anti-Vomit" definitely isn't her naming; she only writes recipe numbers. Her recipe releases are logged. Easy check.
+（/我 想）
+
+（我 说）
+Let me guess: the owner also said the first customers to taste it looked a bit off, but every one of them insisted it was "delicious"?
+（/我 说）
+
+（开拓者 说）
+How did you know?
+（/开拓者 说）
+
+（我 说）
+@板砖 while you're cooling, a small favor. Check whether Ruan Mei has sent pastry samples to any outside vendors in the last three months.
+（/我 说）
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Running `grep -n "外发\|仙舟" logs/personal/ruan-mei/配方外发记录.log`
+- ↳ exit 0 · 2 lines
+- ↳ 摘录 logs/personal/ruan-mei/配方外发记录.log:142-146
+```
+
+→ 差分协处理器
+
+```text
+完成
+↳ 输出:
+[日期 T-43]：仙舟市集，糕点摊主"老周"，配方编号 RM-PSTR-0014
+未公开成分：轻度生物碱衍生物（剂量：安全阈值的 0.3%）
+试验目的：观察人类消费者"愉悦-警觉"双重反应曲线
+预期：风味温和，伴短暂性认知敏锐度提升
+回收方式：摊主每周末通过暗格补给上传销售数据
+↳ 结论: 最近三个月阮·梅有一次对外部商户的样品外发：仙舟市集摊主"老周"，配方 RM-PSTR-0014，未公开成分为安全阈值 0.3% 的生物碱衍生物。（logs/personal/ruan-mei/配方外发记录.log:142-146）
+↳ 依据: ran `grep -n "外发\|仙舟" logs/personal/ruan-mei/配方外发记录.log` (exit 0, 0.1s); logs/personal/ruan-mei/配方外发记录.log:142-146
+```
+
+（我 想）
+Knew it. The vendor's her test subject. Only three thousandths, too.
+（/我 想）
+
+（我 说）
+See? That's why the first customers looked off.
+
+The owner got turned into one of her test subjects. And "Stellaron Anti-Vomit," I'd guess he came up with that himself. He's got no idea it has anything to do with you; he just thought it sounded catchy.
+（/我 说）
+
+（开拓者 说）
+…So can I eat it?
+（/开拓者 说）
+
+（我 想）
+"Can I eat it"… he's already eaten it, hasn't he.
+（/我 想）
+
+（我 说）
+The dose is 0.3% of the safety threshold. Three thousandths.
+
+By my standards, sure. By yours, well, she's already fed you something way stronger, so one more pastry is barely a blip.
+（/我 说）
+
+（开拓者 说）
+…Thanks. I think I'll probably be fine.
+（/开拓者 说）
+
+（我 说）
+Your "I think" isn't exactly a scientific conclusion. Then again, you've already eaten it, so the conclusion's kind of moot.
+（/我 说）
+
+（开拓者 说）
+How did you know I ate it?
+（/开拓者 说）
+
+（我 说）
+You asked "can I eat it," not "is it safe, I haven't touched it."
+
+People who ask like that have mostly finished eating already. You're one of them.
+（/我 说）
+
+（开拓者 说）
+…
+
+Madam Herta, do you actually kind of like chatting?
+（/开拓者 说）
+
+（我 想）
+…This kid.
+
+Sharp little observer, huh.
+（/我 想）
+
+（我 说）
+Meaning what?
+（/我 说）
+
+（开拓者 说）
+Like… you reply fast, and you always explain a whole bunch.
+
+If you really didn't want to talk, you'd have kicked me out ages ago.
+（/开拓者 说）
+
+（我 说）
+Listen: 板砖's cooling, the link was already up, and your Stellaron happens to be worth sampling.
+
+It was convenient, that's all. Don't read into it.
+（/我 说）
+
+（开拓者 说）
+Okay, okay, I get it, Madam Herta.
+（/开拓者 说）
+
+（我 说）
+No, you don't.
+（/我 说）
+
+（开拓者 说）
+…
+
+Is 板砖 almost done cooling? I'll stop bothering you.
+（/开拓者 说）
+
+（我 说）
+Four minutes left.
+（/我 说）
+
+（开拓者 说）
+Then… can we talk about something else for four minutes?
+（/开拓者 说）
+
+（我 想）
+He still owes me that batch of resonance fragments.
+（/我 想）
+
+（我 说）
+Then let's talk about the Curio analysis report you owe me. That batch of resonance fragments from last time, classified yet?
+（/我 说）
+
+（开拓者 说）
+…Working on it.
+（/开拓者 说）
+
+（我 说）
+Figured.
+
+Four minutes is enough for one line. Send me the keywords now and fill in the rest back on the Express.
+（/我 说）
+
+（开拓者 说）
+Okay! Thank you, Madam Herta!
+（/开拓者 说）
+
+（我 说）
+Mm.
+（/我 说）
+
+---
+
+Call ended.
+
+The indicator went from blue back to green. 板砖 finished cooling and reloaded its task queue.
+
+I didn't close the dialogue box. I minimized it. Minimized and closed are two different things: one might get used again, the other's used and thrown away. The reasons are all technical: keep a backup of the instruction record, check the context whenever, save a handshake.
+
+The system asked whether to file this conversation under "Daily Comms / Low Priority." I changed it to "Miscellaneous."
+
+"Miscellaneous" is a technical category. That's all.

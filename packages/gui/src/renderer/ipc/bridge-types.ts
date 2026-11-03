@@ -1,3 +1,4 @@
+import type { PluginRequest, PluginReply } from "../../shared/prompt-plugins.js";
 import type {
   ApprovalOverlayState,
   ApprovalResult,
@@ -9,10 +10,12 @@ import type {
   LogPage,
   LogQuery,
   OverlayEvent,
+  PictureTarget,
   RecordEvent,
   RenameSessionResult,
   RepoContextSnapshot,
   RepoEvent,
+  ResetPendingImagesResult,
   ResolveApprovalOpts,
   ResumeEvent,
   RewindResult,
@@ -35,13 +38,14 @@ import type {
   WorkspaceEvent,
   WorkspaceTrustState,
 } from "@herta/app-server";
-import type { WorkspaceTrust } from "@herta/core";
+import type { CompactAction, CompactReply, GoalAction, GoalReply, PlanAction, PlanReply, WorkspaceTrust } from "@herta/core";
 import type { LiveToolSnapshot } from "../../shared/live-tool-feed.js";
 import type {
   DiscoverProviderModelsInput,
   DiscoverProviderModelsResult,
   ProviderReadiness,
   ProviderSettingsView,
+  ResetImageChecksResult,
   SaveProviderInput,
   SetProviderBindingsInput,
   ValidateProviderModelInput,
@@ -61,6 +65,22 @@ import type {
 export interface AttachProgressEvent extends AttachProgress {
   readonly sessionId: string;
 }
+
+/** F04 (R116): main's answer to `setPictureModelUse`. `no_session`: the
+ *  window's task is not the active one; `unavailable`: the session cannot do
+ *  this. The session's own refusals pass through (app-server
+ *  `SetPictureModelUseResult`); nothing changes on any refusal. */
+export type SetPictureModelUseReply =
+  | { readonly ok: true; readonly changed: number }
+  | {
+      readonly ok: false;
+      readonly reason:
+        | "no_session"
+        | "unavailable"
+        | "turn_in_progress"
+        | "not_found"
+        | "invalid";
+    };
 
 export type {
   LiveToolSnapshot,
@@ -112,6 +132,7 @@ export interface SessionSnapshot {
    *  reloaded window's strip comes back instead of vanishing while main
    *  still counts them. Optional on the wire; absent = none. */
   readonly stagedImages?: readonly StagedImageInfo[];
+  readonly stagedImageError?: string | null;
 }
 
 /** Carried by session:reset when bootstrap fails (e.g. no API key). */
@@ -508,6 +529,20 @@ export type StageImagesReply =
  * `on*` register ipcRenderer.on listeners and return an unsubscribe.
  */
 export interface HertaBridge {
+  getSessionPlan?: (id: string) => Promise<PlanReply>;
+  getSessionCompact?: (id: string) => Promise<CompactReply>;
+  updateSessionCompact?: (id: string, revision: number, action: CompactAction) => Promise<CompactReply>;
+  updateSessionPlan?: (
+    id: string,
+    expectedRevision: number,
+    action: PlanAction,
+  ) => Promise<PlanReply>;
+  getSessionGoal?: (id: string) => Promise<GoalReply>;
+  updateSessionGoal?: (id: string, expectedRevision: number, action: GoalAction) => Promise<GoalReply>;
+  getChatGoal?: (id: string) => Promise<GoalReply>;
+  updateChatGoal?: (id: string, expectedRevision: number, action: GoalAction) => Promise<GoalReply>;
+  promptPlugins?: (input: PluginRequest) => Promise<PluginReply>;
+  executablePlugins?: (input: import("../../shared/executable-plugin-management.js").ExecutablePluginRequest) => Promise<import("../../shared/executable-plugin-management.js").ExecutablePluginReply>;
   readHertaChatImage?: (chatId: string, messageId: string, index: number) => Promise<import("@herta/providers/images").MessageImage>;
   getHertaChat?: () => Promise<
     import("../../shared/herta-chat.js").HertaChatSnapshot
@@ -516,10 +551,19 @@ export interface HertaBridge {
     input: import("../../shared/herta-chat.js").HertaChatInput,
   ) => Promise<{ accepted: boolean }>;
   stopHertaChat?: () => Promise<void>;
+  draftChatContext?: (input: import("../../shared/herta-chat.js").DraftChatContextInput) => Promise<import("../../shared/herta-chat.js").DraftChatContextReply>;
+  cancelChatContextDraft?: (input: import("../../shared/herta-chat.js").CancelChatContextDraftInput) => Promise<{ cancelled: boolean }>;
   manageHertaChat?: (
     action: import("../../shared/herta-chat.js").HertaChatAction,
   ) => Promise<import("../../shared/herta-chat.js").HertaChatSnapshot>;
-  parseChatFile?: (name: string, bytes: Uint8Array) => Promise<import("../../shared/herta-chat.js").ChatFileResult>;
+  /** `job`: the card's id, so `cancelChatFile` can stop this read in the main process (R118). */
+  parseChatFile?: (
+    name: string,
+    bytes: Uint8Array,
+    job?: string,
+  ) => Promise<import("../../shared/herta-chat.js").ChatFileResult>;
+  /** Stop the chat file read started for `job` (R118). False when it is not the one being read. */
+  cancelChatFile?: (job: string) => Promise<boolean>;
   saveChatFile?: (name: string, content: string) => Promise<{saved: boolean; failed?: boolean}>;
   getProviderSettings(): Promise<ProviderSettingsView>;
   getProviderReadiness?(sessionId?: string): Promise<ProviderReadiness>;
@@ -548,6 +592,9 @@ export interface HertaBridge {
   validateProviderModel(
     input: ValidateProviderModelInput,
   ): Promise<ValidateProviderModelResult>;
+  /** R109 (F06): moves an unreadable image-check record file to a new name; refused when the
+   *  file reads. Optional: absent in bridges built before it. */
+  resetImageChecks?(): Promise<ResetImageChecksResult>;
   saveProvider(input: SaveProviderInput): Promise<ProviderSettingsView>;
   deleteProvider(id: string): Promise<ProviderSettingsView>;
   setProviderBindings(
@@ -559,10 +606,13 @@ export interface HertaBridge {
   readonly platform: string;
   /** `stagedImageIds` sends the pictures waiting in the composer with this
    *  message (ADR 0048 §4); their record blocks land right after the user
-   *  block, inside the turn's span. */
+   *  block, inside the turn's span. `expectedSessionId` pins a delayed send to
+   *  its source task; the desktop workbench always supplies it. Omitted only
+   *  by legacy callers, which retain active-session behavior. */
   submitText(
     text: string,
     stagedImageIds?: readonly string[],
+    expectedSessionId?: string,
   ): Promise<SubmitTextResult | { readonly failure: WorkbenchFailure }>;
   interrupt(turnId?: string): Promise<{ readonly ok: boolean }>;
   /** A message while 板砖 works (ADR 0063): `accepted` means the text is in
@@ -677,6 +727,10 @@ export interface HertaBridge {
   getUpdateState?(): Promise<UpdateState>;
   /** The app's own version, for the Settings pane. */
   getAppVersion?(): Promise<string>;
+  /** The OS, its version and the CPU architecture, for `/feedback` (R125).
+   *  Takes nothing; never the user's or the computer's name. OPTIONAL —
+   *  the panel says 未知 without it. */
+  getSystemInfo?(): Promise<SystemInfo>;
   onUpdate?(cb: (e: UpdateState) => void): () => void;
   pickWorkspace(): Promise<string | null>;
   setWorkspace(
@@ -697,13 +751,25 @@ export interface HertaBridge {
   attachFiles(
     sessionId: string,
     paths: readonly string[],
-  ): Promise<{ readonly ok: boolean; readonly message?: string }>;
+    /** `requireAll` (R100): the composer's send; a gone source refuses the
+     *  whole attach and comes back in `missing`. */
+    options?: { readonly requireAll?: boolean },
+  ): Promise<{ readonly ok: boolean; readonly message?: string; readonly missing?: readonly string[] }>;
   /** Take back an attached document: deletes the stored file and marks its
    *  record block removed. Same refusal shape as attachFiles. */
   removeAttachment(
     sessionId: string,
     path: string,
   ): Promise<{ readonly ok: boolean; readonly message?: string }>;
+  /** F04 (R116): stop sending sent pictures to the models, or send them again.
+   *  Each target is a picture row as the window saw it, by ABSOLUTE record
+   *  index and stored path; a stale one refuses the whole request with
+   *  nothing changed. Idle-only. A change comes back as a record reset. */
+  setPictureModelUse?(
+    sessionId: string,
+    targets: readonly PictureTarget[],
+    use: "stop" | "send",
+  ): Promise<SetPictureModelUseReply>;
   /**
    * Stage pictures in the composer (ADR 0048 §4): stored and captioning now,
    * appended to the record only when the message is sent — so the × before
@@ -721,9 +787,25 @@ export interface HertaBridge {
       readonly bytes?: Uint8Array;
       readonly name?: string;
     }[],
+    /** The card's id (R118), for `cancelStaging`. */
+    job?: string,
   ): Promise<StageImagesReply>;
+  /** Stop the staging started for card `job` (R118): its read is aborted, a
+   *  copy it wrote is deleted and no caption is asked for. False when nothing
+   *  with that id is running — a picture it already kept is then unstaged. */
+  cancelStaging?(sessionId: string, job: string): Promise<boolean>;
   /** Drop a staged picture and delete its stored copy. */
   unstageImage(sessionId: string, id: string): Promise<boolean>;
+  /** Set the task's unreadable pending-picture manifest aside (R98): the
+   *  damaged file is renamed and kept, no picture file is deleted.
+   *  OPTIONAL: without it the composer offers no reset. */
+  resetPendingImages?(sessionId: string): Promise<ResetPendingImagesResult>;
+  /** Read the restored pending pictures among `ids` at send, before the
+   *  message's documents are attached (R98). OPTIONAL like the reset. */
+  prepareStagedImages?(
+    sessionId: string,
+    ids: readonly string[],
+  ): Promise<{ readonly ok: true; readonly unreadable: readonly string[] } | { readonly ok: false }>;
   /** The file-viewer panel's read (ADR 0050): bounded, jailed to the
    *  session's effective workspace. OPTIONAL so existing bridge fakes keep
    *  compiling — the file names simply aren't clickable without it. */
@@ -985,7 +1067,18 @@ export interface NavBlockedEvent {
  *  via prefers-color-scheme, resolved live by the theme controller. */
 export type ThemePref = "light" | "dark" | "system";
 
+/** What `/feedback` says about the system (R125): Node's `process.platform`,
+ *  `os.release()` and `os.arch()` — e.g. "win32", "10.0.26200", "x64". */
+export interface SystemInfo {
+  readonly platform: string;
+  readonly release: string;
+  readonly arch: string;
+}
+
 // The `window.herta` global augmentation lives in the renderer-only
 // ambient declaration `../herta-window.d.ts`. This file stays free of
 // any DOM (`Window`) dependency so the Electron main + preload projects
 // (which have no DOM lib) can import these IPC contract types directly.
+
+
+

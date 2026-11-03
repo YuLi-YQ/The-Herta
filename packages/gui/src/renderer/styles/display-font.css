@@ -1,0 +1,28 @@
+/* The display face (R76): Noto Serif SC SemiBold (SIL OFL 1.1), subset to the
+   fixed lines it sets (assets/fonts/herta-display.json, 44 characters). Only
+   the persona headlines and the brand use it: body text stays on the system
+   face, which is hinted for small sizes, and code stays on Maple Mono. A
+   missing glyph falls back to the system sans rather than a bitmap song face.
+   Both conversation areas use the same display and body roles. */
+@font-face {
+  font-family: "Herta Display";
+  src: url("../assets/fonts/herta-display.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+:root[data-appearance="observatory"]
+  :is(
+    .herta-welcome-copy :is(h1, h2),
+    .herta-chat-empty :is(h1, h2),
+    .herta-chat-brand,
+    .herta-title > strong,
+    .herta-eyebrow,
+    .settings-nav-eyebrow
+  ) {
+  font-family: "Herta Display", "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
+  font-weight: 600;
+}
+:root[data-appearance="observatory"] :is(.herta-welcome-copy :is(h1, h2), .herta-chat-empty :is(h1, h2)) {
+  letter-spacing: 0.02em;
+}

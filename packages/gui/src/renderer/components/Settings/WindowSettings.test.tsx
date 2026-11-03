@@ -21,9 +21,14 @@ function setup(platform?: string) {
 }
 
 describe("WindowSettings appearance row (night-mode slice 2)", () => {
-  it("renders the Appearance select alongside close-to-tray", () => {
+  it("keeps theme and motion controls without the retired interface selector", () => {
     setup();
     expect(screen.queryByLabelText("Appearance")).toBeNull();
+    expect(screen.queryByLabelText("界面风格")).toBeNull();
+    expect(screen.queryByLabelText("界面版本")).toBeNull();
+    expect(screen.queryByText(/经典界面/)).toBeNull();
+    expect(screen.getByLabelText("界面主题")).toBeInTheDocument();
+    expect(screen.getByLabelText("界面动效")).toBeInTheDocument();
     expect(screen.getByLabelText("Close to tray")).toBeInTheDocument();
   });
 

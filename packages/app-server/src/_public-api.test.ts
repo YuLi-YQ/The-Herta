@@ -11,6 +11,10 @@ describe("@herta/app-server — public API surface", () => {
         "CLOSE_SETTLE_CAP_MS",
         "createSessionHost",
         "defaultDirsFor",
+        // The standalone Herta chat (gui main, herta-chat.ts) opens with the
+        // same persona identity the workbench driver uses, so the two never
+        // drift into different characters. Text only; it grants nothing.
+        "desktopPersonaIdentity",
         // Long-session windowing (2026-07-12): the shared tail-slice helper
         // used by every full-record payload to the renderer.
         "RECORD_TAIL_BLOCKS",

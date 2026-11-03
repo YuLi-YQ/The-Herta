@@ -1,3 +1,5 @@
+import { PluginSettings } from "../Plugins/PluginSettings.js";
+import { Icon } from "../Icon.js";
 import {
   useCallback,
   useEffect,
@@ -14,17 +16,24 @@ import {
 import { primeSettings } from "./settings-snapshot.js";
 import { WindowSettings } from "./WindowSettings.js";
 
+import { playEntrance } from "../../lib/gsap-motion.js";
+import { useMotionPreference } from "../../lib/motion.js";
+import { useReducedMotion } from "../../hooks/useReducedMotion.js";
+
 const EXIT_MS = 180;
 
 export interface SettingsModalProps {
   readonly open: boolean;
   readonly onClose: () => void;
   readonly sessionId?: string;
+  /** Explicit-purpose entries override the remembered page on opening only. */
+  readonly initialSection?: Section;
 }
 
 const SECTIONS = [
   { key: "connections", label: "连接与模型" },
   { key: "appearance", label: "外观" },
+  { key: "plugins", label: "插件" },
   { key: "workspace", label: "工作区" },
   { key: "shortcuts", label: "快捷键" },
   { key: "about", label: "关于" },
@@ -43,8 +52,12 @@ export function SettingsModal({
   open,
   onClose,
   sessionId,
+  initialSection,
 }: SettingsModalProps): JSX.Element | null {
   const { bridge } = useHertaBridge();
+  const motion = useMotionPreference();
+  const reducedMotion = useReducedMotion();
+  const skipExit = motion === "off" || reducedMotion;
   // Prime the panes' last-known values (settings-snapshot.ts): once when the
   // app starts — this component is mounted, closed, from launch — and again
   // on every open, so each pane's FIRST frame shows the stored state instead
@@ -74,18 +87,35 @@ export function SettingsModal({
     if (control.dirty) setLeaveTo("close");
     else onClose();
   }, [control.busy, control.dirty, onClose]);
+  // A section picked from the nav fades its pane in like the other surface
+  // swaps (R73). Only picks count: opening the card has its own entrance, so
+  // the first section never fades twice.
+  const [picks, setPicks] = useState(0);
+  const pick = (next: Section): void => {
+    setSection(next);
+    setPicks((n) => n + 1);
+  };
   const navigate = (next: Section): void => {
     if (control.busy || next === section) return;
     if (control.dirty) setLeaveTo(next);
-    else setSection(next);
+    else pick(next);
   };
   const leave = (): void => {
     const target = leaveTo;
     setLeaveTo(null);
     setControl({ dirty: false, busy: false, save: async () => true });
     if (target === "close") onClose();
-    else if (target) setSection(target);
+    else if (target) pick(target);
   };
+  const contentRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (picks === 0 || !el) return;
+    const entrance = playEntrance(el, "panel");
+    return () => {
+      entrance?.revert();
+    };
+  }, [picks]);
   const active = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0];
   const cardRef = useRef<HTMLDivElement>(null);
   const prevFocus = useRef<HTMLElement | null>(null);
@@ -102,6 +132,11 @@ export function SettingsModal({
       return;
     }
     if (mounted) {
+      if (skipExit) {
+        setMounted(false);
+        setLeaving(false);
+        return;
+      }
       setLeaving(true);
       const t = setTimeout(() => {
         setMounted(false);
@@ -109,15 +144,15 @@ export function SettingsModal({
       }, EXIT_MS);
       return () => clearTimeout(t);
     }
-  }, [open, mounted]);
+  }, [open, mounted, skipExit]);
 
-  // Every open starts on the first section — never remember the last-viewed
-  // one (the component stays mounted while closed, so `section` would otherwise
-  // persist). useLayoutEffect resets it before paint, so even reopening during
-  // the close animation (still mounted) shows the first section with no flash.
+  // Generic Settings reopens the last page in this window. A connection-specific
+  // entry still goes straight there; it must not bypass dirty-page guards while open.
+  const wasOpen = useRef(false);
   useLayoutEffect(() => {
-    if (open) setSection(SECTIONS[0].key);
-  }, [open]);
+    if (open && !wasOpen.current && initialSection) setSection(initialSection);
+    wasOpen.current = open;
+  }, [open, initialSection]);
 
   // Focus the card on open; restore focus to the trigger on close — falling
   // back to the sidebar Settings button if the prior focus was lost to <body>.
@@ -143,7 +178,7 @@ export function SettingsModal({
         prev.focus?.({ preventScroll: true });
       } else {
         document
-          .querySelector<HTMLElement>(".sidebar-settings")
+          .querySelector<HTMLElement>(".herta-settings-button, .sidebar-settings")
           ?.focus?.({ preventScroll: true });
       }
     }
@@ -160,6 +195,9 @@ export function SettingsModal({
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === "Escape") {
         if (!isTop) return; // a higher overlay (e.g. a card menu) owns Escape
+        // An IME's Escape cancels its candidate; it must not close Settings
+        // and discard the field being typed (R44).
+        if (e.isComposing || e.keyCode === 229) return;
         e.preventDefault();
         requestClose();
         return;
@@ -232,16 +270,16 @@ export function SettingsModal({
             </button>
           ))}
         </nav>
-        <div className="settings-content">
+        <div className="settings-content" ref={contentRef}>
           <button
             type="button"
             className="settings-close"
             aria-label="返回任务"
             onClick={requestClose}
           >
-            ×
+            <Icon name="close" />
           </button>
-          <h2 className="settings-section-title">{active.label}</h2>
+          <h1 className="settings-section-title">{active.label}</h1>
           {leaveTo && (
             <div className="provider-confirm" role="alert">
               <p>连接有未保存修改。保存后离开，或丢弃此次修改。</p>
@@ -270,24 +308,29 @@ export function SettingsModal({
             />
           )}
           {section === "appearance" && <WindowSettings />}
+          {section === "plugins" && <PluginSettings />}
           {section === "workspace" && (
             <>
               <p className="settings-intro">
-                项目通过侧栏的“打开项目文件夹”选择。打开项目不会自动授予执行权限。
+                项目从侧栏的“打开项目文件夹”选择。打开项目不会授予执行权限。
               </p>
               <p className="settings-note">
-                工作区信任与审批由主进程控制。保存连接不会触发项目读写；实际执行前检查目标项目与具体审批内容。
+                写入与执行按输入区的权限档位处理，需要审批时逐项询问。
               </p>
             </>
           )}
           {section === "shortcuts" && (
             <>
               <p className="settings-intro">
-                Ctrl+, 打开设置 · Escape 返回任务
+                Ctrl+, 打开设置 · Escape 关闭设置并返回
               </p>
               <p>
-                Enter 发送 · Shift+Enter 换行。中文输入法组合输入时 Enter
-                只确认输入。
+                Ctrl+Enter 发送 · Enter 换行（工作台与聊天相同）。中文输入法组字时，Enter
+                和 Escape 只作用于候选。
+              </p>
+              <p>
+                工作台：Ctrl+N 新建任务 · Ctrl+O 打开项目文件夹 · Ctrl+L
+                聚焦输入框 · Ctrl+Shift+E 收起或展开导航
               </p>
               <p className="settings-note">
                 模型和执行权限可在输入区调整。
@@ -300,11 +343,10 @@ export function SettingsModal({
                 The Herta · 个人二次创作桌面编程助手
               </p>
               <p>
-                第三轮：三协议请求、真实任务和工具接线。服务兼容性以当前模型的验证状态及本轮报告为准。
+                工作台连接你配置的模型服务，在权限档位与审批下执行工具，并保留过程记录与文件差分；与黑塔聊天是独立的对话空间，有自己的历史、附件与记忆。
               </p>
               <p className="settings-note">
-                原创几何占位；无角色图、语音或 3D。数据目录沿用
-                HertaAtelier，改名不迁移或清除凭据。
+                数据保存在本机的 HertaAtelier 目录。欢迎页插画为二次创作素材。
               </p>
             </>
           )}

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <!-- 16–32 px frames of the app mark (R75): the same tile and spark, larger,
+       without the orbit and station that would blur at that size. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#33283F"/>
+      <stop offset="1" stop-color="#16111C"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0.2" y1="0.1" x2="0.8" y2="0.9">
+      <stop offset="0" stop-color="#F1E4FF"/>
+      <stop offset="1" stop-color="#B08CE8"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#tile)"/>
+  <path d="M128 30c5 54 25 74 79 79-54 5-74 25-79 79-5-54-25-74-79-79 54-5 74-25 79-79Z" transform="translate(0 19)" fill="url(#spark)"/>
+</svg>

@@ -1,0 +1,73 @@
+{
+  "manifest": {
+    "schemaVersion": 2,
+    "apiVersion": 1,
+    "id": "herta.example.project-command",
+    "name": "项目命令",
+    "version": "1.0.0",
+    "description": "在工作台逐条确认后运行本机命令，默认查看 Git 状态。已批准程序可按当前用户权限修改文件或联网；结果仅显示，不写草稿或发送消息。",
+    "entry": "main.js",
+    "capabilities": [
+      {
+        "name": "commands.run"
+      },
+      {
+        "name": "ui.present"
+      }
+    ],
+    "actions": [
+      {
+        "id": "run-command",
+        "title": "运行项目命令",
+        "scope": "workbench",
+        "export": "runProjectCommand",
+        "inputs": [
+          {
+            "id": "program",
+            "label": "程序",
+            "type": "text",
+            "required": true,
+            "default": "git",
+            "maxLength": 2048
+          },
+          {
+            "id": "arguments",
+            "label": "参数（JSON 字符串数组）",
+            "type": "text",
+            "required": true,
+            "default": "[\"status\",\"--short\"]",
+            "maxLength": 16000
+          },
+          {
+            "id": "cwd",
+            "label": "项目内工作目录（留空使用项目根）",
+            "type": "text",
+            "required": false,
+            "default": "",
+            "maxLength": 1024
+          },
+          {
+            "id": "timeout_ms",
+            "label": "执行时限（毫秒，审批另受总等待限制）",
+            "type": "number",
+            "required": false,
+            "default": 15000,
+            "min": 1,
+            "max": 60000,
+            "integer": true
+          }
+        ],
+        "capabilities": [
+          "commands.run",
+          "ui.present"
+        ]
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "main.js",
+      "source": "function outputPreview(text) {\n  const characters = Array.from(text);\n  return {\n    text: characters.slice(0, 4000).join('').replace(/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f]/g, '\\uFFFD'),\n    shortened: characters.length > 4000\n  };\n}\n\nexport async function runProjectCommand(input, api) {\n  let args;\n  try { args = JSON.parse(input.arguments); }\n  catch { throw new Error('arguments-must-be-json-array'); }\n  if (!Array.isArray(args) || args.length > 63 || args.some(value => typeof value !== 'string')) {\n    throw new Error('arguments-must-be-string-array');\n  }\n  const request = { argv: [input.program, ...args], timeoutMs: input.timeout_ms };\n  if (input.cwd !== '') request.cwd = input.cwd;\n  const result = await api.commands.run(request);\n  const stdout = outputPreview(result.stdout);\n  const stderr = outputPreview(result.stderr);\n  const success = result.exitCode === 0 && !result.timedOut;\n  await api.ui.present({ view: {\n    title: '项目命令结果',\n    blocks: [\n      { type: 'status', tone: success ? 'success' : 'warning', text: result.timedOut\n        ? '命令已超时，宿主已请求停止；请核对已产生的改动。'\n        : success ? '命令已结束，退出码为 0。' : '命令已结束，但没有以退出码 0 正常完成。' },\n      { type: 'fields', items: [\n        { label: '退出码', value: result.exitCode === null ? '未取得' : String(result.exitCode) },\n        { label: '耗时', value: String(result.durationMs) + ' ms' },\n        { label: '是否超时', value: result.timedOut ? '是' : '否' },\n        { label: '结束信号', value: result.signal || '无' },\n        { label: '标准输出字节', value: String(result.stdoutBytes) + ' B' },\n        { label: '标准错误字节', value: String(result.stderrBytes) + ' B' },\n        { label: '宿主截断输出', value: result.stdoutTruncated || result.stderrTruncated ? '是' : '否' },\n        { label: '结果卡再次截断', value: stdout.shortened || stderr.shortened ? '是' : '否' }\n      ] },\n      { type: 'text', text: '标准输出（stdout）' },\n      { type: 'code', language: 'text', code: stdout.text || '（无输出）' },\n      { type: 'text', text: '标准错误（stderr）' },\n      { type: 'code', language: 'text', code: stderr.text || '（无输出）' },\n      { type: 'text', text: '每路最多展示前 4000 个 Unicode 字符，不支持的控制字符替换为 �。结果卡没有写入草稿或发送消息；已批准的本机命令本身可能修改文件或联网。' }\n    ],\n    actions: []\n  } });\n  return { exitCode: result.exitCode, timedOut: result.timedOut, durationMs: result.durationMs,\n    stdoutTruncated: result.stdoutTruncated, stderrTruncated: result.stderrTruncated };\n}\n"
+    }
+  ]
+}

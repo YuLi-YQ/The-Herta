@@ -65,6 +65,19 @@ function setup() {
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe("session activation — the window follows the host (UX review 2026-09-22, item 6)", () => {
+  it("changes the plugin owner epoch through A to B to A and immediately on a pending activation", async () => {
+    const { h, activation } = setup();
+    const a = session("A"), b = session("B");
+    h.state.active = a; activation.pointAt(a); const first = activation.revision;
+    activation.pointAt(b); activation.pointAt(a);
+    expect(activation.revision).toBeGreaterThan(first);
+    const beforeOpen = activation.revision;
+    const pending = activation.openAndPoint("A");
+    expect(activation.revision).toBeGreaterThan(beforeOpen);
+    await flush(); h.opens[0]!.resolve(a); await pending;
+    const beforeRelease = activation.revision;
+    activation.release(); expect(activation.revision).toBeGreaterThan(beforeRelease);
+  });
   it("a superseded open followed by a FAILED newest open points the window at what the host kept", async () => {
     const { h, activation, resets } = setup();
     const x = session("X");

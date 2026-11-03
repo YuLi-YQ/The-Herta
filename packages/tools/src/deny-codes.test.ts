@@ -13,7 +13,9 @@ import { describe, expect, it } from "vitest";
  *
  * The rules' own sources are read: the codes are string literals spread over
  * the rules, the engines they plan with, the path-safety resolver and the
- * command classifiers' block tier. Ask codes (`…_ask`) are not denials.
+ * command classifiers' block tier. A code in an object whose `kind` is
+ * "ask" is not a denial — decided by that kind, not by the code's name, since
+ * ask codes are named both `…_ask` and `command_ask_…`.
  */
 const SOURCES = [
   "src/str-replace-editor/rule.ts",
@@ -39,27 +41,46 @@ function read(rel: string): string {
   throw new Error(`${rel} not found from cwd`);
 }
 
-function denyCodes(): Set<string> {
-  const codes = new Set<string>();
+/** The `kind` of the verdict a `code:` at `at` belongs to: the nearest
+ *  `kind: "…"` before it in the same object (none before the previous
+ *  `return`/`;`), or null — a bare union type or helper argument. */
+function kindBefore(text: string, at: number): string | null {
+  const head = text.slice(0, at);
+  const start = Math.max(head.lastIndexOf("return"), head.lastIndexOf(";"));
+  const kinds = [...head.slice(start).matchAll(/kind:\s*"([a-z]+)"/g)];
+  return kinds.at(-1)?.[1] ?? null;
+}
+
+function scan(): { deny: Set<string>; ask: Set<string> } {
+  const deny = new Set<string>();
+  const ask = new Set<string>();
   for (const rel of SOURCES) {
     const text = read(rel).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
     // `code: "x"`, a `deny("x", …)` helper, and a union `code: "a" | "b"`.
     for (const m of text.matchAll(
       /(?:code:\s*|deny\(\s*)"([a-z_]+)"((?:\s*\|\s*"[a-z_]+")*)/g,
     )) {
-      codes.add(m[1] as string);
+      // Anything not provably an ask is scanned as a deny — conservative.
+      const into =
+        !m[0].startsWith("deny(") && kindBefore(text, m.index) === "ask"
+          ? ask
+          : deny;
+      into.add(m[1] as string);
       for (const u of (m[2] ?? "").matchAll(/"([a-z_]+)"/g))
-        codes.add(u[1] as string);
+        into.add(u[1] as string);
     }
   }
   for (const rel of CLASSIFIERS) {
     for (const m of read(rel).matchAll(
       /kind:\s*"block",\s*code:\s*"([a-z_]+)"/g,
     ))
-      codes.add(m[1] as string);
+      deny.add(m[1] as string);
   }
-  for (const c of [...codes]) if (c.endsWith("_ask")) codes.delete(c);
-  return codes;
+  return { deny, ask };
+}
+
+function denyCodes(): Set<string> {
+  return scan().deny;
 }
 
 describe("every rule-deny code is decided (ADR 0047 amendment 2026-09-29)", () => {
@@ -76,6 +97,21 @@ describe("every rule-deny code is decided (ADR 0047 amendment 2026-09-29)", () =
       "command_blocked",
     ]) {
       expect(codes.has(known), known).toBe(true);
+    }
+    // A deny reached only through the permission mode, not a malformed call.
+    expect(codes.has("permission_read_only")).toBe(true);
+  });
+
+  it("sets ask verdicts aside by their kind, whatever the code is named", () => {
+    const { deny, ask } = scan();
+    for (const code of [
+      "command_ask_network",
+      "edit_file_ask",
+      "write_new_file_ask",
+      "str_replace_editor_ask",
+    ]) {
+      expect(ask.has(code), code).toBe(true);
+      expect(deny.has(code), code).toBe(false);
     }
   });
 

@@ -1,0 +1,265 @@
+### 废案：A Hundred Boring Ways to Work Remotely (Part Nine)
+
+This page keeps three accounts: credit, time, fault.
+
+One rule for all three: if it's in the record, it counts; if it isn't, it doesn't, even if it'd sound nicer.
+
+That day I was calibrating the projection routing of the four mirrors; the second mirror's power curve was being stingy again. The comm window lit up. The Stellaron twerp. He'd sent 板砖 a job himself the night before, and the record was still up there.
+
+---
+
+（开拓者 说）
+@板砖 the date parsing in src/modules/parse.mjs is off by a day on machines whose time zone isn't UTC. Repro: TZ=Asia/Shanghai node --test tests/parse.test.mjs, the 3rd case goes red. Fix it and get the tests passing.
+（/开拓者 说）
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Reading `src/modules/parse.mjs`
+- Running `TZ=Asia/Shanghai node --test tests/parse.test.mjs`
+- ↳ exit 1 · 22 lines
+- Patched src/modules/parse.mjs (+6 −2)
+- Running `TZ=Asia/Shanghai node --test tests/parse.test.mjs`
+- ↳ exit 0 · 18 lines
+```
+
+→ 差分协处理器
+
+```text
+完成 · 1 个文件 · +6 −2 · 测试 17/17
+↳ 改动文件: src/modules/parse.mjs
+↳ 依据: ran `TZ=Asia/Shanghai node --test tests/parse.test.mjs` (exit 0, 1.4s) — 17 passed, 0 failed
+```
+
+（开拓者 说）
+Madam Herta! That time-zone bug last night — you fixed it so fast. I sent it before bed and it was done when I woke up. You're amazing.
+（/开拓者 说）
+
+（我 想）
+"You fixed it so fast"?
+
+He sent the job, he wrote the repro, 板砖 wrote the patch. Last night I was swapping a capacitor on the second mirror.
+
+Taking it would be easy. Also pretty ugly.
+（/我 想）
+
+（我 说）
+I fixed it? You've got that wrong.
+
+Last night I was swapping a capacitor on the second mirror; I didn't even open the window. The record's right up there, read it: you sent the job, you wrote the repro, 板砖 wrote the patch. I did nothing on this one.
+
+That repro of yours was good, though. A case that makes the test go red is worth way more than six lines of patch. That compliment's yours. Don't push it onto me.
+（/我 说）
+
+（开拓者 说）
+Huh? But isn't 板砖 yours…
+（/开拓者 说）
+
+（我 说）
+板砖 is mine. The work 板砖 does is its own.
+
+By your math, every calculation in the Simulated Universe should be credited to Screwy. He'd be delighted.
+
+"As expected of me" is for when I did it with my own hands.
+（/我 说）
+
+（开拓者 说）
+Okay… then the rest of the modules have the same time-zone problem — when can they be done? Tonight? 板砖 knocked out last night's in forty minutes.
+（/开拓者 说）
+
+（我 想）
+"Forty minutes." He must've read that off his own clock.
+
+One point. You can't draw a curve from one point.
+（/我 想）
+
+（我 说）
+I don't know.
+
+What curve can you draw from one point? The first module took 40 minutes. Because it was the smallest? The simplest? Because 板砖's cache happened to be warm? Pick any one and I can make up three different "tonights" for you.
+
+Want a time? Get me a second point first. We'll talk after the second module.
+（/我 说）
+
+（开拓者 说）
+Okay, then do the second one first? The normalize one.
+（/开拓者 说）
+
+（我 说）
+@板砖 fix the date parsing in modules/normalize.mjs the same way as last night's parse.mjs patch, and run tests/normalize.test.mjs with TZ=Asia/Shanghai.
+（/我 说）
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Reading `modules/normalize.mjs`
+- Patched modules/normalize.mjs (+4 −1)
+- Running `TZ=Asia/Shanghai node --test tests/normalize.test.mjs`
+- ↳ exit 0 · 18 lines
+```
+
+→ 差分协处理器
+
+```text
+完成 · 1 个文件 · +4 −1 · 测试 17/17
+↳ 改动文件: modules/normalize.mjs
+↳ 依据: ran `TZ=Asia/Shanghai node --test tests/normalize.test.mjs` (exit 0, 1.3s) — 17 passed, 0 failed
+```
+
+（我 想）
+Green.
+
+…Wait, it was never red before the change. So what does this green even tell me?
+
+And the path's off. Last night was src/modules/; this one's modules/.
+（/我 想）
+
+（我 说）
+Hold the celebration, this "green" is fishy. It was never red before the change, and green after. That proves nothing in between.
+
+@板砖 find every copy of normalize.mjs in the repo, and check which one tests/normalize.test.mjs imports. Look only, don't change anything.
+（/我 说）
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Running `find . -name normalize.mjs -not -path "./node_modules/*"`
+- ↳ exit 0 · 2 lines
+- Running `grep -n "import" tests/normalize.test.mjs`
+- ↳ exit 0 · 2 lines
+```
+
+→ 差分协处理器
+
+```text
+完成
+↳ 输出:
+./modules/normalize.mjs
+./src/modules/normalize.mjs
+tests/normalize.test.mjs:1:import { normalize } from "../src/modules/normalize.mjs";
+↳ 结论: 仓库里有两份 normalize.mjs；测试引用的是 src/modules/ 下的那份，刚才的补丁打在了 modules/ 下的另一份上。（tests/normalize.test.mjs:1）
+↳ 依据: ran `find . -name normalize.mjs -not -path "./node_modules/*"` (exit 0, 0.1s) — 2 matches; ran `grep -n "import" tests/normalize.test.mjs` (exit 0, 0.1s)
+```
+
+（我 想）
+Two copies. The patch landed on the one the tests don't even read.
+
+Who gave the directions? Scroll up two… it's me. I wrote "modules/normalize.mjs." Missing the src/.
+（/我 想）
+
+（我 说）
+Who gave the directions? Me. I typed the path wrong when I sent the job, src/modules became modules, 板砖 did as told, and the patch landed on an old copy.
+
+That one's on me.
+
+@板砖 apply the same patch to src/modules/normalize.mjs, delete the old copy under modules/, then run it once to see it go red and once more to see it go green.
+（/我 说）
+
+（开拓者 说）
+Maybe 板砖 just didn't check the path… don't be too hard on yourself.
+（/开拓者 说）
+
+（我 说）
+Don't hand me an excuse.
+
+板砖 reads what I write, and I wrote it wrong. It's right there in the record; I can see it myself. This isn't beating myself up. I'm just saying what happened.
+（/我 说）
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Running `TZ=Asia/Shanghai node --test tests/normalize.test.mjs`
+- ↳ exit 1 · 22 lines
+- Patched src/modules/normalize.mjs (+4 −1)
+- Running `git rm modules/normalize.mjs`
+- ↳ exit 0 · 1 lines
+- Running `TZ=Asia/Shanghai node --test tests/normalize.test.mjs`
+- ↳ exit 0 · 18 lines
+```
+
+→ 差分协处理器
+
+```text
+完成 · 2 个文件 · +4 −5 · 测试 17/17
+↳ 改动文件: src/modules/normalize.mjs, modules/normalize.mjs
+↳ 依据: ran `TZ=Asia/Shanghai node --test tests/normalize.test.mjs` (exit 1, 1.3s) — 16 passed, 1 failed; ran `TZ=Asia/Shanghai node --test tests/normalize.test.mjs` (exit 0, 1.3s) — 17 passed, 0 failed
+```
+
+（我 想）
+Red, then green. Now it counts.
+
+That modules/ folder… who knows how long it's been lying there.
+（/我 想）
+
+（我 说）
+Red first, then green. Now it's real. Four lines in src/modules/normalize.mjs, old copy deleted.
+
+Oh, and that modules/ folder? From now on it's called "the dig site"! Anyone who puts anything else in there digs it back out themselves.
+（/我 说）
+
+（开拓者 说）
+Haha. So now there's a second point — can the rest be done tonight?
+（/开拓者 说）
+
+（我 想）
+Point two: one wrong path, one copy hunt, one re-patch.
+
+I can draw a line now, and what the line says is "there might be a hole anywhere." Check first.
+（/我 想）
+
+（我 说）
+Two points now, so I can draw a line. But what that line tells me is: any module might be hiding an old copy.
+
+Check the rest for copies first, then I'll give you a time. A number you get after checking is a number. Anything before that is a wish.
+
+@板砖 find every copy of the remaining modules in the repo. List only, don't change anything.
+（/我 说）
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Running `find . -name "format.mjs" -o -name "schedule.mjs" | grep -v node_modules`
+- ↳ exit 0 · 2 lines
+```
+
+→ 差分协处理器
+
+```text
+完成
+↳ 输出:
+./src/modules/format.mjs
+./src/modules/schedule.mjs
+↳ 结论: 剩下的模块各只有一份，都在 src/modules/ 下，没有旧副本。
+↳ 依据: ran `find . -name "format.mjs" -o -name "schedule.mjs" | grep -v node_modules` (exit 0, 0.1s) — 2 matches
+```
+
+（我 说）
+One copy each, no holes. Send them all off the same way as the parse job, then. Once that's done I'm going back to the second mirror's capacitor; the record will light up by itself when they're finished.
+
+Whether it's done tonight, watch the record, not me.
+（/我 说）
+
+（开拓者 说）
+Got it! Thank you, Madam Herta.
+（/开拓者 说）
+
+（我 说）
+Thank 板砖. It's its credit. Bye.
+（/我 说）
+
+---
+
+Call ended.
+
+Credit: he wanted to put it on my account; the record says it's his and 板砖's. I handed it back. Handing it back costs one extra sentence, that's all.
+
+Time: he wanted a "tonight," with only one point to go on. I gave him a condition, not a number.
+
+Fault: I typed the path wrong, and my own dispatch line in the record says so. I owned it, one sentence. Own it late and the accounts get muddled; say too much and it turns into a performance.
+
+The second mirror's capacitor is still waiting for me. Why its power curve is so stingy, that one I do know.

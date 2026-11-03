@@ -1,6 +1,5 @@
 ﻿packages:
   - "packages/*"
-  - "website"
 
 # pnpm 10+ blocks dependency build scripts by default and (v11) ignores the
 # package.json "pnpm" field entirely — without this allow-list, a plain-pnpm

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { ImageCaptioner } from "./attachments.js";
 import { SessionAttachments } from "./session-attachments.js";
 import { makePdf } from "./testing/document-fixtures.js";
+import { makePng } from "./testing/image-fixtures.js";
 import { removeTmpDir } from "./testing/tmp-workspace.js";
 
 const dirs: string[] = [];
@@ -130,5 +131,60 @@ describe("SessionAttachments — the PDF-picture switch (2026-10-01)", () => {
     expect(storedText(on.files[0]?.path ?? "")).toContain(
       "自动转写：\\mathbf{w}",
     );
+  });
+});
+
+describe("SessionAttachments — cancelling a staging job (R118)", () => {
+  function make(ws: string, captionImage: ImageCaptioner): SessionAttachments {
+    return new SessionAttachments({
+      sessionId: "s1",
+      lang: "zh",
+      wsHolder: { current: ws },
+      captionImage,
+      turnInFlight: () => false,
+      driver: { getRecord: () => [] as unknown as TerminalRecord } as never,
+      onAppended: () => {},
+      onReplaced: () => {},
+    });
+  }
+
+  it("cancelStaging stops a running job: no picture is kept and no caption is asked for", async () => {
+    const ws = mkdtempSync(join(tmpdir(), "herta-stage-cancel-"));
+    dirs.push(ws);
+    const asked: string[] = [];
+    const attachments = make(ws, async () => {
+      asked.push("caption");
+      return "x";
+    });
+    const png = makePng(8, 8);
+    const running = attachments.stageImages([{ bytes: png, name: "a.png" }], {
+      job: "card-1",
+    });
+    expect(attachments.cancelStaging("card-1")).toBe(true);
+    const r = await running;
+    expect(r).toEqual({
+      ok: true,
+      staged: [],
+      rejected: [{ name: "a.png", reason: "cancelled" }],
+    });
+    expect(attachments.stagedImageList).toEqual([]);
+    expect(asked).toEqual([]);
+    // Finished jobs are forgotten; an unknown id does nothing.
+    expect(attachments.cancelStaging("card-1")).toBe(false);
+    expect(attachments.cancelStaging("never")).toBe(false);
+  });
+
+  it("a job left alone stages as before, and cancelling another id leaves it be", async () => {
+    const ws = mkdtempSync(join(tmpdir(), "herta-stage-cancel-"));
+    dirs.push(ws);
+    const attachments = make(ws, async () => "x");
+    const png = makePng(8, 8);
+    const running = attachments.stageImages([{ bytes: png, name: "a.png" }], {
+      job: "card-2",
+    });
+    expect(attachments.cancelStaging("card-3")).toBe(false);
+    const r = await running;
+    expect(r.ok && r.staged.map((s) => s.name)).toEqual(["a.png"]);
+    expect(r.ok && r.rejected).toEqual([]);
   });
 });

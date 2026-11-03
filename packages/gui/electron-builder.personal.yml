@@ -39,6 +39,8 @@ extraResources:
     to: licenses/atelier-geometric-LICENSE.txt
   - from: resources/licenses/MapleMono-OFL.txt
     to: licenses/MapleMono-OFL.txt
+  - from: resources/licenses/NotoSerifSC-OFL.txt
+    to: licenses/NotoSerifSC-OFL.txt
 publish: null
 win:
   target:

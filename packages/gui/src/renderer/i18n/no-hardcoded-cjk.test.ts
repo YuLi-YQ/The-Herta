@@ -5,13 +5,14 @@
  *   - i18n/messages/ (the catalogs themselves)
  *   - *.test.ts / *.test.tsx
  *   - this file itself
+ *   - the Chinese product surfaces named in CHINESE_SURFACES
  *
  * A line is a VIOLATION if it contains a CJK character AND does NOT contain
  * any of the allow-listed tokens that legitimately appear in source:
  *   @板砖, 板砖, 中文, 差分协处理器, 系统
  */
 
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -28,6 +29,71 @@ const LINE_COMMENT_RE = /\/\/.*$/gm;
 // Tokens that are legitimately allowed in source (dispatch trigger, Chinese
 // endonym, and the D7 discriminant labels used in group-record / ActivityBlock).
 const ALLOW_TOKENS = ["@板砖", "板砖", "中文", "差分协处理器", "系统"];
+
+/**
+ * The Chinese product surfaces: fixed Chinese chrome, no t() catalog, each
+ * listed by exact path (R51). The bilingual legacy areas below keep this
+ * guard; their catalog migration is deferred, and a new file anywhere is
+ * scanned until it is listed here with a reason.
+ */
+const CHINESE_SURFACES = new Set([
+  // R2: the round workbench, its evidence and the revised settings.
+  "components/RoundTwoWorkbench.tsx",
+  "components/RoundThreeWorkbench.tsx",
+  "components/RecoveryFacts.tsx",
+  "components/EvidenceDetail.tsx",
+  "components/Settings/ProviderSettings.tsx",
+  "components/Settings/SettingsModal.tsx",
+  "components/Settings/WindowSettings.tsx",
+  // The round workbench's own panels and controls.
+  "components/RoundResults.tsx",
+  "components/RoundReader.tsx",
+  "components/RoundDashboard.tsx",
+  "components/ProjectSidebar.tsx",
+  "components/ComposerModelPicker.tsx",
+  "components/ModeTabs.tsx",
+  "components/UserInputCard.tsx",
+  "components/WaitingStatus.tsx",
+  "components/WebSearch.tsx",
+  // The standalone Herta chat (R46 added ChatSidebar).
+  "components/HertaChat.tsx",
+  "components/ChatSidebar.tsx",
+  "components/ChatStorage.tsx",
+  "components/ChatMemory.tsx",
+  "components/ChatAttachmentPreview.tsx",
+  // The chat's Markdown export, in the chat window's words (R124).
+  "components/ChatMarkdown.tsx",
+  // The /feedback panel and its Markdown, chat and workbench alike (R125).
+  "components/FeedbackPanel.tsx",
+  // The shared goal panel, status strip and command state (R129).
+  "components/GoalPanel.tsx",
+  // The workbench plan panel and shared explicit full-access acknowledgement (R130).
+  "components/PlanPanel.tsx",
+  "components/FullAccessConfirmation.tsx",
+  // Workbench recap viewer and explicitly applied chat context drafts (R131).
+  "components/WorkbenchCompactPanel.tsx",
+  "components/ChatContextPanel.tsx",
+  // A message's attachments, chat and workbench alike (R78).
+  "components/AttachmentTray.tsx",
+  // The composer actions and its / menu (R80).
+  "components/ComposerActions.tsx",
+  "components/SlashMenu.tsx",
+  "components/MessageContent.tsx",
+  "components/MessageTime.tsx",
+  // JSON prompt plugins (R39).
+  "components/Plugins/PluginSettings.tsx",
+  "components/Plugins/PromptActionPicker.tsx",
+]);
+
+/** Areas built on the t() catalog; never exempted wholesale or by file. */
+const BILINGUAL_AREAS = [
+  "components/Sidebar/",
+  "components/FileViewer/",
+  "components/Approval/",
+  "components/UtilityRail/",
+  "components/Workspace/",
+  "components/TopBar/",
+];
 
 function collectSourceFiles(dir: string): string[] {
   const results: string[] = [];
@@ -55,20 +121,9 @@ describe("no-hardcoded-cjk", { timeout: 30_000 }, () => {
     const files = collectSourceFiles(RENDERER_ROOT);
     const violations: string[] = [];
 
-    // R2 intentionally ships fixed Chinese chrome in these exact new/revised surfaces.
-    // Existing bilingual legacy surfaces retain this guard; catalog migration is deferred.
-    const ROUND_TWO_CHINESE_ONLY = new Set([
-      "components/RoundTwoWorkbench.tsx",
-      "components/RoundThreeWorkbench.tsx",
-      "components/RecoveryFacts.tsx",
-      "components/EvidenceDetail.tsx",
-      "components/Settings/ProviderSettings.tsx",
-      "components/Settings/SettingsModal.tsx",
-      "components/Settings/WindowSettings.tsx",
-    ]);
     for (const filePath of files) {
       if (
-        ROUND_TWO_CHINESE_ONLY.has(
+        CHINESE_SURFACES.has(
           relative(RENDERER_ROOT, filePath).replace(/\\/g, "/"),
         )
       )
@@ -92,5 +147,17 @@ describe("no-hardcoded-cjk", { timeout: 30_000 }, () => {
     }
 
     expect(violations).toEqual([]);
+  });
+
+  it("names Chinese surfaces by exact existing file, never a bilingual area", () => {
+    for (const path of CHINESE_SURFACES) {
+      expect(path, path).toMatch(/^components\/[\w/]+\.tsx$/);
+      expect(existsSync(join(RENDERER_ROOT, path)), path).toBe(true);
+      for (const area of BILINGUAL_AREAS)
+        expect(path.startsWith(area), `${path} is in ${area}`).toBe(false);
+    }
+    // A renamed or moved bilingual area must be updated here, not dropped.
+    for (const area of BILINGUAL_AREAS)
+      expect(existsSync(join(RENDERER_ROOT, area)), area).toBe(true);
   });
 });

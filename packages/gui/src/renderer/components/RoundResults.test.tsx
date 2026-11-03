@@ -35,7 +35,8 @@ describe("round result evidence UI", () => {
     fireEvent.click(screen.getByRole("button", { name: "涉及文件" }));
     expect(within(process).getByText("修改代码")).toBeInTheDocument();
     expect(within(process).queryByText("检查代码")).not.toBeInTheDocument();
-    expect(screen.getByText(/本轮用量 -- tokens/)).toBeInTheDocument();
+    // Unreported usage is left out rather than shown as "--" (R72).
+    expect(screen.queryByText(/本轮用量/)).toBeNull();
   });
   it("uses separate file links and does not invent expandable empty tool details", () => {
     const read = vi.fn();
@@ -135,4 +136,33 @@ it.each(["cancelled", "interrupted"] as const)("preserves changed files for revi
  const process=document.querySelector(".round-tools") as HTMLElement;
  expect(within(process).getByText(status === "cancelled" ? "已取消" : "结果未确认")).toBeInTheDocument();
  expect(within(process).queryByText("执行成功")).not.toBeInTheDocument();
+});
+
+it("drops a bare 'denied' summary that only repeats the refused state (R45)", () => {
+ const refused = { id: "t3", attemptId: "a", kind: "run_command", title: "node -e console.log(1+1)", status: "denied" as const, durationMs: null, summary: "denied", command: "node -e console.log(1+1)", files: [] };
+ const failed = { ...round.activities[0]!, id: "t4", summary: "denied by project rule" };
+ render(<RoundResults round={{...round,activities:[refused,failed]}} onRead={vi.fn()} loadFile={vi.fn()} />);
+ fireEvent.click(screen.getByText("查看过程"));
+ const process = document.querySelector(".round-tools") as HTMLElement;
+ expect(within(process).getAllByText("node -e console.log(1+1)").length).toBeGreaterThan(0);
+ expect(within(process).queryByText("denied")).not.toBeInTheDocument();
+ expect(within(process).getByText("denied by project rule")).toBeInTheDocument();
+});
+describe("round result wording (R72)", () => {
+  const legacy = "仅扫描工作区内文本；依赖、构建、内部及凭据目录、符号链接不纳入；期间观测变化归属不确定";
+  it("keeps the scan's fixed scope out of an older round's limitations and offers it beside the files line", () => {
+    render(<RoundResults round={{ ...round, files: [], limitations: [legacy] }} onRead={vi.fn()} loadFile={vi.fn()} />);
+    expect(screen.queryByText(/记录限制/)).toBeNull();
+    expect(screen.queryByText(/未记录到可确认的文件变更/)).toBeNull();
+    expect(screen.getByText("本轮未修改文件")).toHaveAttribute("title", expect.stringContaining("只统计工作区内的文本文件"));
+  });
+  it("still lists a real limitation and points to it", () => {
+    render(<RoundResults round={{ ...round, files: [], limitations: [legacy, "部分目录不可读，扫描不完整"] }} onRead={vi.fn()} loadFile={vi.fn()} />);
+    expect(screen.getByText("记录限制 · 1")).toBeInTheDocument();
+    expect(screen.getByText("未记录到可确认的文件变更，见下方记录限制。")).toBeInTheDocument();
+  });
+  it("shows the round's usage once the service reports it", () => {
+    render(<RoundResults round={{ ...round, metrics: { ...round.metrics, totalTokens: 1234 } }} onRead={vi.fn()} loadFile={vi.fn()} />);
+    expect(screen.getByText(/本轮用量 1,234 tokens · 记录不完整/)).toBeInTheDocument();
+  });
 });

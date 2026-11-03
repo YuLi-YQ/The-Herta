@@ -186,7 +186,7 @@ export const MessageContent = memo(function MessageContent({
   streaming?: boolean;
   onMemory?: (
     action: Extract<HertaChatAction, { type: "memory" }>,
-  ) => Promise<boolean>;
+  ) => Promise<string | null>;
   memoryItems?: { id: string; text: string }[];
   downloadable?: boolean;
 }) {

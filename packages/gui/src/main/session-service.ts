@@ -1,5 +1,15 @@
+import { PromptPluginStore } from "./prompt-plugin-store.js";
+import { ExecutablePluginStore } from "./plugins/executable-plugin-store.js";
+import { getPluginStorageCoordinator } from "./plugins/plugin-storage-coordinator.js";
+import { PluginNetworkSettingsStore } from "./plugins/plugin-network-settings-store.js";
+import { createExecutablePluginController } from "./plugins/executable-plugin-controller.js";
+import { createElectronPluginRuntime } from "./plugins/electron-plugin-runtime.js";
+import { createGoalCommands } from "./goal-commands.js";
+import { createPlanCommands } from "./plan-commands.js";
+import { createCompactCommands } from "./compact-commands.js";
 import { createHertaChat } from "./herta-chat.js";
-import { parseChatFile } from "./chat-file-import.js";
+import { createChatFileReader } from "./chat-file-import.js";
+import { prepareAttachedImage } from "./prepare-image.js";
 import { createChatFileSaver } from "./chat-file-export.js";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -14,6 +24,7 @@ import {
   createSessionHost,
   defaultDirsFor,
   type LogQuery,
+  type PictureTarget,
   recordTail,
   type Session,
   type SessionHost,
@@ -43,6 +54,7 @@ import { CMD, EVT } from "../preload/channels.js";
 import type {
   MiniMaxRefusalState,
   SessionSnapshot,
+  SetPictureModelUseReply,
 } from "../renderer/ipc/bridge-types.js";
 import { slimAgentEventForRenderer } from "../shared/agent-event-wire.js";
 import { createLiveToolFeed } from "../shared/live-tool-feed.js";
@@ -80,6 +92,7 @@ import {
   acquireTurnProviders,
   getProviderReadiness,
   ProviderConfigurationError,
+  recordImageRequestRefused,
 } from "./provider-settings.js";
 import {
   readWorkspaceBytesBounded,
@@ -214,8 +227,17 @@ const USER_ACTION_CHANNELS: ReadonlySet<string> = new Set([
   CMD.pickAttachments,
   CMD.attachFiles,
   CMD.removeAttachment,
+  CMD.setPictureModelUse,
+  CMD.updateSessionGoal,
+  CMD.updateSessionPlan,
+  CMD.updateSessionCompact,
+  CMD.draftChatContext,
+  CMD.cancelChatContextDraft,
+  CMD.updateChatGoal,
   CMD.stageImages,
   CMD.unstageImage,
+  CMD.cancelStaging,
+  CMD.resetPendingImages,
   CMD.readWorkspaceFile,
   CMD.readWorkspaceBytes,
   CMD.readWorkspaceCommit,
@@ -445,6 +467,7 @@ export function snapshot(s: Session): SessionSnapshot {
     ...(s.turnInFlight
       ? { turn: { backendActive: s.backendActive ?? false } }
       : {}),
+    ...(s.stagedImageError ? { stagedImageError: s.stagedImageError } : {}),
     ...(s.stagedImageList !== undefined && s.stagedImageList.length > 0
       ? { stagedImages: s.stagedImageList }
       : {}),
@@ -462,7 +485,7 @@ export async function handleSetWorkspace(
       sessionId: string;
       setWorkspace(
         p: string,
-      ): Promise<{ ok: true } | { ok: false; reason: "turn_in_progress" }>;
+      ): Promise<{ ok: true } | { ok: false; reason: "turn_in_progress" | "attachments_in_progress" }>;
     } | null;
   },
   sessionId: string,
@@ -477,8 +500,13 @@ export async function handleSetWorkspace(
   }
   const r = await s.setWorkspace(check.resolved);
   // Idle-only refusal (audit finding 13): the session drops workspace
-  // changes mid-turn rather than corrupting the record cursor.
-  if (!r.ok) return { ok: false, message: "a turn is in progress" };
+  // changes mid-turn rather than corrupting the record cursor — and while an
+  // attachment copy is being written (R100).
+  if (!r.ok)
+    return {
+      ok: false,
+      message: r.reason === "attachments_in_progress" ? "attachments in progress" : "a turn is in progress",
+    };
   return { ok: true };
 }
 
@@ -579,6 +607,32 @@ export function pickLatest(
  *  every separator/drive/dot shape is rejected. Exported for testing. */
 export function isSafeSessionId(id: unknown): id is string {
   return typeof id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(id);
+}
+
+/** F04 (R116): the picture rows a window asks `setPictureModelUse` about,
+ *  checked at the IPC boundary before the session sees them (it checks
+ *  again): 1–32 targets (app-server MAX_PICTURE_TARGETS), each a
+ *  non-negative safe-integer record index and a 1–4096 character stored
+ *  path. Only those two fields go on; null for any other shape. */
+function pictureTargetsOf(targets: unknown): PictureTarget[] | null {
+  if (!Array.isArray(targets) || targets.length === 0 || targets.length > 32)
+    return null;
+  const checked: PictureTarget[] = [];
+  for (const t of targets) {
+    if (typeof t !== "object" || t === null) return null;
+    const { index, path } = t as Record<string, unknown>;
+    if (
+      typeof index !== "number" ||
+      !Number.isSafeInteger(index) ||
+      index < 0 ||
+      typeof path !== "string" ||
+      path.length === 0 ||
+      path.length > 4096
+    )
+      return null;
+    checked.push({ index, path });
+  }
+  return checked;
 }
 
 /** IPC-boundary validation for CMD.create (audit 2026-07-13 T1.2): the
@@ -819,21 +873,98 @@ export function createSessionService(
   // `await createSession`) raced the renderer's first session:list /
   // session:submitText invokes — and if bootstrap threw, the handlers were
   // never registered at all ("No handler registered").
+  const promptPlugins = new PromptPluginStore(app.getPath("userData"), async () => {
+    const result = await dialog.showOpenDialog(win, { properties: ["openFile"], filters: [{ name: "The Herta 插件", extensions: ["json"] }] });
+    return result.canceled ? undefined : result.filePaths[0];
+  });
+  const pluginStorage = getPluginStorageCoordinator(app.getPath("userData"));
+  const executableStore = new ExecutablePluginStore({ profileDir: app.getPath("userData"), storage: pluginStorage, chooseFile: async () => {
+    const result = await dialog.showOpenDialog(win, { properties: ["openFile"], filters: [{ name: "The Herta 执行插件", extensions: ["json"] }] });
+    return result.canceled ? undefined : result.filePaths[0];
+  } });
+  const executablePlugins = createExecutablePluginController({
+    store: executableStore,
+    networkSettings: new PluginNetworkSettingsStore(app.getPath("userData")),
+    storage: pluginStorage,
+    runtime: createElectronPluginRuntime(),
+    profile: app.getPath("userData"),
+    protectedPaths: [app.getPath("userData"), join(process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"), "TheHerta-TestAccess")],
+    chooseArtifactPath: async suggested => {
+      const result = await dialog.showSaveDialog(win, { title: "保存插件文件副本", defaultPath: join(app.getPath("documents"), suggested) });
+      return { canceled: result.canceled, filePath: result.filePath };
+    },
+    withWorkspaceOperation: async (owner, workspaceRoot, signal, work) => {
+      const session = host?.activeSession;
+      if (owner.scope !== "workbench" || !session || session.sessionId !== owner.target || activation.pointed !== session
+        || session.backendWorkspace !== workspaceRoot || !session.runWorkspaceOperation) throw new Error("当前任务无法应用插件提案。");
+      const revision = activation.revision;
+      return session.runWorkspaceOperation({ workspaceRoot, signal }, async lease => {
+        const assertCurrent = () => {
+          if (host?.activeSession !== session || activation.pointed !== session || activation.revision !== revision) throw new Error("任务已变化。");
+          lease.assertCurrent();
+        };
+        assertCurrent();
+        return work({ signal: lease.signal, assertCurrent, authorizeFileChange: async change => {
+          assertCurrent(); const allowed = await lease.authorizeFileChange(change); assertCurrent(); return allowed;
+        }, authorizeNetworkRequest: async request => {
+          assertCurrent(); const allowed = await lease.authorizeNetworkRequest(request); assertCurrent(); return allowed;
+        }, authorizeCommand: async command => {
+          assertCurrent(); const allowed = await lease.authorizeCommand(command); assertCurrent(); return allowed;
+        } });
+      });
+    },
+    owner: scope => {
+      if (scope === "chat") {
+        const identity = hertaChat.pluginIdentity();
+        if (identity.disposed || !identity.id) return null;
+        return { id: identity.id, revision: identity.revision, busy: identity.busy,
+          permissionMode: "read-only", permissionRevision: 0, planActive: false };
+      }
+      const session = host?.activeSession;
+      if (!session || activation.pointed !== session) return null;
+      const permission = management.permissionFor(session.sessionId, session.backendWorkspace);
+      return { id: session.sessionId, revision: activation.revision, busy: lifecycle.busy() || !!session.turnInFlight,
+        workspaceRoot: session.backendWorkspace, permissionMode: permission.mode, permissionRevision: permission.revision,
+        planActive: Boolean(permission.planLocked) };
+    },
+  });
   function registerHandlers(): void {
     if (handlersRegistered) return;
     handlersRegistered = true;
+    handle(CMD.promptPlugins, (_event, input) => promptPlugins.request(input));
+    handle(CMD.executablePlugins, (_event, input) => {
+      if (input && typeof input.kind === "string" && !["list", "status", "discard", "outputs-list", "storage-usage"].includes(input.kind)) {
+        host?.noteUserActivity?.(); hertaChat.noteUserActivity();
+      }
+      return executablePlugins.request(input);
+    });
+    const goals = createGoalCommands({ session: () => host?.activeSession ?? null, chat: hertaChat });
+    const plans = createPlanCommands(() => host?.activeSession ?? null, () => lifecycle.busy());
+    const compacts = createCompactCommands(() => host?.activeSession ?? null, () => lifecycle.busy());
+    handle(CMD.getSessionCompact, (_event, id) => compacts.getSessionCompact(id));
+    handle(CMD.updateSessionCompact, (_event, id, revision, action) => compacts.updateSessionCompact(id, revision, action));
+    handle(CMD.draftChatContext, (_event, input) => hertaChat.draftContext(input));
+    handle(CMD.cancelChatContextDraft, (_event, input) => hertaChat.cancelContextDraft(input));
+    handle(CMD.getSessionPlan, (_event, id) => plans.getSessionPlan(id));
+    handle(CMD.updateSessionPlan, (_event, id, revision, action) =>
+      plans.updateSessionPlan(id, revision, action),
+    );
+    handle(CMD.getSessionGoal, (_event, id) => goals.getSessionGoal(id));
+    handle(CMD.updateSessionGoal, (_event, id, revision, action) => goals.updateSessionGoal(id, revision, action));
+    handle(CMD.getChatGoal, (_event, id) => goals.getChatGoal(id));
+    handle(CMD.updateChatGoal, (_event, id, revision, action) => goals.updateChatGoal(id, revision, action));
     handle("herta-chat:image", (_event, chatId, messageId, index) => hertaChat.readImage(chatId, messageId, index));
     handle("herta-chat:snapshot", () => hertaChat.snapshot());
     handle("herta-chat:send", (_event, input) => hertaChat.send(input));
     handle("herta-chat:stop", () => hertaChat.stop());
     handle("herta-chat:manage", (_event, action) => action?.type === "storage" ? hertaChat.inspectStorage() : hertaChat.manage(action));
     const saveChatFile = createChatFileSaver({directory: app.getPath("documents"), choose: defaultPath => dialog.showSaveDialog(win, {defaultPath})});
-    let parsingChatFile = false;
-    handle("herta-chat:parse-file", async (_event, name, bytes) => {
-      if (parsingChatFile) return {ok:false,message:"请等待当前附件解析完成。"};
-      parsingChatFile = true;
-      try { return await parseChatFile(name, bytes); } finally { parsingChatFile = false; }
-    });
+    const chatFiles = createChatFileReader();
+    handle("herta-chat:parse-file", (_event, name, bytes, job) =>
+      chatFiles.parse(name, bytes, job),
+    );
+    // R118: a cancelled card stops its read here, not only in the window.
+    handle("herta-chat:cancel-file", (_event, job) => chatFiles.cancel(job));
     handle("herta-chat:save-file", (_event, name, content) => saveChatFile(name, content));
     handle(CMD.getProjectNavigation, () => management.navigation());
     handle(CMD.updateProjectNavigation, (_e, input) =>
@@ -845,7 +976,7 @@ export function createSessionService(
     );
     handle(
       CMD.submitText,
-      async (_e, text: string, stagedImageIds?: readonly string[]) => {
+      async (_e, text: string, stagedImageIds?: readonly string[], expectedSessionId?: string) => {
         if (lifecycle.busy())
           return {
             failure: {
@@ -856,6 +987,7 @@ export function createSessionService(
             },
           };
         if (
+          (expectedSessionId !== undefined && !isSafeSessionId(expectedSessionId)) ||
           typeof text !== "string" ||
           text.length > 2_000_000 ||
           (stagedImageIds !== undefined &&
@@ -879,9 +1011,26 @@ export function createSessionService(
           })`,
         );
         const active = host?.activeSession ?? null;
+        if (expectedSessionId !== undefined && active?.sessionId !== expectedSessionId) {
+          return { failure: {
+            code: "service-unavailable" as const, stage: "configuration" as const,
+            action: "retry" as const, message: "任务已切换，本次未发送。请返回原任务确认草稿后重试。",
+          } };
+        }
         if (active === null) {
           console.warn("[herta] submitText ignored — no active session yet");
           return undefined;
+        }
+        if (stagedImageIds?.length) {
+          const available = new Set((active.stagedImageList ?? []).map((image) => image.id));
+          if (new Set(stagedImageIds).size !== stagedImageIds.length ||
+              stagedImageIds.some((id) => !available.has(id))) {
+            return { failure: {
+              code: "service-unavailable" as const, stage: "configuration" as const,
+              action: "retry" as const,
+              message: "图片暂存已失效，本次未发送。请移除失效图片并重新添加后发送。",
+            } };
+          }
         }
         try {
           const readiness = getProviderReadiness(active.sessionId);
@@ -917,6 +1066,10 @@ export function createSessionService(
             failure.code,
             failure.status ?? "",
           );
+          // A restored pending picture whose copy cannot be read (R96): nothing
+          // was sent, and the fix is the card, not the connection (R98).
+          if ((err as { code?: string })?.code === "image-unreadable" && stagedImageIds?.length && stagedImageIds.every(id => active.stagedImageList?.some(image => image.id === id)))
+            return { failure: { ...failure, stage: "configuration" as const, action: "attachment" as const, message: "图片没有发给模型：待发图片的本机副本缺失或无法读取。请移除显示“图片缺失”的卡片后重新添加；文字草稿已保留。" } };
           return { failure };
         }
       },
@@ -1252,7 +1405,11 @@ export function createSessionService(
     });
     handle(
       CMD.attachFiles,
-      async (_e, sessionId: string, paths: readonly string[]) => {
+      async (_e, sessionId: string, paths: readonly string[], options?: unknown) => {
+        // R100: the composer's send asks for all-or-nothing; anything else is ignored.
+        const requireAll =
+          typeof options === "object" && options !== null &&
+          (options as { requireAll?: unknown }).requireAll === true;
         const s = host?.activeSession ?? null;
         if (s === null || s.sessionId !== sessionId) {
           return { ok: false as const, message: "no matching active session" };
@@ -1267,11 +1424,14 @@ export function createSessionService(
         );
         let r: Awaited<ReturnType<typeof s.attachFiles>>;
         try {
-          r = await s.attachFiles(paths, relay.push);
+          r = await s.attachFiles(paths, relay.push, requireAll ? { requireAll } : undefined);
         } finally {
           relay.flush();
         }
         if (r.ok) return { ok: true as const };
+        // The renderer's own paths, returned so it can mark those cards (R100).
+        if (r.reason === "missing")
+          return { ok: false as const, message: "missing files", missing: r.missing };
         // Each refusal gets its own words: "a turn is in progress" is a
         // retry-in-a-moment, "too many files" is a do-something-different.
         return {
@@ -1281,7 +1441,9 @@ export function createSessionService(
               ? "a turn is in progress"
               : r.reason === "too_many"
                 ? "too many files at once"
-                : "no files",
+                : r.reason === "workspace_changing"
+                  ? "workspace changing"
+                  : "no files",
         };
       },
     );
@@ -1295,6 +1457,7 @@ export function createSessionService(
           readonly bytes?: Uint8Array;
           readonly name?: string;
         }[],
+        job?: unknown,
       ) => {
         const s = host?.activeSession ?? null;
         if (s === null || s.sessionId !== sessionId) {
@@ -1303,7 +1466,11 @@ export function createSessionService(
         if (s.stageImages === undefined) {
           return { ok: false as const, message: "attachments unavailable" };
         }
-        const r = await s.stageImages(inputs);
+        // The card's id (R118), so a cancel reaches the read; anything else is ignored.
+        const r = await s.stageImages(
+          inputs,
+          typeof job === "string" && /^[\w-]{1,120}$/.test(job) ? { job } : {},
+        );
         if (r.ok)
           return { ok: true as const, staged: r.staged, rejected: r.rejected };
         return {
@@ -1313,14 +1480,41 @@ export function createSessionService(
               ? "a turn is in progress"
               : r.reason === "too_many_images"
                 ? "five images per message"
-                : "no files",
+                : r.reason === "workspace_changing"
+                  ? "workspace changing"
+                  : "no files",
         };
       },
     );
+    // R118: the card cancelled while its picture was staged. Session-bound like unstage.
+    handle(CMD.cancelStaging, (_e, sessionId: unknown, job: unknown) => {
+      const s = host?.activeSession ?? null;
+      if (s === null || s.sessionId !== sessionId || typeof job !== "string")
+        return false;
+      return s.cancelStaging?.(job) ?? false;
+    });
     handle(CMD.unstageImage, async (_e, sessionId: string, id: string) => {
       const s = host?.activeSession ?? null;
       if (s === null || s.sessionId !== sessionId) return false;
       return (await s.unstageImage?.(id)) ?? false;
+    });
+    // R98: the composer's reset of an unreadable pending-picture manifest.
+    // Session-bound like unstage; the renderer asks only after a confirmation.
+    handle(CMD.resetPendingImages, async (_e, sessionId: string) => {
+      const s = host?.activeSession ?? null;
+      if (typeof sessionId !== "string" || s === null || s.sessionId !== sessionId)
+        return { ok: false as const, reason: "failed" as const };
+      return (await s.resetPendingImages?.()) ?? { ok: false as const, reason: "nothing_to_reset" as const };
+    });
+    // R98: read restored pending pictures at send, before the message's
+    // documents are attached, so a missing copy commits nothing of it.
+    handle(CMD.prepareStagedImages, async (_e, sessionId: string, ids: unknown) => {
+      const s = host?.activeSession ?? null;
+      if (typeof sessionId !== "string" || s === null || s.sessionId !== sessionId ||
+          !Array.isArray(ids) || ids.length > 5 ||
+          !ids.every((id) => typeof id === "string" && id.length > 0 && id.length <= 128))
+        return { ok: false as const };
+      return { ok: true as const, unreadable: (await s.prepareStagedImages?.(ids)) ?? [] };
     });
     // The file-viewer panel (ADR 0050): a bounded read jailed to the
     // session's EFFECTIVE backend workspace — the tree the record's file
@@ -1474,6 +1668,35 @@ export function createSessionService(
         };
       },
     );
+    // F04 (R116): stop sending pictures to the models, or send them again.
+    // Session-bound like removeAttachment; the targets are data, checked here
+    // and again by the session, and only ever compared with the record.
+    handle(
+      CMD.setPictureModelUse,
+      async (
+        _e,
+        sessionId: unknown,
+        targets: unknown,
+        use: unknown,
+      ): Promise<SetPictureModelUseReply> => {
+        const s = host?.activeSession ?? null;
+        if (
+          typeof sessionId !== "string" ||
+          s === null ||
+          s.sessionId !== sessionId
+        )
+          return { ok: false, reason: "no_session" };
+        const checked = pictureTargetsOf(targets);
+        if (checked === null || (use !== "stop" && use !== "send"))
+          return { ok: false, reason: "invalid" };
+        if (s.setPictureModelUse === undefined)
+          return { ok: false, reason: "unavailable" };
+        const r = await s.setPictureModelUse(checked, use);
+        return r.ok
+          ? { ok: true, changed: r.changed }
+          : { ok: false, reason: r.reason };
+      },
+    );
     handle(CMD.resetWorkspace, (_e, sessionId: string) =>
       lifecycle.run(async () => {
         const s = host?.activeSession ?? null;
@@ -1482,7 +1705,10 @@ export function createSessionService(
         }
         const r = await s.resetWorkspace();
         if (!r.ok) {
-          return { ok: false as const, message: "a turn is in progress" };
+          return {
+            ok: false as const,
+            message: r.reason === "attachments_in_progress" ? "attachments in progress" : "a turn is in progress",
+          };
         }
         return { ok: true as const };
       }),
@@ -1723,9 +1949,19 @@ export function createSessionService(
         neutralProviders: {
           resolveTurn: async (sessionId, turnId) =>
             acquireTurnProviders(sessionId, turnId),
+          // R77: attached pictures go to the model; one over 2 MB is rescaled first.
+          prepareImage: prepareAttachedImage,
+          // R110 (F06): a refused request with pictures marks the persona model for an image re-check.
+          onImageRequestRefused: (refused) => {
+            recordImageRequestRefused(refused);
+          },
         },
         getPermissionMode: (sessionId, backendWorkspace) =>
           management.permissionFor(sessionId, backendWorkspace),
+        restorePermissionMode: (sessionId, backendWorkspace, previousMode, confirmed) =>
+          management.restorePlanPermission(
+            sessionId, backendWorkspace, previousMode, confirmed,
+          ),
         permissionProtectedPaths: [
           ...(process.argv.includes("--herta-verification")
             ? [
@@ -1780,6 +2016,7 @@ export function createSessionService(
   }
 
   async function dispose(): Promise<void> {
+    executablePlugins.dispose();
     activation.release();
     await hertaChat.dispose();
     if (handlersRegistered) {
@@ -1928,3 +2165,8 @@ export function mainNavigationBlock(
   }
   return null;
 }
+
+
+
+
+

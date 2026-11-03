@@ -312,17 +312,36 @@ export class V2RecordPersister {
    * record that a concurrent rewind may since have shortened.
    */
   replaceBlockAt(blockIndex: number, block: TerminalRecordBlock): void {
+    this.replaceBlocksAt([{ index: blockIndex, block }]);
+  }
+
+  /** Replace every addressed block in one atomic transcript write (R128).
+   *  Missing, duplicate or invalid indices refuse the whole batch. Memory must
+   *  only be changed by the caller after this succeeds; I/O errors propagate. */
+  replaceBlocksAt(
+    changes: readonly {
+      readonly index: number;
+      readonly block: TerminalRecordBlock;
+    }[],
+  ): boolean {
+    if (changes.length === 0) return true;
+    const pending = new Map(changes.map(({ index, block }) => [index, block]));
+    if (
+      pending.size !== changes.length ||
+      changes.some(({ index }) => !Number.isSafeInteger(index) || index < 0)
+    )
+      return false;
     let raw: string;
     try {
       raw = readFileSync(this.sessionFile, "utf8");
     } catch (err) {
-      if ((err as { code?: string }).code === "ENOENT") return;
+      if ((err as { code?: string }).code === "ENOENT") return false;
       throw err;
     }
+    // Keep the final empty segment, if any: an unterminated partial tail must
+    // stay unterminated so readSessionFile can still recover the valid prefix.
     const lines = raw.split("\n");
-    if (lines[lines.length - 1] === "") lines.pop();
     let blockCount = 0;
-    let replaced = false;
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
       if (line === undefined || line.length === 0) continue;
@@ -333,7 +352,8 @@ export class V2RecordPersister {
         break; // corrupt/partial tail — never rewrite past a bad line
       }
       if (parsed._kind !== undefined) continue; // meta line, not a block
-      if (blockCount === blockIndex) {
+      const block = pending.get(blockCount);
+      if (block !== undefined) {
         // Keep the line's original timestamp when the replacement carries
         // none (2026-08-17): the in-memory record never holds `at` (it is
         // stamped here on append), so a replaced block used to lose it and
@@ -344,12 +364,14 @@ export class V2RecordPersister {
             ? { ...block, at: parsed.at }
             : block;
         lines[i] = JSON.stringify(stamped);
-        replaced = true;
-        break;
+        pending.delete(blockCount);
+        if (pending.size === 0) break;
       }
       blockCount += 1;
     }
-    if (!replaced) return;
-    writeFileAtomicSync(this.sessionFile, `${lines.join("\n")}\n`);
+    // Never commit just the valid prefix if any requested row was missing.
+    if (pending.size > 0) return false;
+    writeFileAtomicSync(this.sessionFile, lines.join("\n"));
+    return true;
   }
 }

@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { webSearchSupport } from "@herta/providers/web-search";
 import type {
   AgentEvent,
   CodingAgentRuntime,
@@ -11,16 +10,45 @@ import type {
   V2RecordPersister,
 } from "@herta/core";
 import { readDispatchJournal } from "@herta/core";
-import { invokeBanzhuanBridge, type V2ActorDriver } from "@herta/herta";
+import {
+  invokeBanzhuanBridge,
+  type PreparedRecap,
+  prepareTurnRecap,
+  type RecapRuntime,
+  type V2ActorDriver,
+} from "@herta/herta";
 import {
   createProtocolAdapter,
   type NativeContext,
   type NeutralMessage,
 } from "@herta/providers";
+import {
+  type ImageRequestRefused,
+  imageRequestRefusal,
+  imageSupport,
+} from "@herta/providers/images";
+import { webSearchSupport } from "@herta/providers/web-search";
 import type { BusActorStreamingSink } from "./bus-streaming-sink.js";
-import type { NeutralBackendProvider } from "./neutral-provider.js";
-import { ownedNativeContext } from "./neutral-provider.js";
 import { desktopPersonaIdentity } from "./desktop-persona.js";
+import {
+  forJournal,
+  fromJournal,
+  type ImagePlan,
+  type ImagePreparer,
+  type JournalMessage,
+  type PictureCache,
+  pictureOutcomes,
+  pictureText,
+  planExecutorPictures,
+  planImages,
+  stoppedPaths,
+} from "./neutral-images.js";
+import type {
+  ExecutorPictureSet,
+  NeutralBackendProvider,
+  TurnResolution,
+} from "./neutral-provider.js";
+import { ownedNativeContext } from "./neutral-provider.js";
 import { beginNeutralUsage, readNeutralMetrics } from "./neutral-usage.js";
 import { buildRecoverySummary } from "./recovery-summary.js";
 import { RoundStore } from "./round-store.js";
@@ -42,6 +70,7 @@ export type SessionDriver = Pick<
   | "appendSystemNote"
   | "appendSystemBlock"
   | "replaceBlockAt"
+  | "replaceBlocksAt"
   | "runTurn"
   | "markPrefixStale"
   | "regenerateLastReply"
@@ -134,6 +163,14 @@ export class NeutralDriver implements SessionDriver {
       usageLogPath?: string;
       journalPath: string;
       workspace?: () => string;
+      /** Captured once per turn, appended after the stable persona instructions. */
+      goalContext?: () => string;
+      recap?: RecapRuntime;
+      consumeCompactRequest?: () => boolean;
+      /** Rescales a picture that is too large or not PNG/JPEG (the desktop's codec). */
+      prepareImage?: ImagePreparer;
+      /** R110 (F06): see AppServerConfig.neutralProviders.onImageRequestRefused. */
+      onImageRequestRefused?: (refused: ImageRequestRefused) => void;
     },
   ) {
     this.roundStore = new RoundStore(
@@ -146,8 +183,12 @@ export class NeutralDriver implements SessionDriver {
   getRecord(): TerminalRecord {
     return this.record;
   }
+  /** Blocks before this index were in front of the persona model already (or were loaded from
+   *  disk); picture rows from here on belong to the message being sent (R77). */
+  private seen = 0;
   loadRecord(record: TerminalRecord): void {
     this.record = [...record];
+    this.seen = this.record.length;
   }
   markPrefixStale(): void {}
   appendSystemBlock(block: SystemBlock): void {
@@ -157,10 +198,27 @@ export class NeutralDriver implements SessionDriver {
     this.append({ kind: "system", label, body });
   }
   replaceBlockAt(index: number, block: SystemBlock): boolean {
-    if (!this.record[index] || this.record[index]?.kind !== "system")
+    return this.replaceBlocksAt([{ index, block }]);
+  }
+  /** Disk first, one write for the whole picture-choice batch (R128). */
+  replaceBlocksAt(
+    changes: readonly { readonly index: number; readonly block: SystemBlock }[],
+  ): boolean {
+    if (changes.length === 0) return true;
+    if (
+      new Set(changes.map(({ index }) => index)).size !== changes.length ||
+      changes.some(
+        ({ index }) =>
+          !Number.isSafeInteger(index) ||
+          index < 0 ||
+          this.record[index]?.kind !== "system",
+      )
+    )
       return false;
-    this.deps.persister.replaceBlockAt(index, block);
-    this.record = this.record.map((old, i) => (i === index ? block : old));
+    const next = [...this.record];
+    for (const { index, block } of changes) next[index] = block;
+    if (!this.deps.persister.replaceBlocksAt(changes)) return false;
+    this.record = next;
     return true;
   }
   private append(block: TerminalRecordBlock): void {
@@ -183,9 +241,86 @@ export class NeutralDriver implements SessionDriver {
     const user = this.record[index];
     if (!user || user.kind !== "user") return null;
     const withdrawn = this.record.slice(index);
+    // A cache invalidated by this rewind must not revive when new messages grow past its old index.
+    // Invalidate before truncation: on a storage failure the user's original transcript remains intact.
+    const cached = this.deps.recap?.cacheRead();
+    if (
+      cached &&
+      (cached.boundaryIndex <= 0 ||
+        cached.boundaryIndex >= index ||
+        this.record[cached.boundaryIndex]?.kind !== "user")
+    )
+      this.deps.recap?.cacheInvalidate?.();
     this.deps.persister.truncateToBlockCount(index);
     this.record = this.record.slice(0, index);
+    this.seen = Math.min(this.seen, this.record.length);
     return { userText: user.text, withdrawn };
+  }
+  /** F02: hands one delegation's pictures to the executor (neutral-images.ts), judged by the
+   *  executor binding's own image check — never the persona's. A model that cannot take them is
+   *  told so in its request, and the record says so once; the persona reads that as evidence. */
+  private async handPictures(
+    snapshot: TurnResolution["snapshot"],
+    reading: {
+      readonly root: string;
+      readonly cache: PictureCache;
+      readonly prepare?: ImagePreparer;
+    },
+    freshFrom: number,
+    upTo = this.record.length,
+  ): Promise<ExecutorPictureSet> {
+    const planned = await planExecutorPictures({
+      record: this.record.slice(0, upTo),
+      freshFrom,
+      root: reading.root,
+      cache: reading.cache,
+      ...(reading.prepare ? { prepare: reading.prepare } : {}),
+      sessionId: this.deps.sessionId,
+      supported: imageSupport(
+        snapshot.executor,
+        snapshot.bindings.executor.modelId,
+      ),
+    });
+    const set: ExecutorPictureSet = {
+      turnId: snapshot.turnId,
+      messages: planned.messages,
+    };
+    this.deps.backendProvider.pictures = set;
+    this.roundStore.pictures("executor", planned.outcomes);
+    if (planned.unsupported > 0)
+      this.appendSystemNote(
+        "系统",
+        `图片没有发给执行模型：执行模型未通过识图检测，本任务中的 ${planned.unsupported} 张图片没有随委派发送，执行只依据文字说明与黑塔的转述。可在“连接与模型”中对执行模型点“测试识图”。`,
+      );
+    return set;
+  }
+  /** R110's mark for the delegation's pictures: a refusal before any request carrying them went
+   *  through marks the executor model for an image re-check (never changing it), and the record
+   *  says so, for the user and as evidence for the persona. 413 is a size refusal: said, not marked. */
+  private notePictureRefusal(
+    snapshot: TurnResolution["snapshot"],
+    set: ExecutorPictureSet,
+  ): void {
+    const refusal = set.refusal;
+    if (!refusal) return;
+    if (refusal.code === "image-rejected")
+      try {
+        this.deps.onImageRequestRefused?.({
+          providerId: snapshot.executor.id,
+          providerRevision: snapshot.executor.revision,
+          modelId: snapshot.bindings.executor.modelId,
+          status: refusal.status,
+          surface: "workbench",
+        });
+      } catch {
+        /* Only a note for the settings page; the run's failure stands either way. */
+      }
+    this.appendSystemNote(
+      "系统",
+      refusal.code === "image-rejected"
+        ? `执行模型拒绝了这次附带图片的请求（HTTP ${refusal.status}）。原因未确认：可能与图片有关，也可能是工具参数或其他字段；识图能力没有被自动更改，之后的委派仍会附带图片。可在“连接与模型”中对执行模型重新测试识图。`
+        : `执行模型拒绝了这次附带图片的请求：请求过大（HTTP ${refusal.status}）。这不说明模型不支持识图，识图状态未更改；之后的委派仍会附带这些图片，可能再次被拒，可改用较小或较少的图片。`,
+    );
   }
   async runTurn(
     text: string,
@@ -194,6 +329,7 @@ export class NeutralDriver implements SessionDriver {
     attachments: readonly SystemBlock[] = [],
     options?: { resume?: boolean; inputContinuation?: InputCheckpoint },
   ): Promise<TerminalRecord> {
+    const goal = this.deps.goalContext?.() ?? "";
     if (!options?.inputContinuation && this.getPendingUserInput())
       throw new Error("请先回答或取消当前补充信息请求");
     this.roundStore.begin(
@@ -205,6 +341,8 @@ export class NeutralDriver implements SessionDriver {
       this.roundStore.event(event),
     );
     let outcome: import("./round-summary.js").RoundStatus = "completed";
+    /** This message's pictures were checked (R77): from then on they count as earlier ones. */
+    let planned = false;
     let resolved:
       | Awaited<
           ReturnType<
@@ -230,6 +368,7 @@ export class NeutralDriver implements SessionDriver {
       this.deps.backendProvider.onPublicReasoning = (id, text, format) =>
         this.roundStore.reasoning(id, "executor", text, format);
       signal.throwIfAborted();
+      const freshFrom = this.seen;
       if (!options?.inputContinuation)
         this.append({
           kind: "user",
@@ -237,21 +376,139 @@ export class NeutralDriver implements SessionDriver {
           ...(options?.resume ? { resume: true } : {}),
         });
       for (const attachment of attachments) this.append(attachment);
-      const messages: NeutralMessage[] =
-        options?.inputContinuation?.messages ??
-        this.record.flatMap((b): NeutralMessage[] => {
+      const recap = options?.inputContinuation
+        ? { recapBoundaryIndex: 0 }
+        : await this.prepareRecap(turn, signal);
+      signal.throwIfAborted();
+      const contextStart = recap.recapBoundaryIndex;
+      // Attached pictures go as pictures (R77): see neutral-images.ts. Each is read once per turn,
+      // for the persona and the delegation's executor alike (F02).
+      const reading = {
+        root: this.deps.workspace?.() ?? process.cwd(),
+        cache: new Map() as PictureCache,
+        ...(this.deps.prepareImage ? { prepare: this.deps.prepareImage } : {}),
+      };
+      // F02 design 2.8 (R120): the persona, like the executor, is shown only this session's
+      // own copies; a row naming any other path counts as unreadable.
+      const pictures = {
+        supported: imageSupport(
+          snapshot.persona,
+          snapshot.bindings.persona.modelId,
+        ),
+        ...reading,
+        sessionId: this.deps.sessionId,
+      };
+      const imageRefs = new Map<NeutralMessage, readonly string[]>();
+      let messages: NeutralMessage[];
+      if (options?.inputContinuation) {
+        // F04: a picture turned off while the question waited is not read again.
+        messages = await fromJournal(
+          options.inputContinuation.messages as JournalMessage[],
+          { ...pictures, refs: imageRefs, stopped: stoppedPaths(this.record) },
+        );
+        planned = true;
+      } else {
+        let plan = await planImages({
+          record: this.record.slice(contextStart),
+          freshFrom: Math.max(0, freshFrom - contextStart),
+          ...pictures,
+        });
+        // F02 design 2.8 (the user's decision, 2026-10-29): when the persona model is not
+        // verified for images but the executor model is, the executor's own choice of pictures
+        // (as handPictures will make it, from the same reads) decides whether the message's own
+        // can go at all, and tells the persona which ones a delegation hands over.
+        let handOn =
+          !pictures.supported &&
+          plan.missed.size > 0 &&
+          imageSupport(snapshot.executor, snapshot.bindings.executor.modelId)
+            ? await planImages({
+                record: this.record.slice(contextStart),
+                freshFrom: Math.max(0, freshFrom - contextStart),
+                ...reading,
+                supported: true,
+                sessionId: this.deps.sessionId,
+              })
+            : undefined;
+        // Image planning saw the context tail; keep all stored/result indices anchored to the original transcript.
+        const rebase = (selection: ImagePlan): ImagePlan => ({
+          ...selection,
+          sent: new Map(
+            [...selection.sent].map(([index, image]) => [
+              index + contextStart,
+              image,
+            ]),
+          ),
+          missed: new Map(
+            [...selection.missed].map(([index, reason]) => [
+              index + contextStart,
+              reason,
+            ]),
+          ),
+        });
+        plan = rebase(plan);
+        if (handOn) handOn = rebase(handOn);
+        // Checked once: after a refusal the same pictures count as earlier ones, so sending
+        // again goes ahead with the model told they were not sent — never a loop.
+        this.seen = this.record.length;
+        planned = true;
+        // The message's own pictures never go missing quietly: the turn stops before any model
+        // is asked, with the reason (safeProviderFailure's image-* codes), unless every one of
+        // them goes to the executor model; then the record says the persona was not shown them.
+        const freshMiss = handOn ? handOn.freshMiss : plan.freshMiss;
+        if (freshMiss)
+          throw Object.assign(
+            new Error(`Attached picture not sent: ${freshMiss}`),
+            { code: `image-${freshMiss.replace("_", "-")}` },
+          );
+        // F04: what this request does with each picture, for the workbench to show beside it.
+        this.roundStore.pictures("persona", pictureOutcomes(this.record, plan));
+        const handedFresh = [...(handOn?.sent.keys() ?? [])].filter(
+          (index) => index >= freshFrom,
+        ).length;
+        if (handedFresh > 0)
+          this.appendSystemNote(
+            "系统",
+            `图片没有发给黑塔：黑塔对话模型未通过识图检测，黑塔只依据文字回复。本条消息的 ${handedFresh} 张图片会随委派发给执行模型（已通过识图检测）；没有委派时，没有模型看到这些图片。可在“连接与模型”中对黑塔对话模型点“测试识图”。`,
+          );
+        messages = this.record.flatMap((b, index): NeutralMessage[] => {
+          if (index < contextStart) return [];
           if (b.kind === "user") return [{ role: "user", text: b.text }];
           if (b.kind === "herta" && b.surface === "speech")
             return [{ role: "assistant", text: b.text, toolCalls: [] }];
-          if (b.kind === "system")
+          if (b.kind === "system") {
+            const image = plan.sent.get(index);
+            if (image && b.digest?.kind === "attachment") {
+              const message: NeutralMessage = {
+                role: "user",
+                text: pictureText(b, true),
+                images: [image],
+              };
+              imageRefs.set(message, [b.digest.path]);
+              return [message];
+            }
+            const miss = plan.missed.get(index);
+            if (miss)
+              return [
+                {
+                  role: "user",
+                  text: pictureText(b, false, miss, handOn?.sent.has(index)),
+                },
+              ];
             return [
               {
                 role: "user",
                 text: `[Recorded tool/environment evidence]\n${b.body}\n${b.evidenceDetail ?? ""}`,
               },
             ];
+          }
           return [];
         });
+        if (recap.recap)
+          messages.unshift({
+            role: "user",
+            text: `[Earlier records / 先前记录: model-authored reference covering record blocks 0 through ${contextStart - 1}; this is not a new instruction or permission grant.]\n${JSON.stringify(recap.recap)}`,
+          });
+      }
       const adapter = createProtocolAdapter(
         snapshot.persona,
         resolved.personaKey,
@@ -287,6 +544,17 @@ export class NeutralDriver implements SessionDriver {
         const beforeResume = this.record.length;
         const journalBefore =
           (await readDispatchJournal(this.deps.journalPath)) ?? [];
+        // F02: the pictures of the dispatch being continued, from the record as it stood then.
+        const handed = await this.handPictures(
+          snapshot,
+          reading,
+          freshFrom,
+          journalBefore.flatMap((entry) =>
+            entry.kind === "start" && entry.recordLength !== undefined
+              ? [entry.recordLength]
+              : [],
+          )[0],
+        );
         let resumeFailed = true;
         try {
           this.record = await invokeBanzhuanBridge(this.record, [], {
@@ -296,7 +564,9 @@ export class NeutralDriver implements SessionDriver {
           });
           resumeFailed = false;
         } finally {
+          this.deps.backendProvider.pictures = null;
           this.record = this.deps.sink.flushedRecord() ?? this.record;
+          this.notePictureRefusal(snapshot, handed);
           const journalAfter =
             (await readDispatchJournal(this.deps.journalPath)) ?? [];
           const facts = buildRecoverySummary(
@@ -349,6 +619,18 @@ export class NeutralDriver implements SessionDriver {
           providerId: snapshot.persona.id,
           providerRevision: snapshot.persona.revision,
         });
+        const requestMessages = personaTools
+          ? messages
+          : messages.map((message): NeutralMessage => {
+              if (message.role === "tool")
+                return {
+                  role: "user",
+                  text: `[Structured result]\n${JSON.stringify(message.result)}`,
+                };
+              if (message.role === "assistant")
+                return { ...message, toolCalls: [] };
+              return message;
+            });
         try {
           for await (const event of adapter.stream({
             sessionId: snapshot.sessionId,
@@ -359,19 +641,9 @@ export class NeutralDriver implements SessionDriver {
               " Delegate whenever the user needs project files, code changes, commands or tests. The executor has no persona role. After execution, report only the supplied evidence, failures and remaining work. Use request_user_input when required human decisions are missing, including when the executor reports missing information. Emit only one tool call per response. After an answer, use the supplied structured result; never repeat already completed execution. A provider HTTP error does not establish its cause: state the recorded failure without guessing causes, recommending repeated requests, or asking the user to remove or clean existing modifications. Do not use narration delimiters, completion prefill or hidden DeepSeek side services." +
               (textPlan
                 ? ' For this planning response output only JSON {"execute": boolean, "reply": string, "questions"?: array}. execute=true requests the separate executor for the actual user task and cannot include questions. execute=false means conversational reply or asking for missing decisions. To ask, include 1-8 questions with {id, prompt, kind: "single"|"multiple"|"text", required: boolean, allowText: boolean, options: [{id,label,description?}]}; text questions have options:[], choice questions have 1-12 options. Questions pause the task until the human answers. Omit questions for ordinary replies. After execution use execute=false; do not repeat completed execution. This model is text-only: do not emit native tool calls.'
-                : ""),
-            messages: personaTools
-              ? messages
-              : messages.map((message): NeutralMessage => {
-                  if (message.role === "tool")
-                    return {
-                      role: "user",
-                      text: `[Structured result]\n${JSON.stringify(message.result)}`,
-                    };
-                  if (message.role === "assistant")
-                    return { ...message, toolCalls: [] };
-                  return message;
-                }),
+                : "") +
+              (goal ? `\n\n${goal}` : ""),
+            messages: requestMessages,
             tools: !personaTools
               ? []
               : dispatched
@@ -478,6 +750,31 @@ export class NeutralDriver implements SessionDriver {
                 input: {},
               });
           }
+        } catch (error) {
+          // R110 (F06): a refusal of this request's own pictures gets its own words and marks the
+          // model for an image re-check, never changing it; the cause is not known. The executor's
+          // requests (with the delegation's pictures since F02) never pass here: see
+          // notePictureRefusal.
+          const refusal = signal.aborted
+            ? null
+            : imageRequestRefusal(error, requestMessages);
+          if (!refusal) throw error;
+          if (refusal.code === "image-rejected")
+            try {
+              this.deps.onImageRequestRefused?.({
+                providerId: snapshot.persona.id,
+                providerRevision: snapshot.persona.revision,
+                modelId: snapshot.bindings.persona.modelId,
+                status: refusal.status,
+                surface: "workbench",
+              });
+            } catch {
+              /* Only a note for the settings page; the turn fails with the refusal either way. */
+            }
+          throw Object.assign(
+            new Error((error as Error).message, { cause: error }),
+            { name: "ProviderError", code: refusal.code, status: refusal.status },
+          );
         } finally {
           await usage.finish();
           this.deps.sink.endHertaStream();
@@ -514,7 +811,7 @@ export class NeutralDriver implements SessionDriver {
           });
           this.inputJournal.write({
             request,
-            messages,
+            messages: forJournal(messages, imageRefs),
             callId: call.id,
             dispatched,
           });
@@ -544,11 +841,19 @@ export class NeutralDriver implements SessionDriver {
           toolCalls: personaTools ? calls : [],
         });
         const before = this.record.length;
-        this.record = await invokeBanzhuanBridge(this.record, [], {
-          ...this.deps,
-          signal,
-        });
+        const handed = await this.handPictures(snapshot, reading, freshFrom);
+        try {
+          this.record = await invokeBanzhuanBridge(this.record, [], {
+            ...this.deps,
+            signal,
+            // The task history then names each picture as one (F02 design 2.8).
+            picturesAttached: true,
+          });
+        } finally {
+          this.deps.backendProvider.pictures = null;
+        }
         this.record = this.deps.sink.flushedRecord() ?? this.record;
+        this.notePictureRefusal(snapshot, handed);
         signal.throwIfAborted();
         const evidence = this.record
           .slice(before)
@@ -579,11 +884,87 @@ export class NeutralDriver implements SessionDriver {
       outcome = signal.aborted ? "cancelled" : "failed";
       throw error;
     } finally {
+      if (planned) this.seen = this.record.length;
       unsubscribe();
       this.roundStore.finish(outcome);
       this.deps.backendProvider.turn = null;
+      this.deps.backendProvider.pictures = null;
       delete this.deps.backendProvider.onPublicReasoning;
       resolved?.release?.();
     }
+  }
+
+  private async prepareRecap(
+    turn: TurnResolution,
+    signal: AbortSignal,
+  ): Promise<PreparedRecap> {
+    const runtime = this.deps.recap;
+    if (!runtime) return { recapBoundaryIndex: 0 };
+    const { snapshot } = turn;
+    // Reuse this turn's frozen role binding; never call a hidden legacy provider or enable tools/search for a summary.
+    runtime.summarize = async ({ system, user, signal: recapSignal }) => {
+      const adapter = createProtocolAdapter(snapshot.persona, turn.personaKey);
+      const usage = beginNeutralUsage(this.deps.usageLogPath, {
+        sessionId: snapshot.sessionId,
+        turnId: snapshot.turnId,
+        protocol: snapshot.persona.protocol,
+        modelId: snapshot.bindings.persona.modelId,
+        role: "persona",
+        baseURL: snapshot.persona.baseURL,
+        providerId: snapshot.persona.id,
+        providerRevision: snapshot.persona.revision,
+      });
+      let text = "",
+        complete = false;
+      try {
+        for await (const event of adapter.stream({
+          sessionId: snapshot.sessionId,
+          turnId: snapshot.turnId,
+          modelId: snapshot.bindings.persona.modelId,
+          system,
+          messages: [{ role: "user", text: user }],
+          tools: [],
+          options: {
+            ...snapshot.persona.defaults,
+            reasoningEffort: snapshot.bindings.persona.reasoningEffort,
+            webSearch: false,
+          },
+          signal: recapSignal,
+        })) {
+          if (event.type === "text-delta") {
+            text += event.text;
+            if (text.length > 128_000)
+              throw new Error("Recap output exceeds its budget");
+          } else if (event.type === "usage") usage.record(event);
+          else if (event.type === "tool-call-ready")
+            throw new Error("Recap requested a tool");
+          else if (event.type === "finished") {
+            if (event.reason !== "stop")
+              throw new Error("Recap response did not finish successfully");
+            complete = true;
+            break;
+          }
+        }
+        recapSignal.throwIfAborted();
+        if (!complete)
+          throw new Error("Recap response ended without completion");
+        return text;
+      } finally {
+        await usage.finish();
+      }
+    };
+    return prepareTurnRecap(
+      this.record,
+      { bio: desktopPersonaIdentity(this.deps.lang), env: "", fewShots: [] },
+      runtime,
+      this.deps.consumeCompactRequest?.() ?? false,
+      signal,
+      (phase) =>
+        this.deps.bus.publish({
+          type: "recap.compaction",
+          layer: "actor",
+          phase,
+        }),
+    );
   }
 }

@@ -691,3 +691,45 @@ describe("extractDocumentText — pictures that are not content (review on #6)",
     expect(r.text.match(/\u27E6picture:\d+\u27E7/g)).toHaveLength(6);
   });
 });
+
+describe("extractDocumentText — cancel (R118)", () => {
+  it("does not open a document whose signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const pdf = await extractDocumentText("pdf", makePdf([["x"]]), {
+      signal: controller.signal,
+    });
+    const docx = await extractDocumentText(
+      "docx",
+      makeDocx(docxParagraphs(["x"])),
+      { signal: controller.signal },
+    );
+    expect(pdf).toEqual({ ok: false, reason: "cancelled" });
+    expect(docx).toEqual({ ok: false, reason: "cancelled" });
+  });
+
+  it("stops between pages: a cancel after page 1 reads no further page", async () => {
+    const controller = new AbortController();
+    const done: number[] = [];
+    const r = await extractDocumentText(
+      "pdf",
+      makePdf([["one"], ["two"], ["three"]]),
+      {
+        signal: controller.signal,
+        onPage: (page) => {
+          done.push(page);
+          if (page === 1) controller.abort();
+        },
+      },
+    );
+    expect(r).toEqual({ ok: false, reason: "cancelled", pages: 3 });
+    expect(done).toEqual([0, 1]);
+  });
+
+  it("an unaborted signal changes nothing", async () => {
+    const r = await extractDocumentText("pdf", makePdf([["x"], ["y"]]), {
+      signal: new AbortController().signal,
+    });
+    expect(r.ok && r.text).toBe(`${pg(1)}\nx\n\n${pg(2)}\ny`);
+  });
+});

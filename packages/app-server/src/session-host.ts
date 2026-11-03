@@ -40,6 +40,8 @@ import {
 } from "./dispatch-recovery.js";
 import { DreamTrigger } from "./dream-trigger.js";
 import { SessionImpl } from "./session.js";
+import { SessionGoalStore } from "./session-goal-store.js";
+import { SessionPlanStore } from "./session-plan-store.js";
 import {
   DEFAULT_HIT_LIMIT,
   narrowSearchCandidates,
@@ -657,7 +659,21 @@ class SessionHostImpl implements SessionHost {
         () => false,
         () => true,
       );
+      if (removed) {
+        try {
+          new SessionGoalStore(this.config.workspaceRoot, sessionId).remove();
+          new SessionPlanStore(this.config.workspaceRoot, sessionId).remove();
+        } catch {
+          /* The partial deletion is already reported as failed; keep the sidecar. */
+        }
+      }
       return { ok: false, wasActive, removed };
+    }
+    try {
+      new SessionGoalStore(this.config.workspaceRoot, sessionId).remove();
+      new SessionPlanStore(this.config.workspaceRoot, sessionId).remove();
+    } catch {
+      return { ok: false, wasActive, removed: true };
     }
     return { ok: true, wasActive, removed: true };
   }

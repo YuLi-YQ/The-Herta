@@ -28,6 +28,9 @@ export interface LightboxImage {
   readonly path: string;
   readonly name: string;
   readonly caption?: string;
+  /** A ready image URL. Chat pictures arrive as data URLs (R44); without
+   *  one, the path goes through the attachment scheme as before. */
+  readonly src?: string;
   /** Sniffed pixel dimensions when the digest knows them — the fit scale
    *  computes immediately instead of waiting for the bytes. */
   readonly width?: number;
@@ -103,7 +106,9 @@ function clampZoom(z: number): number {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
 }
 
-function ImageLightbox({
+/** The viewer itself, for surfaces outside a session's LightboxProvider —
+ *  the chat opens it directly (R44). */
+export function ImageLightbox({
   image,
   onClose,
 }: {
@@ -375,7 +380,7 @@ function ImageLightbox({
         <img
           ref={imgRef}
           className="lightbox-img"
-          src={attachmentImageUrl(image.path)}
+          src={image.src ?? attachmentImageUrl(image.path)}
           alt={image.caption ?? image.name}
           title={image.name}
           draggable={false}

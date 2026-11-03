@@ -1,0 +1,52 @@
+/* R132 app direction continues: existing purple/white-gray tokens, flat reading blocks. */
+.plugin-controlled-view { min-width: 0; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--herta-border); }
+.plugin-controlled-view > h5 { margin: 0 0 12px; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.plugin-controlled-view:focus-visible { outline: 2px solid var(--herta-focus); outline-offset: 3px; }
+.plugin-controlled-blocks { display: grid; gap: 12px; min-width: 0; }
+.plugin-controlled-text { margin: 0 !important; white-space: pre-wrap; overflow-wrap: anywhere; }
+.plugin-controlled-list { margin: 0; padding-left: 22px; }
+.plugin-controlled-list li { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.plugin-controlled-fields { margin: 0; min-width: 0; }
+.plugin-controlled-fields > div { display: grid; grid-template-columns: minmax(70px, 1fr) minmax(0, 2fr); gap: 12px; margin: 6px 0; }
+.plugin-controlled-fields dt { color: var(--herta-muted); }
+.plugin-controlled-fields :is(dt, dd) { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.plugin-controlled-status { display: flex; align-items: flex-start; gap: 8px; }
+.plugin-controlled-status > svg { flex: none; margin-top: 2px; }
+.plugin-controlled-status > div { min-width: 0; }
+.plugin-controlled-status p { margin: 2px 0 0 !important; white-space: pre-wrap; overflow-wrap: anywhere; }
+.plugin-controlled-status-label { font-size: 12px; color: var(--herta-muted); }
+.plugin-view-status-info > svg { color: var(--herta-accent); }
+.plugin-view-status-success > svg { color: var(--herta-success); }
+.plugin-view-status-warning > svg { color: var(--herta-warning); }
+.plugin-view-status-error > svg { color: var(--herta-error); }
+.plugin-controlled-table-scroll { min-width: 0; max-width: 100%; overflow: auto; border: 1px solid var(--herta-border); border-radius: 8px; }
+.plugin-controlled-table-scroll:focus-visible { outline: 2px solid var(--herta-focus); outline-offset: 2px; }
+.plugin-controlled-table-scroll table { width: 100%; table-layout: fixed; max-width: none; border-collapse: collapse; font-size: 13px; }
+.plugin-controlled-table-scroll caption { padding: 8px 12px; color: var(--herta-muted); text-align: left; font-size: 12px; }
+.plugin-controlled-table-scroll :is(th, td) { min-width: 72px; max-width: 240px; padding: 8px 12px; text-align: left; vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; }
+.plugin-controlled-table-scroll th { font-weight: 500; color: var(--herta-muted); }
+.plugin-controlled-table-scroll tbody tr + tr { border-top: 1px solid var(--herta-border); }
+.plugin-controlled-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.plugin-controlled-buttons button { overflow-wrap: anywhere; }
+.plugin-controlled-note, .plugin-controlled-language { display: block; margin: 8px 0 0; color: var(--herta-muted); font-size: 12px; overflow-wrap: anywhere; }
+.plugin-controlled-language { margin: 0 0 4px; }
+.plugin-controlled-code { min-width: 0; }
+.plugin-controlled-code .file-viewer__body { min-width: 0; }
+.plugin-controlled-code .file-viewer__code { max-height: 260px; overflow: auto; border-radius: 8px; background: var(--herta-bg); }
+.plugin-controlled-code .file-viewer__code-inner { display: flex; min-width: 100%; }
+.plugin-controlled-code :is(.file-viewer__text, .file-viewer__gutter) {
+  margin: 0; padding: 10px 12px; font-family: Consolas, "Cascadia Code", monospace; font-size: 13px; line-height: 1.6;
+  white-space: pre; overflow: visible; max-height: none;
+}
+.plugin-controlled-code .file-viewer__text { min-width: max-content; flex: 1; }
+.plugin-controlled-code .file-viewer__gutter { flex: none; color: var(--herta-muted); text-align: right; user-select: none; border-right: 1px solid var(--herta-border); }
+.plugin-controlled-code .hljs-keyword { color: var(--herta-accent); }
+.plugin-controlled-code :is(.hljs-string, .hljs-number, .hljs-literal) { color: var(--herta-success); }
+.plugin-controlled-code .hljs-comment { color: var(--herta-muted); }
+.plugin-controlled-code :is(.hljs-title, .hljs-built_in) { color: var(--herta-gold); }
+.plugin-view-origin { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+@media (max-width: 440px) {
+  .plugin-controlled-fields > div { grid-template-columns: 1fr; gap: 2px; margin: 10px 0; }
+  .plugin-controlled-table-scroll :is(th, td) { padding: 8px; max-width: 180px; }
+}
+/* No new animation: native scrolling/focus and the existing reduced-motion-aware popover only. */

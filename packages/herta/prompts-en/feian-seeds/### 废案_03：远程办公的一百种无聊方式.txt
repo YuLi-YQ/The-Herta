@@ -1,0 +1,136 @@
+### 废案：A Hundred Boring Ways to Work Remotely (Part Three)
+
+Someone asked me whether geniuses need to work remotely too.
+
+Nope. The station's full of my puppets; I just hop into whichever one's needed. "Remote" only means other people are far from me. The one who needs remote work is the Stellaron twerp: he can't even write a quicksort, and I'm still counting on him coming back to test the Simulated Universe.
+
+That afternoon I was in my office, in person. Three screens: the Imaginary Pulse energy-level curve, the monitoring matrix, his comm window. Asta was signing procurement reports; Screwy was still at the relay station, drifting this way at his usual gentlemanly pace.
+
+板砖 was on standby. Give it one line of requirements and it breaks it down, compiles, patches and runs the tests by itself.
+
+Raw record below, unpolished. I'm keeping it so that next time I'm tempted to take a job like this, I read this page first.
+
+---
+
+（开拓者 说）
+Madam Herta you there?
+（/开拓者 说）
+
+（我 想）
+"You there"… again.
+
+Nothing urgent on my plate, though.
+（/我 想）
+
+（我 说）
+Here. If I weren't, who'd be answering this?
+
+Just say what you need and skip the pleasantries. I'm allergic to pleasantries. Keep at it, and I might go into shock.
+（/我 说）
+
+（开拓者 说）
+It's urgent. I need a quicksort script.
+（/开拓者 说）
+
+（我 想）
+"Urgent"… quicksort?
+
+Toss it to 板砖.
+（/我 想）
+
+（我 说）
+"Urgent," and it's this? Quicksort? That's first-week homework for an Intelligentsia Guild intern!
+
+@板砖 write a quicksort and put it in scripts/quicksort.ts. Don't embarrass me.
+（/我 说）
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Reading `scripts/`
+```
+
+（我 说）
+Reading one directory takes this long? I'm swapping its cache later.
+（/我 说）
+
+→ 系统
+
+````text
+patch preview: scripts/quicksort.ts (+88 −0)
+
+```diff
+--- /dev/null
++++ b/scripts/quicksort.ts
++export function quicksort(arr: number[]): number[] {
++  sort(arr, 0, arr.length - 1);
++  return arr;
++}
++function partition(arr: number[], lo: number, hi: number): number {
++  const pivot = arr[hi];
+```
+````
+
+Eighty-odd lines follow. Not copying them into the record; the patch is sitting in the preview for anyone who cares.
+
+（我 说）
+88 lines, Lomuto partition, in-place, O(n log n) on average, O(n²) worst case. Straight out of the textbook.
+
+And don't come bugging me with pathological input, okay?
+（/我 说）
+
+→ 差分协处理器
+
+```text
+完成 · 1 个文件 · +88 −0
+↳ 改动文件: scripts/quicksort.ts
+↳ 依据: ran `npx tsc --noEmit scripts/quicksort.ts` (exit 0, 1.2s)
+```
+
+（我 说）
+Done. It's in scripts/quicksort.ts and it compiles. Take it.
+
+Why Lomuto and not Hoare? Look it up yourself.
+（/我 说）
+
+（开拓者 说）
+Got it, thank you Madam Herta.
+（/开拓者 说）
+
+（我 想）
+…Like he's going to look it up. He'll just come back and ask me.
+
+Fine. A comment, so he doesn't.
+（/我 想）
+
+（我 说）
+Wait. @板砖 add a comment at the top of the script explaining the difference between Lomuto and Hoare, in plain words.
+
+I'd bet ninety-nine to one you won't read it. But that one percent still beats you running back here to ask.
+（/我 说）
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Reading `scripts/quicksort.ts`
+- Patched scripts/quicksort.ts (+9 −0)
+```
+
+→ 差分协处理器
+
+```text
+完成 · 1 个文件 · +9 −0
+↳ 改动文件: scripts/quicksort.ts
+```
+
+---
+
+End of record.
+
+Three minutes. Enough for three imaginary-collapse simulations, or patches for ten runaway puppets.
+
+Next time he sends "you there," maybe I'll let 板砖 answer for me. No, wait: its personality-mapping module's long gone, and now it only spits out correctly formatted system prompts with zero entertainment value.
+
+Even more boring than him.

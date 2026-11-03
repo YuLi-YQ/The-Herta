@@ -11,6 +11,10 @@ import {
   type ProtocolAdapter,
   type ProviderConfig,
 } from "@herta/providers";
+import {
+  type ImageRequestRefusal,
+  imageRequestRefusal,
+} from "@herta/providers/images";
 import { beginNeutralUsage } from "./neutral-usage.js";
 import type { AppServerConfig } from "./types.js";
 
@@ -25,6 +29,18 @@ const EXECUTION_USER_ANCHOR: NeutralMessage = Object.freeze({
   role: "user",
   text: "Execute the current user task described in the system execution contract and quoted user history. Continue from the recorded tool results; do not repeat completed side effects.",
 });
+
+/** F02: the pictures one delegation hands the executor (neutral-images.ts `planExecutorPictures`),
+ *  read once and carried after the anchor on every step of that turn's run, so the request's
+ *  prefix — and its private-context fingerprint — stays the same from step to step. */
+export interface ExecutorPictureSet {
+  readonly turnId: string;
+  readonly messages: readonly NeutralMessage[];
+  /** A request carrying them went through: a later refusal in this delegation is not theirs. */
+  accepted?: boolean;
+  /** The service refused a request carrying them before any went through (R110's rule). */
+  refusal?: ImageRequestRefusal;
+}
 
 export function ownedNativeContext(
   context: NativeContext | undefined,
@@ -48,6 +64,8 @@ export class NeutralBackendProvider implements ProviderAdapter {
     format: "text" | "summary",
   ) => void;
   turn: TurnResolution | null = null;
+  /** Installed by the driver for one dispatch; used only while its turn is the active one. */
+  pictures: ExecutorPictureSet | null = null;
   private contextTurnId: string | null = null;
   private nativeContext: NativeContext | undefined;
   constructor(
@@ -69,6 +87,8 @@ export class NeutralBackendProvider implements ProviderAdapter {
       config,
       turn.executorKey,
     );
+    const pictures =
+      this.pictures?.turnId === turn.snapshot.turnId ? this.pictures : null;
     const system =
       "backendSystem" in frame
         ? [
@@ -94,6 +114,7 @@ export class NeutralBackendProvider implements ProviderAdapter {
       system: `${system}\nIf a required human decision is missing, stop execution and report the exact missing information to The Herta persona. Do not guess it or proceed with side effects; the persona will request structured user input.`,
       messages: [
         EXECUTION_USER_ANCHOR,
+        ...(pictures?.messages ?? []),
         ...frame.messages.map((message): NeutralMessage => {
           if (message.role === "user")
             return { role: "user", text: message.text };
@@ -150,6 +171,7 @@ export class NeutralBackendProvider implements ProviderAdapter {
         else if (ev.type === "tool-call-ready")
           yield { type: "tool-call-request", call: ev.call };
         else if (ev.type === "finished") {
+          if (pictures) pictures.accepted = true;
           this.nativeContext = ownedNativeContext(
             ev.nativeContext,
             config,
@@ -161,6 +183,19 @@ export class NeutralBackendProvider implements ProviderAdapter {
           };
         }
       }
+    } catch (error) {
+      // R110's rule for the delegation's own pictures: only the request as sent and the status
+      // decide. The run fails as it would anyway (a 4xx is not retried); the driver says so.
+      if (
+        pictures &&
+        !pictures.accepted &&
+        !pictures.refusal &&
+        !signal.aborted
+      ) {
+        const refusal = imageRequestRefusal(error, request.messages);
+        if (refusal) pictures.refusal = refusal;
+      }
+      throw error;
     } finally {
       await usage.finish();
     }

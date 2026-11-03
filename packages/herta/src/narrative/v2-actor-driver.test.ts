@@ -137,6 +137,34 @@ function mkDriver(
 }
 
 describe("V2ActorDriver", () => {
+  it("publishes a replacement batch only after persistence accepts the whole change", () => {
+    const replaceBlocksAt = vi.fn().mockImplementation(() => {
+      throw new Error("disk full");
+    });
+    const driver = mkDriver(mkProvider([]), {
+      replaceBlocksAt,
+    } as unknown as V2RecordPersister);
+    const before = [
+      { kind: "system", label: "系统", body: "one" },
+      { kind: "system", label: "系统", body: "two" },
+    ] as const;
+    const changes = before.map((block, index) => ({
+      index,
+      block: { ...block, body: "changed" },
+    }));
+    driver.loadRecord(before);
+    expect(() => driver.replaceBlocksAt(changes)).toThrow("disk full");
+    expect(driver.getRecord()).toEqual(before);
+    replaceBlocksAt.mockReturnValue(false);
+    expect(driver.replaceBlocksAt(changes)).toBe(false);
+    expect(driver.getRecord()).toEqual(before);
+    replaceBlocksAt.mockReturnValue(true);
+    expect(driver.replaceBlocksAt(changes)).toBe(true);
+    expect(
+      driver.getRecord().map((block) => block.kind === "system" && block.body),
+    ).toEqual(["changed", "changed"]);
+  });
+
   it("returns a record with user + thought + speech blocks after one turn", async () => {
     const provider = mkProvider([
       [

@@ -2,6 +2,7 @@ import { rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { dispatchJournalPath } from "../backend/dispatch-journal.js";
 import { isPathInside } from "../path-containment.js";
+import { guardedRecapCachePath } from "./recap-cache-path.js";
 
 /**
  * Where a session's recap/compaction sidecar lives. Defined in core so
@@ -47,6 +48,15 @@ export async function deleteSessionFiles(
    *  behaviour rather than guessing a path. */
   workspaceRoot?: string,
 ): Promise<void> {
+  // Reject a known-unsafe cache path before deleting the transcript; validation must not cause a partial delete.
+  let recapSidecar: string | undefined;
+  if (workspaceRoot !== undefined && /^[A-Za-z0-9_-]{1,64}$/.test(sessionId)) {
+    try {
+      recapSidecar = guardedRecapCachePath(workspaceRoot, sessionId);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
   // Same containment rule as the workspace-dir guard below (audit 2026-07-13
   // T1.2): the transcript/title joins were the one unguarded id→path sink, so
   // a traversal id could remove an arbitrary `.jsonl` anywhere on disk.
@@ -56,20 +66,15 @@ export async function deleteSessionFiles(
     resolve(dir, `${sessionId}.title.json`),
     // The run journal (ADR 0071), in the `journal/` folder beside them.
     resolve(dispatchJournalPath(dir, sessionId)),
+    ...(/^[A-Za-z0-9_-]{1,64}$/.test(sessionId)
+      ? [resolve(dir, "pending-images", `${sessionId}.json`)] : []),
   ];
   for (const f of files) {
     if (!isPathInside(dir, f, { strict: true })) continue;
     await rm(f, { force: true });
   }
 
-  if (workspaceRoot !== undefined) {
-    // Same containment rule as above — the sidecar path is id-derived too.
-    const compactionDir = resolve(workspaceRoot, ".herta", "compaction");
-    const sidecar = resolve(recapCachePath(workspaceRoot, sessionId));
-    if (isPathInside(compactionDir, sidecar, { strict: true })) {
-      await rm(sidecar, { force: true });
-    }
-  }
+  if (recapSidecar !== undefined) await rm(recapSidecar, { force: true });
 
   if (workspacesBaseDir === undefined) return;
   // Derive the target from the id and assert it stays strictly inside the

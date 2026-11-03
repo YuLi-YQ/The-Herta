@@ -1,12 +1,22 @@
 import { execFile } from "node:child_process";
 import { basename } from "node:path";
 export type CommandEncoding = "utf-8" | "gb18030" | "utf-16le";
+/** Trusted callers may probe with their own complete child environment and
+ * execution budget. These options are never accepted from tool/Guest input. */
+export interface CommandEncodingProbeOptions {
+  readonly commandInterpreter: string;
+  readonly env: NodeJS.ProcessEnv;
+  readonly cwd: string;
+  readonly signal: AbortSignal;
+  readonly timeoutMs: number;
+}
 let consoleEncoding: Promise<CommandEncoding> | undefined;
 /** Only legacy Windows shells use the console code page by default. Other
  * programs keep UTF-8; callers can explicitly name their output encoding. */
 export async function resolveCommandEncoding(
   argv: readonly string[],
   explicit?: CommandEncoding,
+  probeOptions?: CommandEncodingProbeOptions,
 ): Promise<CommandEncoding> {
   if (explicit) return explicit;
   if (process.platform !== "win32") return "utf-8";
@@ -26,11 +36,12 @@ export async function resolveCommandEncoding(
       .some((a) => /^\/u$/i.test(a))
   )
     return "utf-16le";
-  consoleEncoding ??= new Promise((resolve) => {
+  const probe = () => new Promise<CommandEncoding>((resolve) => {
     execFile(
-      process.env.ComSpec || "cmd.exe",
+      probeOptions?.commandInterpreter ?? (process.env.ComSpec || "cmd.exe"),
       ["/d", "/c", "chcp"],
-      { windowsHide: true, timeout: 2000, encoding: "buffer" },
+      { windowsHide: true, timeout: Math.min(2000, Math.max(1, probeOptions?.timeoutMs ?? 2000)), encoding: "buffer",
+        ...(probeOptions ? { env: probeOptions.env, cwd: probeOptions.cwd, signal: probeOptions.signal, maxBuffer: 1024 } : {}) },
       (error, stdout) => {
         const page = error
           ? ""
@@ -39,6 +50,9 @@ export async function resolveCommandEncoding(
       },
     );
   });
+  // Do not share an inherited-environment probe/cache with constrained callers.
+  if (probeOptions) return probe();
+  consoleEncoding ??= probe();
   return consoleEncoding;
 }
 /** Separate instance per stdout/stderr preserves split multibyte sequences. */

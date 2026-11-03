@@ -1,0 +1,49 @@
+/* Line icons (components/Icon.tsx, R75): sized by the font-size of the control
+   they sit in, aligned with the text beside them, never a click target. */
+.herta-icon {
+  display: inline-block;
+  flex: none;
+  vertical-align: -0.15em;
+  pointer-events: none;
+}
+/* An icon with a label beside it keeps a small, even gap. */
+.herta-icon + .herta-icon-label {
+  margin-left: 6px;
+}
+/* The brand spark keeps the gold of the glyph it replaced. */
+.herta-icon[data-icon="spark"] {
+  color: var(--herta-gold, #cbb17a);
+}
+/* The pinned marker in both lists: a small spark before the title. */
+.herta-icon.herta-pin-mark {
+  width: 0.75em;
+  height: 0.75em;
+  margin-right: 0.35em;
+  vertical-align: 0;
+}
+/* One size per role, whatever font-size the glyph before them needed (R75):
+   toolbar toggles and composer tools 17px, the round send/stop 18px. */
+:is(.herta-chat-toggle, .herta-toolbar > button:first-child) .herta-icon,
+:is(.herta-chat-upload, button[aria-label="添加文件"]) .herta-icon {
+  width: 17px;
+  height: 17px;
+  vertical-align: middle;
+}
+:is(.herta-chat-send, .herta-chat-stop, .herta-send-action) .herta-icon {
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+}
+.herta-search-toggle .herta-icon,
+button[aria-label="允许联网搜索"] .herta-icon {
+  width: 15px;
+  height: 15px;
+  vertical-align: -0.2em;
+}
+/* The workbench's attach button is a plain block: centre its icon in the box
+   rather than on the text line, which sat it about 3px low (R75). */
+.herta-composer button[aria-label="添加文件"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -52,6 +52,7 @@ import {
   createSessionService,
   type SessionService,
 } from "./session-service.js";
+import { systemInfo } from "./system-info.js";
 import { type AppTray, createAppTray } from "./tray.js";
 import {
   appVersion,
@@ -212,6 +213,14 @@ function requestExit(): void {
   if (win !== null && !win.isDestroyed()) win.close();
   else app.quit();
 }
+
+// Drafts and the composers' own records (pending files R91, cards of files not added
+// R99/R102) live in renderer localStorage, which Chromium writes to disk only about
+// 5 s after a change; a normal quit flushes it, a crash or a forced end inside that
+// window loses the change. Packaged R102 probe, taskkill /F /T after a write: lost at
+// 0.5/1/2/2.5/4 s, kept at 7/12 s; with this switch lost at 0.3 s, kept from 1 s on.
+// Must run before `ready`.
+app.commandLine.appendSwitch("enable-aggressive-domstorage-flushing");
 
 // Linux input methods under Wayland (platform review 2026-09-23). Electron runs
 // as a native Wayland client on GNOME/KDE Wayland sessions, and Chromium there
@@ -531,6 +540,7 @@ function registerUpdateHandlers(): void {
   ipcMain.removeHandler(CMD.updateRestart);
   ipcMain.removeHandler(CMD.updateStatus);
   ipcMain.removeHandler(CMD.appVersion);
+  ipcMain.removeHandler(CMD.systemInfo);
   ipcMain.removeHandler(CMD.openExternal);
   ipcMain.handle(CMD.updateCheck, async () => {
     await updateService?.checkNow();
@@ -549,6 +559,8 @@ function registerUpdateHandlers(): void {
     () => updateService?.current() ?? { phase: "idle" },
   );
   ipcMain.handle(CMD.appVersion, () => appVersion());
+  // `/feedback` (R125): read-only, and whatever the renderer passes is ignored.
+  ipcMain.handle(CMD.systemInfo, () => systemInfo());
 }
 
 /** Custom caption-button IPC (acts on the current window). Idempotent and

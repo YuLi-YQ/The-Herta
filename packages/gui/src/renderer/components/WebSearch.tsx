@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Icon } from "./Icon.js";
 import {
   boundedSearchEvents,
   webSearchSupport,
@@ -6,6 +7,29 @@ import {
 } from "@herta/providers/web-search";
 import type { ProviderReadiness } from "../../shared/provider-settings-ipc.js";
 import { useHertaBridge } from "../context/HertaBridgeContext.js";
+
+function statusText(
+  item: WebSearchEvent,
+  running: boolean,
+  anyResults: boolean,
+): string {
+  const fetch = item.kind === "fetch";
+  if (item.status === "searching")
+    return fetch
+      ? running
+        ? "读取网页中"
+        : "读取未完成"
+      : running
+        ? "搜索中"
+        : "搜索未完成";
+  if (item.status === "failed")
+    return fetch
+      ? "读取网页失败"
+      : anyResults
+        ? "搜索失败"
+        : "搜索失败，本次回答未使用联网结果";
+  return fetch ? "已读取全文" : "搜索完成";
+}
 
 export function SearchResults({
   events,
@@ -18,6 +42,10 @@ export function SearchResults({
   const [error, setError] = useState("");
   const items = boundedSearchEvents(events);
   if (!items.length) return null;
+  // A failure only means "no live results" when nothing else in this answer succeeded.
+  const anyResults = items.some(
+    (item) => item.status === "completed" && (item.sources?.length ?? 0) > 0,
+  );
   return (
     <details className="herta-search-results" open>
       <summary>联网搜索与来源</summary>
@@ -28,15 +56,8 @@ export function SearchResults({
         >
           {item.status !== "citation" && (
             <p>
-              {item.status === "searching"
-                ? running
-                  ? "搜索中"
-                  : "搜索未完成"
-                : item.status === "failed"
-                  ? "搜索失败"
-                  : "搜索完成"}
+              {statusText(item, running, anyResults)}
               {item.query ? ` · ${item.query}` : ""}
-              {item.error ? `（${item.error}）` : ""}
             </p>
           )}
           {item.sources?.map((source) => (
@@ -85,7 +106,8 @@ export function SearchToggle({
       }
       onClick={() => onChange(!enabled)}
     >
-      ◎ 联网{supported && enabled ? " · 开" : ""}
+      <Icon name="globe" />
+      <span className="herta-icon-label">联网{supported && enabled ? " · 开" : ""}</span>
     </button>
   );
 }

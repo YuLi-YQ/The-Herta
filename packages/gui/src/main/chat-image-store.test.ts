@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { expect, it } from "vitest";
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createChatImageStore } from "./chat-image-store.js";
@@ -41,6 +41,20 @@ it("reports deduplicated on-disk usage without creating an empty directory",()=>
  expect(codec.usage().bytes).toBe(Buffer.from(image.data,"base64").length+3);
  expect(codec.usage().files).toBe(1);
  expect(readdirSync(dir)).toHaveLength(before.length+1);
+});
+it("reports a folder in the library apart instead of failing the whole usage read (R52)",()=>{
+ const dir=join(mkdtempSync(join(tmpdir(),"herta-usage-")),"images"), codec=createChatImageStore(dir);
+ codec.serialize(store());
+ mkdirSync(join(dir,"a".repeat(64)));writeFileSync(join(dir,"a".repeat(64),"inside.bin"),"not counted");
+ expect(codec.usage()).toEqual({bytes:Buffer.from(image.data,"base64").length,files:1,limitBytes:256*1024*1024,others:1});
+});
+it("reports a library location that is not a plain folder and leaves it untouched (R53)",()=>{
+ const dir=join(mkdtempSync(join(tmpdir(),"herta-usage-")),"images");
+ writeFileSync(dir,"a file where the library belongs");
+ const codec=createChatImageStore(dir);
+ expect(codec.usage()).toEqual({bytes:0,files:0,limitBytes:256*1024*1024,invalid:true});
+ expect(()=>codec.serialize(store())).toThrow("图片存储目录无效");
+ expect(readFileSync(dir,"utf8")).toBe("a file where the library belongs");
 });
 it("defers binary validation until preview and preserves exact references when saving",()=>{
  const dir=join(mkdtempSync(join(tmpdir(),"herta-deferred-")),"images"),codec=createChatImageStore(dir);

@@ -172,3 +172,16 @@ describe("deleteSessionFiles", () => {
     expect(existsSync(workspacesDir)).toBe(true);
   });
 });
+
+it("R96 deleting a session removes only its pending-image manifest", async () => {
+  const root = mkdtempSync(join(tmpdir(), "herta-delete-pending-"));
+  const { rmSync } = await import("node:fs");
+  try {
+    mkdirSync(join(root, "pending-images"));
+    writeFileSync(join(root, "pending-images", "s.json"), "manifest");
+    writeFileSync(join(root, "pending-images", "other.json"), "keep");
+    await deleteSessionFiles(root, "s");
+    expect(existsSync(join(root, "pending-images", "s.json"))).toBe(false);
+    expect(existsSync(join(root, "pending-images", "other.json"))).toBe(true);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

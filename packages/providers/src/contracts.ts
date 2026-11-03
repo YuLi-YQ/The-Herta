@@ -164,7 +164,8 @@ export interface ModelPage {
 }
 
 /** Main-process only; key resolution and transport stay outside the renderer.
- * Errors throw ProviderError; abort is not completion. Adapters execute no tools.
+ * Errors throw ProviderError; abort is not completion. Adapters never execute caller tools;
+ * the official DeepSeek connection may call DeepSeek's own Search/Fetch services itself (R42).
  * Each named protocol requires its own implementation and independent tests. */
 export interface ProtocolAdapter {
   readonly protocol: ProviderProtocol;

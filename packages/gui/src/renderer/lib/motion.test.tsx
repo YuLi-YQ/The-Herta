@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { useState } from "react";
 import { initializeMotion, motionPreference, setMotionPreference, useMotionPreference } from "./motion.js";
-import { initializeAppearance, setAppearance } from "./appearance.js";
+import { initializeAppearance } from "./appearance.js";
 import { ModeTabs } from "../components/ModeTabs.js";
 afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); delete document.documentElement.dataset.motion; delete document.documentElement.dataset.appearance; });
 it("persists motion separately from appearance and leaves the current setting intact when storage fails", () => {
@@ -10,7 +10,10 @@ it("persists motion separately from appearance and leaves the current setting in
  expect(motionPreference()).toBe("system");
  setMotionPreference("off"); initializeMotion();
  expect(document.documentElement.dataset.motion).toBe("off");
- setAppearance("classic"); expect(motionPreference()).toBe("off");
+ localStorage.setItem("the-herta.appearance.v1", "classic");
+ initializeAppearance();
+ expect(document.documentElement.dataset.appearance).toBe("observatory");
+ expect(motionPreference()).toBe("off");
  vi.spyOn(Storage.prototype,"setItem").mockImplementation(()=>{throw new Error("unavailable");});
  expect(()=>setMotionPreference("system")).toThrow();
  expect(document.documentElement.dataset.motion).toBe("off");

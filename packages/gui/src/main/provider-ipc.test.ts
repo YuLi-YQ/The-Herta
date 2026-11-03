@@ -5,6 +5,10 @@ vi.mock("./provider-probes.js", () => ({
   validateProviderModel: vi.fn(async (input) => ({ input })),
 }));
 
+vi.mock("./provider-image-checks.js", () => ({
+  quarantineImageChecks: vi.fn(() => "provider-image-checks.json.damaged-x"),
+}));
+
 vi.mock("./provider-settings.js", () => ({
   getProviderSettings: vi.fn(() => ({ runtimeActive: false })),
   getProviderReadiness: vi.fn(() => ({ ready: false })),
@@ -28,12 +32,18 @@ it("registers explicit configuration channels and passes untrusted mutations to 
     CMD.getProviderReadiness,
     CMD.discoverProviderModels,
     CMD.validateProviderModel,
+    CMD.resetImageChecks,
     CMD.saveProvider,
     CMD.deleteProvider,
     CMD.setProviderBindings,
   ]);
   expect(handlers.get(CMD.getProviderSettings)?.({} as never)).toEqual({
     runtimeActive: false,
+  });
+  // R109: the reset answers with the moved file's name and a fresh view; it takes no input.
+  expect(handlers.get(CMD.resetImageChecks)?.({} as never)).toEqual({
+    view: { runtimeActive: false },
+    preserved: "provider-image-checks.json.damaged-x",
   });
   expect(() => handlers.get(CMD.saveProvider)?.({} as never, null)).toThrow(
     "invalid input",

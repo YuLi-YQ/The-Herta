@@ -1,5 +1,6 @@
 import type {
   ActorPromptFrame,
+  CompactReason,
   ProviderAdapter,
   ProviderEvent,
   TerminalRecord,
@@ -31,6 +32,11 @@ import {
  * breaker.
  */
 export interface RecapRuntime {
+  /** Desktop manual commands must not drop raw context when summarization fails. */
+  readonly failurePolicy?: "full-context";
+  /** Optional manual tail size; omitted preserves the CLI's historical token-budget policy. */
+  readonly manualRecentTurns?: number;
+  readonly onOutcome?: (outcome: RecapOutcome) => void;
   readonly config: CompactionConfig;
   readonly guide: string;
   /** Head excerpt of HertaBio (already bounded to config.maxBioChars by the
@@ -56,6 +62,11 @@ export interface RecapRuntime {
    *  consulted while the breaker is open. */
   skippedWhileOpen: number;
 }
+
+export type RecapOutcome =
+  | { readonly status: "running" }
+  | { readonly status: "completed"; readonly cache: RecapCache }
+  | { readonly status: "skipped" | "failed"; readonly reason: CompactReason };
 
 export interface PreparedRecap {
   readonly recap?: string;
@@ -203,6 +214,13 @@ export async function prepareTurnRecap(
   if (rt === undefined) return { recapBoundaryIndex: 0 };
   const cfg = rt.config;
   const lang = rt.lang ?? "zh";
+  const report = (outcome: RecapOutcome) => {
+    try {
+      rt.onOutcome?.(outcome);
+    } catch {
+      /* Presentation must not affect model context. */
+    }
+  };
   // `enabled` gates the AUTOMATIC threshold trigger only; a manual /compact
   // (forceCompact) always engages so the user can compact on demand even while
   // automatic compaction is off.
@@ -285,9 +303,22 @@ export async function prepareTurnRecap(
 
     // Over the high-water mark (or forced) → advance the boundary down to the
     // low-water target and refresh the recap.
-    const boundaryIndex = selectBoundary(record, cfg);
+    const boundaryIndex = selectBoundary(
+      record,
+      forceCompact && rt.manualRecentTurns !== undefined
+        ? {
+            ...cfg,
+            recentWindowTokens: 0,
+            minRecentTurns: rt.manualRecentTurns,
+          }
+        : cfg,
+    );
     // Whole record fits even the low-water tail — nothing more to compact.
-    if (boundaryIndex <= 0) return held;
+    if (boundaryIndex <= 0) {
+      if (forceCompact)
+        report({ status: "skipped", reason: "nothing_to_compact" });
+      return held;
+    }
 
     const droppedTurns = countDroppedTurns(record, boundaryIndex);
     let action: RecapAction = decideRecap(
@@ -321,6 +352,8 @@ export async function prepareTurnRecap(
     }
 
     if (action.kind === "reuse") {
+      if (forceCompact)
+        report({ status: "skipped", reason: "nothing_to_compact" });
       // `cache` is non-null whenever decideRecap returns reuse (its contract);
       // the placeholder fallback here is defensive and theoretically unreachable.
       return {
@@ -343,6 +376,9 @@ export async function prepareTurnRecap(
     if (rt.consecutiveFailures >= cfg.maxConsecutiveRecapFailures) {
       if (rt.skippedWhileOpen < cfg.breakerProbeEveryNSkips) {
         rt.skippedWhileOpen += 1;
+        report({ status: "failed", reason: "circuit_open" });
+        if (rt.failurePolicy === "full-context")
+          return { recapBoundaryIndex: 0 };
         return {
           recap: cache?.recapText ?? placeholder(droppedTurns, lang),
           recapBoundaryIndex: boundaryIndex,
@@ -364,6 +400,10 @@ export async function prepareTurnRecap(
       agedBlocks,
       cfg.maxSummarizerInputTokens,
     );
+    if (bounded.droppedBlocks > 0 && rt.failurePolicy === "full-context") {
+      report({ status: "failed", reason: "input_limit" });
+      return { recapBoundaryIndex: 0 };
+    }
     const agedTurnsText =
       bounded.droppedBlocks > 0
         ? `${RUNTIME_TEXT[lang].elided(bounded.droppedBlocks)}\n\n${serializeTerminalRecord(bounded.blocks, { lang })}`
@@ -394,8 +434,11 @@ export async function prepareTurnRecap(
     });
 
     notify?.("start");
+    report({ status: "running" });
+    let failureReason: CompactReason = "provider";
     try {
       const text = (await rt.summarize({ system, user, signal })).trim();
+      signal.throwIfAborted();
       // Slack over the stated budget (rolls only): models overshoot char
       // counts, and a hard fail here costs a whole crossing (the failure
       // path keeps the prior recap). The concatenated total is bounded
@@ -404,7 +447,10 @@ export async function prepareTurnRecap(
         text,
         isRoll ? addendumBudget + 400 : cfg.maxRecapChars,
       );
-      if (!v.ok) throw new Error(v.reason);
+      if (!v.ok) {
+        failureReason = "invalid_summary";
+        throw new Error(v.reason);
+      }
       // Sanitize AFTER validation (the ZWSP break would blind the
       // dialogue-fence reject) and BEFORE caching: the recap is prepended
       // to every future prompt, so a summarizer-laundered forged label
@@ -417,8 +463,6 @@ export async function prepareTurnRecap(
         ? boundRolledRecap(prevRecap, safe, cfg.maxRecapChars, lang)
         : { text: safe, trimmed: false };
       const stored = bounded.text;
-      rt.consecutiveFailures = 0;
-      rt.skippedWhileOpen = 0;
       let advancesSinceRederive = isRederive
         ? 0
         : (cache?.advancesSinceRederive ?? 0) + 1;
@@ -433,12 +477,18 @@ export async function prepareTurnRecap(
           cfg.rederiveEveryNAdvances,
         );
       }
-      rt.cacheWrite({
+      const nextCache: RecapCache = {
         boundaryIndex,
         recapText: stored,
         lang,
         advancesSinceRederive,
-      });
+        generatedAt: new Date().toISOString(),
+      };
+      failureReason = "storage";
+      rt.cacheWrite(nextCache);
+      rt.consecutiveFailures = 0;
+      rt.skippedWhileOpen = 0;
+      report({ status: "completed", cache: nextCache });
       return { recap: stored, recapBoundaryIndex: boundaryIndex };
     } catch {
       // A user interrupt is not a summarizer failure: the call runs on the
@@ -447,6 +497,11 @@ export async function prepareTurnRecap(
       // call, which an open breaker prevents, so three interrupts would
       // permanently freeze compaction for the session.
       if (!signal.aborted) rt.consecutiveFailures += 1;
+      report({
+        status: "failed",
+        reason: signal.aborted ? "cancelled" : failureReason,
+      });
+      if (rt.failurePolicy === "full-context") return { recapBoundaryIndex: 0 };
       return {
         recap: cache?.recapText ?? placeholder(droppedTurns, lang),
         recapBoundaryIndex: boundaryIndex,
@@ -455,6 +510,10 @@ export async function prepareTurnRecap(
       notify?.("end");
     }
   } catch {
+    report({
+      status: "failed",
+      reason: signal.aborted ? "cancelled" : "storage",
+    });
     return { recapBoundaryIndex: 0 };
   }
 }
@@ -476,13 +535,25 @@ export function makeRecapSummarize(
       toolSchemas: [],
     };
     let buffered = "";
+    let complete = false;
     for await (const ev of provider.streamChat(
       frame,
       signal,
     ) as AsyncIterable<ProviderEvent>) {
-      if (ev.type === "text-delta") buffered += ev.text;
-      else if (ev.type === "finish") break;
+      if (ev.type === "text-delta") {
+        buffered += ev.text;
+        if (buffered.length > 128_000)
+          throw new Error("Recap response exceeds its text budget");
+      } else if (ev.type === "finish") {
+        if (ev.reason !== "stop")
+          throw new Error("Recap response did not finish successfully");
+        complete = true;
+        break;
+      } else if (ev.type === "tool-call-request")
+        throw new Error("Recap response requested a tool");
     }
+    signal.throwIfAborted();
+    if (!complete) throw new Error("Recap response ended without completion");
     return buffered;
   };
 }

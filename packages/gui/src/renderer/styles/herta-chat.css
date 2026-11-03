@@ -24,24 +24,6 @@
   ) {
   display: none;
 }
-.herta-mode-tabs {
-  display: flex;
-  align-self: stretch;
-  gap: 4px;
-  -webkit-app-region: no-drag;
-}
-.herta-mode-tabs button {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  padding: 0 16px;
-  color: var(--herta-secondary);
-}
-.herta-mode-tabs button[aria-selected="true"] {
-  color: var(--herta-accent);
-  box-shadow: inset 0 -2px var(--herta-accent);
-  background: var(--herta-panel);
-}
 .herta-chat-budget {
   display: flex;
   align-items: center;
@@ -57,79 +39,146 @@
   color: var(--herta-error);
   max-width: 55ch;
 }
-.herta-chat-panel > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--herta-border);
-}
-.herta-chat-panel header small {
-  display: block;
-  color: var(--herta-muted);
-  margin-top: 4px;
-}
 .herta-chat-body {
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
   flex: 1;
   min-height: 0;
 }
+.herta-chat-body.is-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* R46: the chat list reads like the workbench's task list: grouped rows of
+   36px, a relative time, and each row's actions behind its own ··· menu. */
 .herta-chat-history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   overflow: auto;
   min-width: 0;
   padding: 14px 10px;
   background: var(--herta-sidebar);
   border-right: 1px solid var(--herta-border);
+  font-size: 13px;
 }
-.herta-chat-history > button {
+.herta-chat-history > .herta-chat-new {
   width: 100%;
+  text-align: left;
 }
-.herta-chat-history nav {
+.herta-chat-group h2 {
+  margin: 8px 7px 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--herta-muted);
+}
+.herta-chat-group ul {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin: 16px 0;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-.herta-chat-history nav button {
-  text-align: left;
-  background: transparent;
-  border-color: transparent;
+.herta-chat-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
   min-width: 0;
+  min-height: 36px;
+  border-radius: 7px;
 }
-.herta-chat-history nav button span {
-  display: block;
+.herta-chat-row:hover {
+  background: var(--herta-panel);
+}
+.herta-chat-row.is-active {
+  background: var(--herta-elevated);
+}
+.herta-shell .herta-chat-history .herta-chat-row button {
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  color: var(--herta-secondary);
+}
+.herta-shell .herta-chat-history .herta-chat-row button:hover:not(:disabled) {
+  background: var(--herta-hover);
+  color: var(--herta-text);
+}
+.herta-shell .herta-chat-history .herta-chat-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 7px;
+  border-radius: 7px;
+  text-align: left;
+}
+.herta-shell .herta-chat-history .herta-chat-row.is-active .herta-chat-row-main {
+  color: var(--herta-text);
+}
+.herta-chat-row-title {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.herta-chat-history nav button.is-active {
-  background: var(--herta-elevated);
-  color: var(--herta-accent);
+.herta-chat-row-title > span {
+  color: var(--herta-gold);
 }
-.herta-chat-management {
+.herta-chat-row-time {
+  flex: none;
+  color: var(--herta-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.herta-shell .herta-chat-history .herta-chat-row-more {
+  flex: 0 0 28px;
+  width: 28px;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--herta-muted);
+  opacity: 0.45;
+}
+.herta-shell .herta-chat-history .herta-chat-row:is(:hover, :focus-within, .is-active) > .herta-chat-row-more,
+.herta-shell .herta-chat-history .herta-chat-row-more[aria-expanded="true"] {
+  opacity: 1;
+}
+.herta-chat-row-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding-top: 12px;
-  border-top: 1px solid var(--herta-border);
+  flex-direction: column;
+  min-width: 140px;
+  padding: 4px;
+  border: 1px solid var(--herta-border);
+  border-radius: 10px;
+  background: var(--herta-panel);
+  box-shadow: 0 8px 24px #0004;
 }
-.herta-chat-management button {
-  font-size: 12px;
-  padding: 4px 8px;
+.herta-shell .herta-chat-history .herta-chat-row-menu button {
+  min-height: 32px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--herta-text);
 }
-.herta-chat-management form {
-  min-width: 0;
+.herta-chat-rename {
   width: 100%;
+  padding: 4px;
 }
-.herta-chat-management input {
+.herta-chat-rename input {
   width: 100%;
   min-width: 0;
-  margin-bottom: 8px;
+  box-sizing: border-box;
 }
 .herta-chat-recycle {
-  margin-top: 20px;
+  margin-top: auto;
   color: var(--herta-secondary);
 }
 .herta-chat-recycle > div {
@@ -150,19 +199,34 @@
   min-width: 0;
   min-height: 0;
 }
-.herta-chat-thread-title {
+/* R46: one toolbar like the workbench's: the list toggle, the chat's name,
+   its live status and quiet actions, in place of two stacked header bars. */
+.herta-chat-toolbar {
   display: flex;
-  gap: 12px;
   align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--herta-border);
+}
+.herta-shell .herta-chat-toolbar button {
+  border-color: transparent;
+  background: transparent;
+}
+.herta-shell .herta-chat-toolbar button:hover:not(:disabled) {
+  background: var(--herta-hover);
+}
+.herta-chat-title {
+  margin: 0;
+  font: inherit;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 10px 24px;
-  color: var(--herta-secondary);
-  border-bottom: 1px solid var(--herta-border);
+  color: var(--herta-text);
 }
-.herta-chat-thread-title small {
-  margin-left: auto;
+.herta-chat-status {
   flex-shrink: 0;
   color: var(--herta-gold);
 }
@@ -170,9 +234,19 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+  /* R103: while useFollowOutput keeps the newest line in view, the browser
+     must not move it. Chromium's scroll anchoring pulled the transcript about
+     135px up, with no input, when a layout landed during the switch entrance;
+     the hook reads that as the reader leaving. */
+  overflow-anchor: none;
   padding: 24px clamp(16px, 3vw, 36px);
   scrollbar-width: thin;
   scrollbar-color: var(--herta-border) transparent;
+}
+/* Once the reader has scrolled away, anchoring keeps their place while the
+   text above reflows, as in a narrower window (R103). */
+.herta-chat-messages.is-away {
+  overflow-anchor: auto;
 }
 .herta-chat-message {
   margin: 0 0 24px;
@@ -186,6 +260,17 @@
 .herta-chat-message.is-user {
   margin-left: auto;
   background: var(--herta-elevated);
+  border-radius: 16px 16px 4px 16px;
+}
+/* The user's bubble reads like the workbench's (R73): its side already says
+   who wrote it, so 你 is kept for screen readers only. */
+.herta-chat-message.is-user > strong {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .herta-chat-message > strong {
   font-size: 12px;
@@ -203,6 +288,12 @@
 .herta-chat-empty > span {
   color: var(--herta-gold);
   font-size: 40px;
+}
+/* R132: the empty-state heading is now h2; retain its previous h1 appearance. */
+.herta-chat-empty > :is(h1, h2) {
+  margin: 0.67em 0;
+  font-size: 2em;
+  font-weight: bold;
 }
 .herta-chat-conversation > footer {
   padding: 12px 24px 20px;
@@ -232,14 +323,26 @@
   max-width: 60%;
   min-width: 0;
 }
-.herta-chat-controls span {
+/* Model, budget and the send action travel together at the row's end, so a
+   wrap never strands the send button on the left. Every button used to take
+   an auto margin, which scattered the row into uneven gaps (R44). */
+.herta-chat-send-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
   margin-left: auto;
-  color: var(--herta-muted);
-  font-size: 12px;
-  white-space: nowrap;
 }
-.herta-chat-controls button {
-  margin-left: auto;
+/* Long "model · provider" names are cut short of the native arrow instead of
+   running under it (R62). */
+.herta-chat-controls .herta-chat-send-group > select {
+  max-width: 300px;
+  padding-right: 24px;
+  text-overflow: ellipsis;
+}
+.herta-chat-send-group > :is(.herta-chat-send, .herta-chat-stop) {
   flex-shrink: 0;
 }
 .herta-chat-panel [role="alert"] {
@@ -276,9 +379,6 @@
   padding-top: 10px;
 }
 @media (max-width: 900px) {
-  .herta-chat-controls span {
-    display: none;
-  }
   .herta-chat-controls select {
     max-width: 75%;
   }
@@ -296,8 +396,9 @@
   .herta-chat-panel textarea {
     min-height: 54px;
   }
-  .herta-chat-panel > header {
-    padding: 8px 16px;
+  .herta-chat-toolbar {
+    min-height: 44px;
+    padding: 4px 16px;
   }
 }
 
@@ -308,9 +409,6 @@
   }
   .herta-title .herta-version {
     display: none;
-  }
-  .herta-mode-tabs button {
-    padding: 0 10px;
   }
 }
 
@@ -362,6 +460,11 @@
   display: block;
   color: var(--herta-muted);
 }
+/* Storage groups: one ending in block-level small print otherwise touches the
+   next group's heading (R53). */
+.herta-chat-memory section + section {
+  margin-top: 16px;
+}
 .herta-chat-attachment pre {
   max-height: 240px;
   overflow: auto;
@@ -374,16 +477,6 @@
 .herta-chat-upload input {
   width: 170px;
   font-size: 11px;
-}
-.herta-chat-pending-files {
-  max-height: min(240px, 25vh);
-  overflow: auto;
-  font-size: 12px;
-}
-.herta-chat-pending-files li {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
 }
 .herta-memory-proposal {
   border: 1px solid var(--herta-border);
@@ -444,12 +537,106 @@
   outline: 2px solid var(--herta-accent);
 }
 
-.herta-chat-pending-files details { min-width: 0; flex: 1; }
-.herta-chat-pending-files pre { max-height: 200px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
-
-.herta-chat-pending-files { padding: 8px 12px; border: 1px solid var(--herta-border); border-radius: 10px; }
-.herta-chat-pending-files p { margin: 8px 0; color: var(--herta-muted); }
-.herta-chat-pending-files pre { max-height: 120px; margin: 8px 0; }
-
 .herta-chat-image { display:block; max-width:100%; max-height:320px; object-fit:contain; border-radius:8px; margin:8px 0; }
 .herta-chat-image-notice { margin:8px 0; color:var(--text-muted); font-size:12px; }
+
+/* R44: chat pictures open the shared viewer. */
+.herta-shell .herta-chat-panel button.herta-chat-image-button {
+  display: block;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: zoom-in;
+}
+.herta-chat-image-button .herta-chat-image {
+  margin: 0;
+}
+/* R44: floats at the transcript's foot while the reader is away from it. */
+.herta-shell .herta-chat-panel .herta-chat-latest {
+  position: sticky;
+  bottom: 8px;
+  z-index: 2;
+  display: block;
+  width: fit-content;
+  margin: 0 auto;
+  border-radius: 999px;
+  font-size: 12px;
+  box-shadow: 0 6px 18px #0004;
+}
+
+/* R43: button rows inside the chat storage dialog. */
+.herta-chat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+/* R46: round composer controls like the workbench's: "+" to attach, ↑ to
+   send, ■ to stop; their names live in aria-label and the tooltip. */
+.herta-shell .herta-chat-controls .herta-chat-upload {
+  justify-content: center;
+  align-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 20px;
+  line-height: 1;
+}
+.herta-shell .herta-chat-send-group > :is(.herta-chat-send, .herta-chat-stop) {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 18px;
+}
+.herta-shell .herta-chat-send-group > .herta-chat-send {
+  border-color: var(--herta-accent);
+  background: var(--herta-accent);
+  color: var(--herta-on-accent);
+}
+.herta-shell .herta-chat-send-group > .herta-chat-send:disabled {
+  opacity: 0.45;
+  color: var(--herta-on-accent);
+}
+/* R46: under the box, like the workbench's metrics row: what the next reply
+   reads, with the 续聊范围 settings opening above as a popover. */
+.herta-chat-meta {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 16px;
+  margin-top: 6px;
+  color: var(--herta-muted);
+  font-size: 12px;
+}
+.herta-chat-meta .herta-chat-context {
+  margin: 0;
+}
+.herta-chat-meta .herta-chat-context > summary {
+  cursor: pointer;
+}
+.herta-chat-meta .herta-chat-context[open] > div {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  width: min(560px, 100%);
+  max-height: min(60vh, 420px);
+  margin: 0 auto;
+  padding: 14px 16px;
+  overflow: auto;
+  border: 1px solid var(--herta-border);
+  border-radius: 12px;
+  background: var(--herta-panel);
+  box-shadow: 0 12px 32px #0005;
+  color: var(--herta-secondary);
+  text-align: left;
+}

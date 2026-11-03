@@ -362,8 +362,6 @@ describe("stepDisplayBody — attachment rows, incl. PDF / Word (ADR 0038)", () 
     "activity.attachment.unreadable.readError": "读取失败",
     "activity.attachment.outline": "目录 {n} 条",
     "activity.attachment.image": "图片 {f}",
-    "activity.attachment.unreadable.imageTooLarge": "图片过大，未能读图",
-    "activity.attachment.unreadable.noCaption": "已存图片，未能读图",
   };
   const ta = (key: MessageKey): string => A[key] ?? `MISSING:${key}`;
   const att = (digest: Record<string, unknown>): SystemBlock =>
@@ -553,7 +551,7 @@ describe("stepDisplayBody — attachment rows, incl. PDF / Word (ADR 0038)", () 
     ).toBe("附件 pic.webp · 图片 WEBP · 一只猫。");
   });
 
-  it("an uncaptioned image says stored-not-read, and still shows what it is", () => {
+  it("an uncaptioned image only says what it is: the picture itself is sent since R77 (R83)", () => {
     expect(
       stepDisplayBody(
         att({
@@ -563,12 +561,12 @@ describe("stepDisplayBody — attachment rows, incl. PDF / Word (ADR 0038)", () 
         }),
         ta,
       ),
-    ).toBe("附件 shot.png · 图片 PNG · 800×600 · 已存图片，未能读图");
+    ).toBe("附件 shot.png · 图片 PNG · 800×600");
   });
 
-  it("too_large on an IMAGE reads as its own reason, not the document ones", () => {
-    // Four meanings share `too_large`; the image one must not borrow a
-    // document's phrasing (mirrors app-server's reasonFor).
+  it("too_large on an IMAGE borrows no document reason and claims no failed read (R83)", () => {
+    // Over the caption ceiling only; sending rescales it (R77), and a picture
+    // that cannot be sent is reported by that turn.
     expect(
       stepDisplayBody(
         att({
@@ -578,7 +576,7 @@ describe("stepDisplayBody — attachment rows, incl. PDF / Word (ADR 0038)", () 
         }),
         ta,
       ),
-    ).toBe("附件 huge.png · 图片 PNG · 9000×9000 · 图片过大，未能读图");
+    ).toBe("附件 huge.png · 图片 PNG · 9000×9000");
   });
 });
 

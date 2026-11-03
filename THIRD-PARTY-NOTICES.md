@@ -21,6 +21,8 @@ Not listed here, because they travel separately:
 
 | Package | Version | License | Bundled into |
 |---|---|---|---|
+| @jitl/quickjs-ffi-types | 0.32.0 | MIT | main process |
+| @jitl/quickjs-wasmfile-release-sync | 0.32.0 | MIT | main process |
 | builder-util-runtime | 9.7.0 | MIT | main process |
 | debug | 4.4.3 | MIT | main process |
 | dompurify | 3.4.14 | (MPL-2.0 OR Apache-2.0) | renderer |
@@ -28,6 +30,7 @@ Not listed here, because they travel separately:
 | fflate | 0.8.3 | MIT | main process |
 | fs-extra | 10.1.0 | MIT | main process |
 | graceful-fs | 4.2.11 | ISC | main process |
+| gsap | 3.15.0 | Standard 'no charge' license: https://gsap.com/standard-license. | renderer |
 | has-flag | 4.0.0 | MIT | main process |
 | highlight.js | 11.12.0 | BSD-3-Clause | renderer |
 | js-yaml | 4.3.2 | MIT | main process |
@@ -38,6 +41,7 @@ Not listed here, because they travel separately:
 | marked | 18.0.11 | MIT | renderer |
 | ms | 2.1.3 | MIT | main process |
 | pdfjs-dist | 6.2.108 | Apache-2.0 | main process |
+| quickjs-emscripten-core | 0.32.0 | MIT | main process |
 | react | 18.3.1 | MIT | renderer |
 | react-dom | 18.3.1 | MIT | renderer |
 | sax | 1.6.0 | BlueOak-1.0.0 | main process |
@@ -49,6 +53,91 @@ Not listed here, because they travel separately:
 | zod-to-json-schema | 3.25.2 | ISC | main process |
 
 ## Licenses
+
+### @jitl/quickjs-ffi-types 0.32.0 — MIT
+
+- Author: Jake Teton-Landis
+- Source: https://github.com/justjake/quickjs-emscripten
+- Bundled into: main process
+
+```text
+The MIT License
+
+quickjs-emscripten copyright (c) 2019-2024 Jake Teton-Landis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### @jitl/quickjs-wasmfile-release-sync 0.32.0 — MIT
+
+- Author: Jake Teton-Landis
+- Source: https://github.com/justjake/quickjs-emscripten
+- Bundled into: main process
+
+```text
+quickjs-emscripten:
+The MIT License
+
+quickjs-emscripten copyright (c) 2019-2024 Jake Teton-Landis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+quickjs:
+QuickJS Javascript Engine
+
+Copyright (c) 2017-2021 Fabrice Bellard
+Copyright (c) 2017-2021 Charlie Gordon
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+```
 
 ### builder-util-runtime 9.7.0 — MIT
 
@@ -423,6 +512,66 @@ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
 WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
 IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+```
+
+### gsap 3.15.0 — Standard 'no charge' license: https://gsap.com/standard-license.
+
+- Source: https://github.com/greensock/GSAP
+- Bundled into: renderer
+
+```text
+Standard "No Charge" GSAP License
+
+Source: https://gsap.com/standard-license (retrieved 2026-10-20 for GSAP 3.15.0, which
+ships no license file; its package.json declares this license).
+
+I. DEFINITIONS
+
+- “GSAP License” means the terms and conditions of this GSAP Software License Agreement.
+
+- "GSAP Products" means any Software made available at gsap.com or any successor sites, including but not limited to the GSAP animation library and related plugins, tools, or extensions.
+
+- "Permitted Uses" means the implementation and/or use of GSAP Products on any website, web application, or digital interface by any person or entity (which may include, for clarity, those of companies that compete with Webflow in other areas of business).
+
+- "Prohibited Uses" means any implementation and/or use of GSAP Products in tools that allow users to build visual animations without code that encourages, induces, or materially assists in creating a solution that competes with Webflow’s visual animation building capabilities.
+
+- "Competitive Products" means any software, tool, or service that enables users to create, edit, or manage animations through a visual interface or builder similar to Webflow.
+
+II. GRANT OF LICENSE
+
+Subject to the terms and conditions of this GSAP License, Webflow grants you a non-exclusive, worldwide license to use, reproduce, display, and implement GSAP Products solely for Permitted Uses.
+
+III. RESTRICTIONS
+
+You may not:
+
+- Use any GSAP Products for any Prohibited Uses without prior written consent;
+
+- Reverse engineer any GSAP Products for the purpose of creating Competitive Products;
+
+- Remove or alter any proprietary notices or branding from GSAP Products.
+
+IV. OWNERSHIP AND INTELLECTUAL PROPERTY
+
+All intellectual property rights in GSAP Products, including but not limited to copyright, patents, trademarks, and trade secrets, remain the exclusive property of Webflow. This GSAP License does not transfer any ownership rights in GSAP Products to you.
+
+V. TERMINATION
+
+Webflow may terminate this GSAP License and revoke your access in its discretion if you fail to comply with any of these terms and conditions. Upon termination, you must cease all use of GSAP Products and destroy all copies in your possession.
+
+VI. MISCELLANEOUS PROVISIONS
+
+- General: This GSAP License is incorporated into and subject to Webflow’s Terms of Service available here ("Terms of Service"). In the event of any conflict or inconsistency between this GSAP License and the Terms of Service, the terms of this GSAP License shall govern in relation to your use of any GSAP Products.
+
+- Amendments: Webflow reserves the right to update or modify this GSAP License at any time by posting the revised terms on this website, provided that any such updates or modifications shall not result in any material degradation to the security, integrity, or functionality of any GSAP Products. You understand and agree that your continued use of any GSAP Products after such revisions to this GSAP License constitutes your acceptance of this GSAP License as revised. If you do not accept the revised GSAP License, you are prohibited from using versions of the GSAP Products released after the effective date of the revised GSAP License (as well as any updates made to previous versions). Notwithstanding, you may continue using previous versions of GSAP Products under the applicable terms licensed to you prior to the effective date of the revised GSAP License (for clarity, excluding any updates made thereto).
+
+- No Waiver: Failure of Webflow to enforce any provision of this GSAP License shall not constitute a waiver of future enforcement of that or any other provision.
+
+Effective date: April 30, 2025
+
+Last modified date: May 30, 2025
+
+Copyright (©) 2025, Webflow
 ```
 
 ### has-flag 4.0.0 — MIT
@@ -939,6 +1088,36 @@ Apache License
       of your accepting any such warranty or additional liability.
 
    END OF TERMS AND CONDITIONS
+```
+
+### quickjs-emscripten-core 0.32.0 — MIT
+
+- Author: Jake Teton-Landis
+- Source: https://github.com/justjake/quickjs-emscripten
+- Bundled into: main process
+
+```text
+The MIT License
+
+quickjs-emscripten copyright (c) 2019-2024 Jake Teton-Landis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```
 
 ### react 18.3.1 — MIT

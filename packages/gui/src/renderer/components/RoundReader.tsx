@@ -1,4 +1,5 @@
 import type { RoundFileContent } from "@herta/app-server";
+import { Icon } from "./Icon.js";
 import {
   memo,
   type ReactNode,
@@ -288,11 +289,17 @@ export interface RoundReaderProps {
 export function RoundReader({ content, loading, onClose }: RoundReaderProps) {
   const closeButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    closeButton.current?.focus();
+    closeButton.current?.focus({ preventScroll: true });
   }, []);
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      // The composer stays usable beside the reader; an IME's Escape only
+      // cancels its candidate there (R44).
+      if (
+        event.key === "Escape" &&
+        !event.isComposing &&
+        event.keyCode !== 229
+      ) {
         event.preventDefault();
         onClose();
       }
@@ -319,7 +326,7 @@ export function RoundReader({ content, loading, onClose }: RoundReaderProps) {
           onClick={onClose}
           ref={closeButton}
         >
-          ×
+          <Icon name="close" />
         </button>
       </header>
       {loading ? (

@@ -86,6 +86,49 @@ describe("createExportSaver (ADR 0072 §3)", () => {
     ]);
   });
 
+  it("masks secret-shaped text before writing, whichever export it is (F09 /export, R124)", async () => {
+    const f = fakeDeps();
+    const key = `sk-${"a1".repeat(12)}`;
+    const markdown = [
+      "# 会话",
+      `用这个 ${key} 调用`,
+      "DEEPSEEK_API_KEY=abc123",
+      "-----BEGIN PRIVATE KEY-----\nMIIBVQ\n-----END PRIVATE KEY-----",
+      "普通的 token 计数与 sk- 前缀说明",
+    ].join("\n");
+    expect(await createExportSaver(f.deps)("会话", markdown)).toEqual({
+      saved: true,
+    });
+    const written = f.written[0]?.[1] ?? "";
+    expect(written).not.toContain(key);
+    expect(written).not.toContain("abc123");
+    expect(written).not.toContain("MIIBVQ");
+    expect(written).toContain("用这个 [REDACTED:api_key] 调用");
+    expect(written).toContain("DEEPSEEK_API_KEY=[REDACTED:env_secret]");
+    expect(written).toContain("[REDACTED:private_key]");
+    // Ordinary words stay as written.
+    expect(written.startsWith("# 会话\n")).toBe(true);
+    expect(written).toContain("普通的 token 计数与 sk- 前缀说明");
+  });
+
+  it("masks secret-shaped text in the suggested file name too: a title can be the first message (R126)", async () => {
+    const f = fakeDeps();
+    const key = `sk-${"a1".repeat(12)}`;
+    const save = createExportSaver(f.deps);
+    expect(await save(`用这个 ${key} 调用`, "# 会话\n")).toEqual({
+      saved: true,
+    });
+    expect(await save("DEEPSEEK_API_KEY=abc123 排查", "# 会话\n")).toEqual({
+      saved: true,
+    });
+    expect(f.offered).toEqual([
+      join("C:", "Docs", "用这个 [REDACTED api_key] 调用.md"),
+      join("D:", "exports", "DEEPSEEK_API_KEY=[REDACTED env_secret] 排查.md"),
+    ]);
+    expect(f.offered.join("\n")).not.toContain("a1a1");
+    expect(f.offered.join("\n")).not.toContain("abc123");
+  });
+
   it("writes nothing when the dialog is cancelled", async () => {
     const f = fakeDeps({ showSaveDialog: async () => ({ canceled: true }) });
     expect(await createExportSaver(f.deps)("x", "y")).toEqual({ saved: false });

@@ -51,11 +51,15 @@
   cursor: pointer;
   list-style: none;
 }
+/* One rotated "›" for every disclosure: "⌄"/"⌃" sit below the text
+   baseline in the UI font and looked misaligned (R44). */
 .round-process > summary::after {
-  content: "⌄";
+  content: "›";
+  display: inline-block;
+  transform: rotate(90deg);
 }
 .round-process[open] > summary::after {
-  content: "⌃";
+  transform: rotate(-90deg);
 }
 .round-process-hint {
   margin-left: auto;
@@ -110,7 +114,7 @@
   color: var(--round-muted);
 }
 .round-tool details[open] > summary::before {
-  content: "⌄";
+  transform: rotate(90deg);
 }
 .round-tool-title {
   min-width: 0;
@@ -274,8 +278,11 @@
   gap: 10px;
   min-width: 0;
 }
+/* The link sizes to its text so its dotted underline marks the path only;
+   the free space goes to the margin, not the underline (R67). */
 .round-file-main .round-file-link {
-  flex: 1;
+  flex: 0 1 auto;
+  margin-right: auto;
 }
 .round-file-main small {
   color: var(--round-muted);
@@ -308,8 +315,13 @@
   cursor: pointer;
 }
 .round-task-card > summary::after {
-  content: "⌄";
+  content: "›";
+  display: inline-block;
   margin-left: auto;
+  transform: rotate(90deg);
+}
+.round-task-card[open] > summary::after {
+  transform: rotate(-90deg);
 }
 .round-task-card > summary > span {
   color: var(--round-muted);
@@ -325,12 +337,6 @@
   flex: 1;
   overflow-wrap: anywhere;
   min-width: 0;
-}
-.round-task-note {
-  padding: 4px 16px 10px;
-  font-size: 11px;
-  color: var(--round-muted);
-  margin: 0;
 }
 .round-limitations {
   color: var(--round-muted);

@@ -14,9 +14,6 @@ const TRACK_TMP_DIRS = "./packages/core/test-setup/track-tmp-dirs.ts";
 // packages/gui.
 export default defineConfig({
   test: {
-    // Once per run: sweep the `herta-*` temp dirs earlier runs left behind
-    // (the ones a test process itself held open — see the file's header).
-    globalSetup: ["./packages/core/test-setup/sweep-tmp-dirs.ts"],
     projects: [
       // Default project: all non-gui packages. Node environment,
       // .test.ts only (no React / JSX in these packages).
@@ -49,17 +46,6 @@ export default defineConfig({
             "packages/gui/src/vitest-dom-free.test.ts",
           ],
           setupFiles: [TRACK_TMP_DIRS],
-        },
-      },
-      // Website project (audit T3.7): the demo lives OUTSIDE packages/, so
-      // it was invisible to the runner and any test written there silently
-      // never ran (masked by passWithNoTests). No tests exist yet; this
-      // entry makes future ones actually execute.
-      {
-        test: {
-          name: "website",
-          include: ["website/src/**/*.test.ts"],
-          passWithNoTests: true,
         },
       },
     ],

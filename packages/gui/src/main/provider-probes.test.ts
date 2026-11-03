@@ -4,6 +4,8 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { inflateSync } from "node:zlib";
+import { imageSupport } from "@herta/providers/images";
 import type { ProtocolAdapter, ProviderProtocol } from "@herta/providers";
 import { beforeEach, expect, it, vi } from "vitest";
 
@@ -27,6 +29,7 @@ import {
   discoverProviderModels,
   validateProviderModel,
 } from "./provider-probes.js";
+import { PROBE_PALETTE } from "./probe-image.js";
 import {
   acquireTurnProviders,
   deleteProvider,
@@ -255,7 +258,7 @@ it.each([
         },
       }),
   );
-  expect(result.validation.state).toBe("failed");
+  expect(result.validation.state).toBe(mode === "truncated" ? "unverified" : "failed");
   expect(result.view.settings.providers[0]!.models[0]!.capabilities.tools).toBe(
     "unknown",
   );
@@ -370,3 +373,283 @@ it("unknown executor tools fail before acquiring a turn", async () => {
   expect(() => acquireTurnProviders("s", "t")).toThrow("工具能力验证");
   expect(deleteProvider(p.id).settings.providers).toHaveLength(0);
 });
+
+/** Read the probe picture back the way a model would have to: decode its pixels and name the
+ *  colour of each square from the palette (the generator writes one IDAT, filter 0 rows). */
+function readProbePicture(base64: string): string[] {
+  const png = Buffer.from(base64, "base64");
+  expect(png.subarray(0, 8)).toEqual(
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  );
+  const width = png.readUInt32BE(16);
+  const chunks: Buffer[] = [];
+  for (let at = 8; at < png.length; ) {
+    const length = png.readUInt32BE(at);
+    if (png.toString("ascii", at + 4, at + 8) === "IDAT")
+      chunks.push(png.subarray(at + 8, at + 8 + length));
+    at += length + 12;
+  }
+  const raw = inflateSync(Buffer.concat(chunks));
+  const at = (x: number, y: number) => {
+    const i = y * (width * 3 + 1) + 1 + x * 3;
+    const rgb = [raw[i], raw[i + 1], raw[i + 2]];
+    return Object.entries(PROBE_PALETTE).find(([, c]) =>
+      c.every((v, k) => v === rgb[k]),
+    )![0];
+  };
+  const q = width / 4;
+  return [at(q, q), at(3 * q, q), at(q, 3 * q), at(3 * q, 3 * q)];
+}
+
+it("image probe sends a generated picture and admits images only when its colours come back (R77)", async () => {
+  const p = create("openai-chat-completions");
+  const input = { providerId: p.id, expectedRevision: p.revision, modelId: "manual" };
+  await validateProviderModel({ ...input, kind: "text" }, () => adapter());
+  let seen: { images: number; mime?: string; supportedForProbe?: string } = { images: 0 };
+  const result = await validateProviderModel({ ...input, kind: "images" }, (config) =>
+    adapter({
+      async *stream(request) {
+        const user = request.messages[0];
+        const images = user?.role === "user" ? (user.images ?? []) : [];
+        seen = {
+          images: images.length,
+          mime: images[0]?.mimeType,
+          supportedForProbe: config.models.find((m) => m.id === "manual")
+            ?.capabilities.images,
+        };
+        yield { type: "text-delta", text: `${readProbePicture(images[0]!.data).join(" ")}.` };
+        yield { type: "finished", reason: "stop" };
+      },
+    }),
+  );
+  expect(seen).toEqual({ images: 1, mime: "image/png", supportedForProbe: "supported" });
+  expect(result.images).toEqual({ supported: true });
+  const model = result.view.settings.providers[0]!.models[0]!;
+  expect(model.capabilities.images).toBe("supported");
+  // The text validation is the text probe's, untouched by the image probe.
+  expect(model.validation.state).toBe("text-available");
+  expect(
+    imageSupport(result.view.settings.providers[0]!, "manual"),
+  ).toBe(true);
+});
+
+it("a wrong colour reading or a refused request leaves images unsupported (R77)", async () => {
+  const p = create("openai-chat-completions");
+  const input = { providerId: p.id, expectedRevision: p.revision, modelId: "manual" };
+  // Pinned: the picture is red, green / blue, yellow, and the reply swaps the top two.
+  const random = vi.spyOn(Math, "random").mockReturnValue(0);
+  const guess = await validateProviderModel({ ...input, kind: "images" }, () =>
+    adapter({
+      async *stream(request) {
+        const user = request.messages[0];
+        expect(user?.role === "user" && readProbePicture(user.images![0]!.data)).toEqual(
+          ["red", "green", "blue", "yellow"],
+        );
+        yield { type: "text-delta", text: "green red blue yellow" };
+        yield { type: "finished", reason: "stop" };
+      },
+    }),
+  );
+  random.mockRestore();
+  expect(guess.images?.supported).toBe(false);
+  const refused = await validateProviderModel({ ...input, kind: "images" }, () =>
+    adapter({
+      async *stream() {
+        throw Object.assign(new Error("400"), { status: 400 });
+      },
+    }),
+  );
+  expect(refused.images?.supported).toBe(false);
+  expect(refused.images?.diagnostic).toBeTruthy();
+  const model = refused.view.settings.providers[0]!.models[0]!;
+  expect(model.capabilities.images).toBe("unsupported");
+  expect(model.validation.state).toBe("unverified");
+  expect(imageSupport(refused.view.settings.providers[0]!, "manual")).toBe(false);
+});
+
+it("text and tool probes never admit images (R77)", async () => {
+  const p = create("openai-chat-completions");
+  const input = { providerId: p.id, expectedRevision: p.revision, modelId: "manual" };
+  await validateProviderModel({ ...input, kind: "text" }, () => adapter());
+  const tools = await validateProviderModel({ ...input, kind: "tools" }, () =>
+    adapter({
+      async *stream(request) {
+        const nonce = (request.tools[0]?.inputSchema as { properties: { nonce: { enum: string[] } } }).properties.nonce.enum[0];
+        yield { type: "tool-call-ready", call: { id: "c", tool: "herta_probe", input: { nonce } } };
+        yield { type: "finished", reason: "tool-calls" };
+      },
+    }),
+  );
+  expect(tools.validation.state).toBe("tools-available");
+  expect(tools.view.settings.providers[0]!.models[0]!.capabilities.images).toBe("unknown");
+  expect(imageSupport(tools.view.settings.providers[0]!, "manual")).toBe(false);
+});
+
+// R104 (F06): only an answer from the model, or the server refusing the request, changes a saved
+// result; a credential, network, timeout, rate-limit or server failure keeps it.
+const toolsAdapter = () =>
+  adapter({
+    async *stream(request) {
+      const nonce = (request.tools[0]?.inputSchema as { properties: { nonce: { enum: string[] } } }).properties.nonce.enum[0];
+      yield { type: "tool-call-ready", call: { id: "c", tool: "herta_probe", input: { nonce } } };
+      yield { type: "finished", reason: "tool-calls" };
+    },
+  });
+const failing = (error: unknown) =>
+  adapter({
+    // biome-ignore lint/correctness/useYield: the request fails before any event
+    async *stream() {
+      throw error;
+    },
+  });
+const timeout = () => Object.assign(new Error("timed out"), { name: "TimeoutError" });
+
+it.each([
+  ["network", () => Object.assign(new Error("net"), { code: "network" }), "transient"],
+  ["timeout", timeout, "transient"],
+  ["rate limit", () => Object.assign(new Error("429"), { code: "http", status: 429 }), "transient"],
+  ["server error", () => Object.assign(new Error("503"), { code: "http", status: 503 }), "transient"],
+  ["unrecognised", () => new Error("odd"), "transient"],
+  ["credential", () => Object.assign(new Error("401"), { code: "http", status: 401 }), "authentication"],
+] as const)("a %s failure keeps the saved text/tool result (F06)", async (_name, error, reason) => {
+  const p = create();
+  const input = { providerId: p.id, modelId: "manual", expectedRevision: 1 };
+  await validateProviderModel({ ...input, kind: "text" }, () => adapter());
+  const before = await validateProviderModel({ ...input, kind: "tools" }, toolsAdapter);
+  expect(before.validation.state).toBe("tools-available");
+  for (const kind of ["text", "tools"] as const) {
+    const result = await validateProviderModel({ ...input, kind }, () => failing(error()));
+    expect(result.kept?.reason).toBe(reason);
+    expect(result.kept?.diagnostic).toBeTruthy();
+    expect(result.validation).toEqual(before.validation);
+  }
+  const model = getProviderSettings().settings.providers[0]!.models[0]!;
+  expect(model.validation).toEqual(before.validation);
+  expect(model.capabilities.tools).toBe("supported");
+});
+
+it("a transient failure on an unverified model leaves it unverified, not failed (F06)", async () => {
+  const p = create();
+  const result = await validateProviderModel(
+    { providerId: p.id, modelId: "manual", expectedRevision: 1, kind: "text" },
+    () => failing(timeout()),
+  );
+  expect(result.kept?.reason).toBe("transient");
+  expect(result.validation.state).toBe("unverified");
+});
+
+it("a refused request or a missing model still fails the text probe (F06)", async () => {
+  const p = create();
+  const input = { providerId: p.id, modelId: "manual", expectedRevision: 1, kind: "text" as const };
+  await validateProviderModel(input, () => adapter());
+  for (const status of [400, 404]) {
+    const result = await validateProviderModel(input, () =>
+      failing(Object.assign(new Error(String(status)), { code: "http", status })),
+    );
+    expect(result.kept).toBeUndefined();
+    expect(result.validation.state).toBe("failed");
+    expect(result.validation.diagnostic).not.toContain("请检查连接与服务状态");
+  }
+});
+
+it("a failed tool probe keeps a current text result instead of failing the model (F06)", async () => {
+  const p = create();
+  const input = { providerId: p.id, modelId: "manual", expectedRevision: 1 };
+  await validateProviderModel({ ...input, kind: "text" }, () => adapter());
+  const passed = await validateProviderModel({ ...input, kind: "tools" }, toolsAdapter);
+  // The model answers in text instead of calling the tool: a fact about tools, not about text.
+  const result = await validateProviderModel({ ...input, kind: "tools" }, () => adapter());
+  expect(result.kept).toBeUndefined();
+  expect(result.validation.state).toBe("text-available");
+  expect(result.validation.checkedAt).toBe(passed.validation.checkedAt);
+  // Says what the model did, not "check the connection".
+  expect(result.validation.diagnostic).toBe("模型有回复，但没有按要求调用测试工具，工具能力未确认。");
+  expect(result.view.settings.providers[0]!.models[0]!.capabilities.tools).toBe("unknown");
+  // A refused tool request is the same kind of answer.
+  const refused = await validateProviderModel({ ...input, kind: "tools" }, () =>
+    failing(Object.assign(new Error("400"), { code: "http", status: 400 })),
+  );
+  expect(refused.validation.state).toBe("text-available");
+  expect(refused.validation.diagnostic).toContain("HTTP 400");
+});
+
+it("a transient or credential failure keeps a passed image result (F06)", async () => {
+  const p = create("openai-chat-completions");
+  const input = { providerId: p.id, expectedRevision: p.revision, modelId: "manual", kind: "images" as const };
+  await validateProviderModel(input, () =>
+    adapter({
+      async *stream(request) {
+        const user = request.messages[0];
+        const images = user?.role === "user" ? (user.images ?? []) : [];
+        yield { type: "text-delta", text: readProbePicture(images[0]!.data).join(" ") };
+        yield { type: "finished", reason: "stop" };
+      },
+    }),
+  );
+  for (const error of [timeout(), Object.assign(new Error("401"), { code: "http", status: 401 })]) {
+    const result = await validateProviderModel(input, () => failing(error));
+    expect(result.kept).toBeTruthy();
+    expect(result.images).toBeUndefined();
+    expect(result.view.settings.providers[0]!.models[0]!.capabilities.images).toBe("supported");
+  }
+});
+
+it("an older probe that finishes after a newer one does not overwrite it (F06)", async () => {
+  const p = create();
+  const input = { providerId: p.id, modelId: "manual", expectedRevision: 1, kind: "text" as const };
+  let release!: () => void;
+  const gate = new Promise<void>((done) => {
+    release = done;
+  });
+  // The first probe is still waiting for its answer when the second one starts and passes.
+  const first = validateProviderModel(input, () =>
+    adapter({
+      async *stream() {
+        await gate;
+        yield { type: "text-delta", text: "" };
+        yield { type: "finished", reason: "stop" };
+      },
+    }),
+  );
+  const second = await validateProviderModel(input, () => adapter());
+  expect(second.validation.state).toBe("text-available");
+  release();
+  const late = await first;
+  expect(late.superseded).toBe(true);
+  expect(late.validation).toEqual(second.validation);
+  expect(getProviderSettings().settings.providers[0]!.models[0]!.validation.state).toBe(
+    "text-available",
+  );
+});
+
+it.each(["text", "tools", "images"] as const)("R108 incomplete %s probes preserve prior capabilities", async kind => {
+  const p = create();
+  const input = { providerId: p.id, modelId: "manual", expectedRevision: p.revision };
+  await validateProviderModel({ ...input, kind: "tools" }, toolsAdapter);
+  await validateProviderModel({ ...input, kind: "images" }, () => adapter({ async *stream(request) {
+    const message = request.messages[0];
+    if (message?.role !== "user") throw new Error("fixture");
+    yield { type: "text-delta", text: readProbePicture(message.images![0]!.data).join(" ") };
+    yield { type: "finished", reason: "stop" };
+  } }));
+  const before = getProviderSettings().settings.providers[0]!.models[0]!;
+  for (const ending of ["missing", "length"] as const) {
+    const result = await validateProviderModel({ ...input, kind }, () => adapter({ async *stream() {
+      yield { type: "text-delta", text: "partial answer" };
+      if (ending === "length") yield { type: "finished", reason: "length" };
+    } }));
+    expect(result.kept?.reason).toBe("transient");
+    expect(result.kept?.diagnostic).toContain("未正常结束");
+    expect(getProviderSettings().settings.providers[0]!.models[0]).toEqual(before);
+    expect(result.images).toBeUndefined();
+  }
+});
+it("R108 an incomplete first probe does not validate an unknown model", async () => {
+  const p = create();
+  const result = await validateProviderModel({ providerId: p.id, modelId: "manual", expectedRevision: p.revision, kind: "text" }, () => adapter({ async *stream() {
+    yield { type: "finished", reason: "length" };
+  } }));
+  expect(result.validation.state).toBe("unverified");
+  expect(result.kept?.reason).toBe("transient");
+});
+

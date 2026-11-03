@@ -427,6 +427,13 @@ export type SystemBlockDigest =
         readonly path: string;
         readonly entries: number;
       };
+      /** The user's choice for a PICTURE (F04, R115): `"stopped"` means it is
+       *  no longer sent to any model from the next request on. The row, its
+       *  stored copy and its preview all stay, and dropping the field sends it
+       *  again. Absent on every other row and on records persisted before F04,
+       *  which send their pictures as before; earlier versions keep the field
+       *  but do not know it. Any other value is reserved and read as absent. */
+      readonly modelUse?: "stopped";
     }
   | {
       /** A search_text result (2026-08-17). Same lifecycle split as `excerpt`:

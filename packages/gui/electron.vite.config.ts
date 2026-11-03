@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { createRequire } from "node:module";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
 import type { Plugin } from "vite";
@@ -119,6 +120,17 @@ function ttsWorker(): Plugin {
   };
 }
 
+/** Offline interpreter payload; no runtime CDN or plugin-supplied WASM path. */
+function pluginInterpreter(): Plugin {
+  return {
+    name: "herta-plugin-interpreter",
+    generateBundle() {
+      const wasm = createRequire(import.meta.url).resolve("@jitl/quickjs-wasmfile-release-sync/wasm");
+      this.emitFile({ type: "asset", fileName: "plugin-quickjs.wasm", source: readFileSync(wasm) });
+    },
+  };
+}
+
 export default defineConfig({
   // Main + preload BUNDLE their entire dependency graph (packaging strategy,
   // 2026-07-06): the former externalizeDepsPlugin left @herta/* as runtime
@@ -132,10 +144,18 @@ export default defineConfig({
   main: {
     plugins: [
       bundleManifest("main"),
+      pluginInterpreter(),
       ...(PRODUCT_PROFILE.voice ? [ttsWorker()] : []),
     ],
     build: { outDir: "out/main", rollupOptions: {
-      input: { index: resolve(__dirname, "src/main/index.ts"), "chat-storage-worker": resolve(__dirname, "src/main/chat-storage-worker.ts") },
+      preserveEntrySignatures: "strict",
+      input: {
+        index: resolve(__dirname, "src/main/index.ts"),
+        "chat-storage-worker": resolve(__dirname, "src/main/chat-storage-worker.ts"),
+        "plugin-utility": resolve(__dirname, "src/main/plugins/plugin-utility.ts"),
+        "plugin-guest-worker": resolve(__dirname, "src/main/plugins/plugin-guest-worker.ts"),
+        "plugin-runtime": resolve(__dirname, "src/main/plugins/electron-plugin-runtime.ts"),
+      },
       output: { entryFileNames: "[name].js" },
     } },
   },
@@ -170,5 +190,9 @@ export default defineConfig({
         input: resolve(__dirname, "src/renderer/index.html"),
       },
     },
+    // Keep the libraries' own legal comments (moved to the end of each
+    // chunk) instead of stripping them: GSAP's standard license forbids
+    // removing its proprietary notice from the shipped code (R46).
+    esbuild: { legalComments: "eof" },
   },
 });

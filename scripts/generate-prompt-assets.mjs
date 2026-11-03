@@ -52,13 +52,26 @@ function compileTree(dirName) {
   }
 
   /** All .txt files of a subdirectory as a sorted { key: content } record.
-   *  `keyOf` maps a filename to its record key. */
+   *  `keyOf` maps a filename to its record key. Two files with identical
+   *  content in one directory abort codegen: they are copies (R41 found
+   *  UTF-8 filenames mis-decoded as GBK), and the parity gate cannot catch
+   *  them when both trees carry the same copies. */
   function dirRecord(sub, keyOf = (f) => f) {
     const out = {};
+    const seen = new Map();
     const files = readdirSync(join(promptsDir, sub))
       .filter((f) => f.endsWith(".txt"))
       .sort();
-    for (const f of files) out[keyOf(f)] = read(sub, f);
+    for (const f of files) {
+      const content = read(sub, f);
+      const twin = seen.get(content);
+      if (twin !== undefined)
+        throw new Error(
+          `Duplicate prompt content in ${dirName}/${sub}: "${twin}" and "${f}". Remove the copy before regenerating.`,
+        );
+      seen.set(content, f);
+      out[keyOf(f)] = content;
+    }
     return out;
   }
 

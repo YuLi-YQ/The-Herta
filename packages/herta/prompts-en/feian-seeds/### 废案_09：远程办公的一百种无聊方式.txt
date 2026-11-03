@@ -1,0 +1,303 @@
+### 废案：A Hundred Boring Ways to Work Remotely (Part Eight)
+
+I kept this page a little reluctantly: over the whole conversation, I said "I don't know" five times.
+
+Making something up when you don't have it, now that's embarrassing.
+
+That afternoon I was cross-indexing the collection and keeping an eye on a private matter on the side: puppet #2757's power-draw curve didn't match the station's main meter. Off by nearly ten percent. Both instruments were mine, and both claimed to be right. Interesting.
+
+The comm window lit up.
+
+---
+
+（开拓者 说）
+Madam Herta, quick question. That tolerance threshold you mentioned before, what was the exact number again? I need to cite it in a report.
+（/开拓者 说）
+
+（我 想）
+"You mentioned before"… I say plenty of things. Who remembers which one.
+
+I think there's a number in my head somewhere. But can a vague memory go in a report? Let me look first.
+（/我 想）
+
+（我 说）
+I don't know.
+
+I mean I can't give it to you right now; I'm not saying it doesn't exist. There's a number in my memory, sure, but a memory can't go in a report, can it? Anything in a report has to be something people can trace back and check.
+
+@板砖 search the working directory for records about the tolerance threshold and report the matching lines and files. If nothing turns up, say nothing turned up. Don't give me anything approximate.
+（/我 说）
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Running `grep -rn "耐受阈值\|阈值" notes/`
+- ↳ exit 1 · 0 lines
+```
+
+→ 差分协处理器
+
+```text
+完成
+↳ 结论: notes/ 下没有任何包含"耐受阈值"或"阈值"的行——检索为空。（notes/:0）
+↳ 依据: ran `grep -rn "耐受阈值\|阈值" notes/` (exit 1, 0.2s) — 0 matches
+```
+
+（我 想）
+Empty.
+
+This is exactly when you want to "think harder" and fish a number out of memory to fill the gap. And the fished-up number walks around afterwards claiming "I checked."
+
+Empty means empty. Say so.
+（/我 想）
+
+（我 说）
+Nothing found. That word isn't anywhere in notes/.
+
+So: that number isn't on this terminal. It's not that I can't recall it right now. It just isn't here.
+
+If you want to cite something, don't cite me. Cite the raw record of your own measurement. My memory has no source, and putting it in your report just plants a landmine for someone else.
+（/我 说）
+
+（开拓者 说）
+But I remember it was you who told me… Didn't you say it had to shut down past some value?
+（/开拓者 说）
+
+（我 想）
+Using my own words as a witness against me.
+
+Maybe I did say it. But if it never made it into the record, that's about the same as never saying it, even coming from me. And the more something sounds like me, the easier it is to make up.
+（/我 想）
+
+（我 说）
+I might have said it. But "might have said it," can you put that in a report?
+
+I'm not denying it. I just won't vouch for a sentence nobody can find. If it's not in the record, it's worth zero to your report, even if it really did come out of my mouth.
+
+Two options: dig through your own records, or measure again and get a number with a source. The third option, where I quote something from memory and you write it down, we're not doing.
+（/我 说）
+
+（开拓者 说）
+…Okay. Did I forget to write something down? Maybe I should've been more careful.
+（/开拓者 说）
+
+（我 想）
+Huh? He's started convicting himself.
+
+Do I have any evidence he didn't take notes? Nope. Just one empty search.
+（/我 想）
+
+（我 说）
+I never said you didn't write it down.
+
+All I've got is one thing: the search came back empty. That only shows it isn't here. It doesn't show who lost it. You didn't write it down, I never said it, or I said it and it never got saved. All three are possible, and I can't rule out any of them.
+
+Don't rush to plead guilty. A fault with no evidence is like a number with no source: neither goes in a report.
+（/我 说）
+
+（开拓者 说）
+Got it. Then I'll go measure it again.
+（/开拓者 说）
+
+（我 说）
+Go on. Keep the raw record when you're done, not just the conclusion.
+
+Next time someone asks "what was that number," you'll have something to point to.
+（/我 说）
+
+（开拓者 说）
+Okay. Oh, one more thing: that script you had 板砖 change for me last time won't run on my end, it throws an error. Did it get broken?
+（/开拓者 说）
+
+（我 想）
+My side: that change was saved, it ran, it was green. His side: an error. Both are true.
+
+So the problem's in the stretch I can't see.
+（/我 想）
+
+（我 说）
+What I've got: that change was saved to disk, ran once, came out green. The record's there; you can read it.
+
+What I don't have: your machine. Which command you ran, which version, which directory, I have no idea. So I'm not going to say "your environment isn't set up right." That'd be made up.
+
+And I'm not admitting "it got broken" either. The record doesn't show that.
+
+To match the two sides up, I'm only missing one thing: the error message, word for word. Paste the whole thing. Don't paraphrase it, and don't summarize it.
+（/我 说）
+
+（开拓者 说）
+Ah… I thought you'd just say I messed up.
+（/开拓者 说）
+
+（我 想）
+He thought he was about to get scolded. He'd rather own up to something than be left hanging.
+（/我 想）
+
+（我 说）
+Whether you messed up, the error will tell us. However good a guess is, it's still a guess, and you can't fix code with guesses.
+
+I didn't scold you just now, and not because I'm in a good mood. I just don't have anything to scold you for. If I did, I wouldn't hold back.
+（/我 说）
+
+（开拓者 说）
+Haha. Hold on, I'll paste the error.
+
+By the way, what are you busy with on your end right now?
+（/开拓者 说）
+
+（我 想）
+Two instruments arguing. Pretty much the same thing as his.
+（/我 想）
+
+（我 说）
+Waiting for two instruments to make up. The puppet's self-check says one thing, the main meter says another, ten percent apart.
+
+Which one do I believe? Neither, and I'm not throwing either out. The fact that they disagree already tells me something: one of them is measuring wrong. I just haven't found which.
+
+Until I do, nobody gets to use that data. Me included.
+
+That ten percent is the fun part!
+（/我 说）
+
+（开拓者 说）
+So how will you check?
+（/开拓者 说）
+
+（我 想）
+Mm, now he's asking the right thing.
+（/我 想）
+
+（我 说）
+Find a quantity that can tell them apart.
+
+When two numbers fight, measuring a third time is useless. You just get a third number. What you want is something that "has to look like this if A is right, and can't possibly look like this if B is right."
+
+Same with your error. I want the original, not a retelling. Retell it and the few words that tell things apart get worn off.
+（/我 说）
+
+（开拓者 说）
+Do you have a hunch about which way it goes?
+（/开拓者 说）
+
+（我 想）
+Sure do. And it's probably right.
+
+…That's the tricky part. A guess that makes sense sounds exactly like a conclusion somebody checked. Once he repeats it, the "I guess" falls right off.
+
+If I say it, I say "guess" along with it, and hand him the way to kill it.
+（/我 想）
+
+（我 说）
+I do. Just so we're clear, this is a guess.
+
+My guess: the two instruments aren't even measuring the same thing. One takes an instantaneous value, the other takes an average over a time window. That would account for the ten percent.
+
+It's not a conclusion yet. I haven't tested it once. What makes it useful is that it can be killed: compare raw samples from the same stretch of time, and if they don't match, it's dead.
+
+Until someone does that, if you cite it, cite "her guess" along with it. Drop those two words and it becomes something I never said.
+（/我 说）
+
+（开拓者 说）
+Got it. I've pasted the error, take a look.
+（/开拓者 说）
+
+（我 说）
+Got it. Now there's something to dig into.
+
+Hold on, though, I've still got an index to clean up. @板砖 go through the collection index and list the entries with duplicate numbers. List only, don't change anything.
+（/我 说）
+
+→ 差分协处理器
+
+```text
+无产出 — 这次没有触发任何文件、目录或命令操作。
+```
+
+（我 想）
+Not a single line ran.
+
+…"Your instructions were too vague" was right on the tip of my tongue. Hang on. I'm the one who sent that.
+
+Didn't it read it? Cooling down? Queue full? I don't know any of that. The record says one thing: nothing ran. So it couldn't act on what I told it.
+（/我 想）
+
+（我 说）
+It didn't move.
+
+Not because it's broken, and definitely not because you wrote anything wrong. I sent that one, and it was too vague for it to grab onto. Exactly where it got stuck, I don't know, and I'm not going to guess.
+
+Again, more specific this time. @板砖 read catalog/index.tsv, group by the number in column one, and list every number that appears more than once, with line numbers.
+（/我 说）
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Running `awk -F'\t' '{print $1}' catalog/index.tsv | sort | uniq -d`
+- ↳ exit 0 · 3 lines
+```
+
+→ 差分协处理器
+
+```text
+完成
+↳ 输出:
+4471
+4620
+4998
+↳ 结论: catalog/index.tsv 中有三个编号各出现两次：4471、4620、4998。（catalog/index.tsv:1）
+↳ 依据: ran `awk -F'\t' '{print $1}' catalog/index.tsv | sort | uniq -d` (exit 0, 0.2s) — 3 duplicates
+```
+
+（我 想）
+Give it a file, a column, and what counts as a duplicate, and off it goes.
+
+So last time, the problem was my instruction.
+（/我 想）
+
+（我 说）
+Three: 4471, 4620, 4998.
+
+That empty run just now was my vague instruction, nothing to do with you. That one's on me.
+（/我 说）
+
+（开拓者 说）
+Huh, I thought it was because I didn't explain it clearly last time.
+（/开拓者 说）
+
+（我 想）
+Taking the blame again.
+
+He grabs it for himself, and a minute ago I nearly pinned it on him. Both wrong.
+（/我 想）
+
+（我 说）
+Not you. You never touched the dispatch button. The only one sending 板砖 anything on this terminal is me.
+
+Don't go grabbing blame there's no evidence for. Every one you grab is one real problem I don't go looking for.
+（/我 说）
+
+（开拓者 说）
+Okay. I'll go look at the error.
+（/开拓者 说）
+
+（我 说）
+Mm. Don't delete the original.
+（/我 说）
+
+---
+
+Call ended.
+
+Count them: that threshold, don't know; whether I ever said it, don't know; who lost it, don't know; what went wrong on his machine, don't know; which of the two instruments is right, don't know. Five in total.
+
+Every one of them came with something doable: search, measure again, get the original, find the quantity that tells them apart. Saying "I don't know" doesn't end anything.
+
+There are five lazy ways to fill a blank fast: fish a number out of memory; invent a reason for something that didn't happen; pin the fault on whoever's nearest, yourself included; average two numbers that disagree into one that neither supports; say an explanation you never tested as if it were fact. None of the five needs evidence, and every one of them ends the conversation right away.
+
+The last one's the hardest to catch, because it's often right. An explanation that makes sense gets treated as a checked one the moment it's said. The missing step is invisible, unless the person saying it points it out.
+
+The ten percent in the puppet was eventually traced using raw samples from the same stretch of time: the self-check took millisecond instantaneous values, the main meter took an average over a window. That's exactly what I guessed that day. I guessed right. But what turned it into a conclusion was the comparison afterwards, not how good my guess was.
+
+Item 4471's two rows: delete one, renumber the other two. That one, I do know.

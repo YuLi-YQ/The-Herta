@@ -21,6 +21,7 @@ import type {
   RoundActivity,
   RoundFile,
   RoundFileContent,
+  RoundPicture,
   RoundStatus,
   RoundSummary,
 } from "./round-summary.js";
@@ -140,11 +141,26 @@ export class RoundStore {
     item.text = joined.slice(0, 24000);
     item.truncated ||= joined.length > 24000;
   }
+  /** F04 (R115): one request's pictures, row by row (sent, or why not), kept as the evidence the
+   *  workbench shows beside a picture. The newest 64 rows; nothing when no picture is cited. */
+  pictures(role: "persona" | "executor", items: readonly RoundPicture[]): void {
+    if (!this.active || items.length === 0) return;
+    const pictures = this.active.summary.pictures ?? {};
+    pictures[role] = [...items]
+      .sort((a, b) => a.index - b.index)
+      .slice(-64)
+      .map((item) => ({ ...item }));
+    this.active.summary.pictures = pictures;
+    this.persist();
+  }
   private rounds: StoredRound[] = [];
   private active: StoredRound | null = null;
   private clocks = new Map<string, number>();
   private beforeCalls = new Map<string, Record<string, Snapshot>>();
   private inputCalls = new Map<string, Record<string, unknown>>();
+  /** Calls that reached the approval gate, by call id. A call refused there
+   *  never starts, so this is the only place its argv or path is known. */
+  private askedCalls = new Map<string, Record<string, unknown>>();
   private callClocks = new Map<string, number>();
   private bytes = 0;
   // Ephemeral within a logical round. File identity plus nanosecond change
@@ -352,12 +368,14 @@ export class RoundStore {
     );
     for (const key of this.scanCache.keys())
       if (!present.has(key)) this.scanCache.delete(key);
-    this.note(
-      "仅扫描工作区内文本；依赖、构建、内部及凭据目录、符号链接不纳入；期间观测变化归属不确定",
-    );
+    // The scan's fixed scope (workspace text only; dependency, build, internal
+    // and credential folders and symlinks left out) is the same for every round,
+    // so it is told once beside the file list, not as a limitation of each
+    // round (R72). Attribution is per file since R67.
     return result;
   }
   begin(attemptId: string, recordStart: number, continuation = false): void {
+    this.askedCalls.clear();
     const last = this.rounds.at(-1);
     this.active = continuation && last ? last : null;
     if (!this.active) {
@@ -446,7 +464,36 @@ export class RoundStore {
           after[path] ?? null,
           `${prefix}-${digest(path).slice(0, 20)}`,
         ),
+      )
+      .map((file) =>
+        prefix === "net" && this.explainedByTools(file.path, before[file.path], after[file.path])
+          ? { ...file, confidence: "tool" as const }
+          : file,
       );
+  }
+  /** True only when this round's tool-boundary snapshots of `path`, in call
+   *  order, chain from the round baseline to the final state with nothing in
+   *  between — any change outside a tool call keeps the file "observed" (R67). */
+  private explainedByTools(
+    path: string,
+    start: Snapshot | undefined,
+    end: Snapshot | undefined,
+  ): boolean {
+    const round = this.active;
+    if (!round) return false;
+    const steps = round.summary.activities.flatMap((a) =>
+      a.files
+        .filter((f) => f.fileId === `${a.id}-${digest(path).slice(0, 20)}`)
+        .map((f) => round.contents[f.fileId])
+        .filter((c): c is FrozenFile => Boolean(c)),
+    );
+    if (!steps.length) return false;
+    let current = start?.hash ?? null;
+    for (const step of steps) {
+      if ((step.before?.hash ?? null) !== current) return false;
+      current = step.after?.hash ?? null;
+    }
+    return current === (end?.hash ?? null);
   }
   private relativePath(value: unknown): string | null {
     if (typeof value !== "string" || !this.active) return null;
@@ -492,22 +539,40 @@ export class RoundStore {
         cwd: round.workspace,
       });
       this.persist();
+    } else if (event.type === "permission.requested") {
+      this.askedCalls.set(
+        event.request.call.id,
+        safeObject(event.request.call.input),
+      );
     } else if (event.type === "tool.call.finished") {
       const id = `${round.summary.attemptIds.at(-1)}:${event.id}`;
       let activity = round.summary.activities.find((a) => a.id === id);
       if (!activity) {
+        // Never started: refused at the gate, or the start was not seen.
+        // Name it by what was asked for, not just the tool (R45).
+        const asked = this.askedCalls.get(event.id) ?? {};
+        const command =
+          typeof asked.command === "string"
+            ? asked.command
+            : Array.isArray(asked.argv)
+              ? asked.argv.join(" ")
+              : undefined;
+        const target =
+          command ?? (typeof asked.path === "string" ? asked.path : undefined);
         activity = {
           id,
           attemptId: round.summary.attemptIds.at(-1)!,
           kind: event.tool,
-          title: event.tool,
+          title: target ? clean(target).slice(0, 240) : event.tool,
           status: "running",
           durationMs: null,
           summary: "",
           files: [],
+          ...(command ? { command: clean(command).slice(0, 8000) } : {}),
         };
         round.summary.activities.push(activity);
       } else if (activity.status !== "running") return;
+      this.askedCalls.delete(event.id);
       const result = event.result;
       const data = safeObject(result.data);
       activity.status = result.ok

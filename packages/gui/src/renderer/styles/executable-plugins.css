@@ -1,0 +1,166 @@
+/* Existing R132 palette/type, flat settings rows; no new animation or artwork. */
+.executable-plugin-settings,
+.executable-plugin-actions {
+  min-width: 0;
+  color: var(--herta-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.executable-plugin-settings { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--herta-border); }
+.executable-plugin-settings :is(h3, h4, h5, p),
+.executable-plugin-actions :is(h4, h5, p) { margin: 0 0 10px; overflow-wrap: anywhere; }
+.executable-plugin-settings h3 { font-size: 16px; font-weight: 600; }
+.prompt-plugin-settings > h3 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+.executable-plugin-settings :is(h4, h5),
+.executable-plugin-actions :is(h4, h5) { font-size: 14px; font-weight: 600; }
+.executable-plugin-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; min-width: 0; }
+.executable-plugin-heading > div { min-width: 0; }
+.executable-plugin-heading > button { flex: none; }
+.executable-plugin-muted, .executable-plugin-meta,
+.executable-plugin-settings small, .executable-plugin-actions small { color: var(--herta-muted); font-size: 12px; }
+.executable-plugin-meta { font-variant-numeric: tabular-nums; }
+h4 > .executable-plugin-meta { margin-left: 12px; font-weight: 400; }
+.executable-plugin-error { color: var(--herta-error); }
+.executable-plugin-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+.executable-plugin-settings button, .executable-plugin-actions button {
+  min-height: 34px; padding: 6px 12px; border-radius: 8px; font-size: 14px; line-height: 1.4; white-space: normal;
+}
+.executable-plugin-settings :is(button, input, select, summary):focus-visible,
+.executable-plugin-actions :is(button, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--herta-focus); outline-offset: 2px;
+}
+.executable-plugin-settings button:disabled, .executable-plugin-actions button:disabled { color: var(--herta-muted); cursor: default; }
+.executable-plugin-row { padding: 16px 0; border-top: 1px solid var(--herta-border); }
+.executable-plugin-row:first-child { margin-top: 12px; }
+.executable-plugin-preview, .executable-plugin-confirm {
+  margin: 16px 0; padding: 16px; border-radius: 8px; background: var(--herta-bg); border: 1px solid var(--herta-border);
+}
+.executable-plugin-preview:focus { outline: 2px solid var(--herta-focus); outline-offset: 2px; }
+.executable-plugin-settings summary, .executable-plugin-actions summary { cursor: pointer; overflow-wrap: anywhere; }
+.executable-plugin-settings details, .executable-plugin-actions details { margin: 10px 0; }
+.plugin-install-diff { min-width: 0; }
+.plugin-install-file { display: grid; gap: 6px; margin: 12px 0; min-width: 0; }
+.plugin-install-file select { width: 100%; min-width: 0; max-width: 100%; padding: 8px; color: var(--herta-text); background: var(--herta-bg); border: 1px solid var(--herta-border); border-radius: 6px; font: inherit; }
+.plugin-install-reader { min-width: 0; max-width: 100%; }
+.plugin-install-reader .round-reader-modes { flex-wrap: wrap; }
+.plugin-install-reader .round-code { max-height: 360px; }
+.plugin-workshop { container-type: inline-size; min-width: 0; }
+.plugin-workshop > label, .plugin-workshop-models label, .plugin-workshop-source label,
+.plugin-workshop-checks label { display: grid; gap: 6px; margin: 12px 0; min-width: 0; }
+.plugin-workshop :is(textarea, select, input:not([type="checkbox"])) {
+  width: 100%; min-width: 0; max-width: 100%; padding: 8px 10px; border: 1px solid var(--herta-border);
+  border-radius: 6px; background: var(--herta-bg); color: var(--herta-text); font: inherit;
+}
+.plugin-workshop textarea { resize: vertical; max-height: 360px; }
+.plugin-workshop :is(textarea, select, input):focus-visible { outline: 2px solid var(--herta-focus); outline-offset: 2px; }
+.plugin-workshop :is(textarea, select, input):disabled { opacity: .65; }
+.plugin-workshop .executable-plugin-check { display: flex; align-items: center; gap: 8px; }
+.plugin-workshop-models { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; }
+.plugin-workshop-drafts { display: grid; gap: 8px; list-style: none; padding: 0; }
+.plugin-workshop-drafts li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.plugin-workshop-drafts li > span { flex: 1 1 140px; overflow-wrap: anywhere; }
+.plugin-workshop-warning { padding: 12px; margin: 12px 0; border: 1px solid var(--herta-border); border-radius: 6px; }
+.plugin-workshop-warning button { margin: 4px 8px 0 0; }
+.plugin-workshop-job { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+.plugin-workshop-job > span { flex: 1 1 180px; }
+.plugin-workshop-source textarea, .plugin-workshop-checks details textarea { font-family: Consolas, "Cascadia Code", monospace; font-size: 12px; line-height: 1.5; }
+.plugin-workshop-checks, .plugin-workshop-trial, .plugin-workshop-install { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--herta-border); min-width: 0; }
+.plugin-workshop-trial :is(ul, pre) { max-height: 320px; overflow: auto; overflow-wrap: anywhere; }
+@container (max-width: 480px) {
+  .plugin-workshop-models { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .plugin-workshop > .executable-plugin-heading { flex-wrap: wrap; gap: 4px; }
+}
+.executable-plugin-permissions { min-width: 0; margin: 16px 0 8px; padding: 0; border: 0; }
+.executable-plugin-permissions legend { margin-bottom: 8px; padding: 0; font-size: 14px; font-weight: 500; }
+.executable-plugin-permission { margin: 8px 0; }
+.executable-plugin-check,
+.prompt-action-popover .executable-plugin-actions label.executable-plugin-check { display: flex; align-items: flex-start; gap: 8px; margin: 8px 0; }
+.executable-plugin-check input[type="checkbox"] { width: 16px; height: 16px; flex: none; margin: 3px 0 0; }
+.executable-plugin-check small { display: block; margin-top: 2px; }
+.executable-plugin-origin { margin: 4px 0 0 24px !important; overflow-wrap: anywhere; }
+.executable-plugin-details-list { padding-left: 20px; margin: 8px 0 12px; }
+.executable-plugin-details-list li { margin: 6px 0; overflow-wrap: anywhere; }
+.executable-plugin-details-list small { margin-left: 12px; }
+.executable-plugin-history { list-style: none; padding: 0; }
+.executable-plugin-history li { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; }
+.executable-plugin-actions { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--herta-border); }
+.executable-plugin-actions.is-open { margin-top: 0; padding-top: 0; border-top: 0; }
+.prompt-standard-actions[hidden] { display: none; }
+.executable-plugin-back { margin: 10px 0 0; }
+.executable-plugin-action-panel { padding-top: 10px; min-width: 0; }
+.executable-plugin-option { display: flex; width: 100%; gap: 12px; justify-content: space-between; text-align: left; margin: 6px 0; }
+.executable-plugin-option > span { min-width: 0; overflow-wrap: anywhere; }
+.executable-plugin-option small { display: block; margin-top: 3px; }
+.executable-plugin-option > small { max-width: 50%; text-align: right; overflow-wrap: anywhere; }
+.executable-plugin-fields { display: grid; gap: 12px; margin: 12px 0; }
+.prompt-action-popover .executable-plugin-fields label { margin: 0; }
+.executable-plugin-fields :is(input:not([type="checkbox"]), textarea, select) {
+  box-sizing: border-box; width: 100%; min-width: 0; min-height: 38px;
+  border: 1px solid var(--herta-control); border-radius: 8px; background: var(--herta-bg); color: var(--herta-text); padding: 8px;
+}
+.executable-plugin-fields textarea { resize: vertical; max-height: 160px; }
+.executable-plugin-run { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--herta-border); }
+.executable-plugin-output, .prompt-action-popover .executable-plugin-output {
+  margin: 10px 0; padding: 12px; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+  border-radius: 8px; background: var(--herta-bg); font-family: inherit; font-size: 13px; line-height: 1.6;
+}
+/* Literal JavaScript files and structured JSON retain their code face; prose uses the UI font. */
+.executable-plugin-output.executable-plugin-code { font-family: Consolas, "Cascadia Code", monospace; }
+.executable-plugin-logs { margin: 8px 0; padding-left: 20px; max-height: 180px; overflow: auto; }
+.executable-plugin-logs li { margin-bottom: 6px; overflow-wrap: anywhere; }
+.executable-plugin-run progress { width: 100%; height: 8px; accent-color: var(--herta-accent); }
+@media (max-width: 600px) {
+  .executable-plugin-heading { flex-wrap: wrap; gap: 8px; }
+  .executable-plugin-heading > .executable-plugin-buttons { margin-top: 0; }
+  .executable-plugin-preview, .executable-plugin-confirm { padding: 12px; }
+  .executable-plugin-option { flex-wrap: wrap; }
+  .executable-plugin-option > small { max-width: 100%; text-align: left; }
+}
+/* These components add no transitions. Parent popover respects off/reduced-motion. */
+
+.plugin-storage-summary { margin: 12px 0 20px; padding: 14px 0; border-block: 1px solid var(--herta-border); min-width: 0; }
+.plugin-storage-summary-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.plugin-storage-summary-heading h4 { margin: 0; }
+.plugin-storage-summary-heading button { flex: none; }
+.executable-plugin-settings .plugin-storage-total { margin: 10px 0 8px; min-height: 24px; font-variant-numeric: tabular-nums; }
+.plugin-storage-total strong { font-size: 18px; font-weight: 600; white-space: nowrap; }
+.plugin-storage-total > span { white-space: nowrap; }
+.plugin-storage-meter { height: 4px; overflow: hidden; border-radius: 2px; background: var(--herta-border); }
+.plugin-storage-meter > span { display: block; height: 100%; background: var(--herta-accent); }
+.plugin-storage-meter.is-over-limit > span { background: var(--herta-error); }
+.executable-plugin-settings .plugin-storage-freshness { margin: 6px 0 10px; }
+.plugin-storage-breakdown summary { min-height: 28px; padding-block: 3px; }
+.plugin-storage-breakdown dl { margin: 10px 0; }
+.plugin-storage-breakdown dl > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 8px 16px; padding-block: 4px; }
+.plugin-storage-breakdown dt { min-width: 0; overflow-wrap: anywhere; }
+.plugin-storage-breakdown dd { margin: 0; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.plugin-private-data-facts { margin: 12px 0; }
+.plugin-private-data-facts > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px 16px; padding-block: 4px; }
+.plugin-private-data-facts dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.plugin-private-data-facts small { display: block; }
+.plugin-private-data section:focus { outline: 2px solid var(--herta-focus); outline-offset: 2px; }
+.plugin-maintenance { margin: 0 0 16px; min-width: 0; }
+.plugin-maintenance-panel:focus { outline: 2px solid var(--herta-focus); outline-offset: 2px; }
+.plugin-maintenance-choices { min-width: 0; margin: 12px 0; padding: 0; border: 0; }
+.plugin-maintenance-choices legend { margin-bottom: 6px; font-weight: 500; }
+.plugin-maintenance-choices ul { list-style: none; margin: 0; padding: 0; max-height: 280px; overflow-y: auto; }
+.plugin-maintenance-choices li { padding: 10px 0; border-bottom: 1px solid var(--herta-border); }
+.plugin-maintenance-choices label { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 8px; align-items: start; }
+.plugin-maintenance-choices input { margin: 3px 0 0; width: 16px; height: 16px; }
+.plugin-maintenance-name { min-width: 0; overflow-wrap: anywhere; }
+.plugin-maintenance-name small { display: block; margin-top: 2px; }
+.plugin-maintenance-bytes { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 12px; }
+.executable-plugin-settings .plugin-maintenance-warning { margin: 4px 0 0 26px; color: var(--herta-muted); font-size: 12px; }
+.plugin-maintenance-selection { font-variant-numeric: tabular-nums; }
+.executable-plugin-settings button.plugin-maintenance-delete { color: var(--herta-error); border: 1px solid var(--herta-error); background: transparent; }
+.plugin-maintenance-blocked { margin: 10px 0; }
+.plugin-maintenance-blocked ul, .plugin-maintenance-result ul { padding-left: 20px; margin: 6px 0 10px; overflow-wrap: anywhere; }
+.plugin-network-settings { min-width: 0; margin: 0 0 18px; padding: 10px 0; border-top: 1px solid var(--herta-border); }
+.plugin-network-settings summary small { margin-left: 10px; font-weight: 400; }
+.plugin-network-settings fieldset { min-width: 0; padding: 0; border: 0; }
+.plugin-network-settings label { display: grid; gap: 6px; margin: 12px 0; min-width: 0; overflow-wrap: anywhere; }
+.plugin-network-settings :is(input, select) { min-width: 0; width: 100%; max-width: 100%; padding: 8px 10px; border: 1px solid var(--herta-border); border-radius: 6px; color: var(--herta-text); background: var(--herta-bg); font: inherit; }
+.plugin-network-settings :is(input, select, summary):focus-visible { outline: 2px solid var(--herta-focus); outline-offset: 2px; }
+.plugin-network-settings :is(input, select):disabled { opacity: .65; }
+.plugin-network-resolver { min-width: 0; }
+.plugin-network-problem { margin-top: 10px; }

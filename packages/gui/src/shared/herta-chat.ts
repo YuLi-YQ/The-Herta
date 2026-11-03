@@ -19,6 +19,12 @@ export const chatFailures = {
     "回复超过本地显示上限，已保留收到的正文。请将问题拆分后继续。",
   "service-unavailable":
     "模型服务未完成回复，收到的正文已保留。请检查服务状态后再发送。",
+  // R110 (F06): a refused request that carried pictures (imageRequestRefusal); older versions
+  // drop a code they do not know when loading.
+  "image-rejected":
+    "服务拒绝了这次附带图片的请求，原因未确认：可能与图片有关，也可能是请求的其他内容；识图能力没有被自动更改。可在“连接与模型”中重新测试识图。图片仍在续聊范围内，之后发送会再次附带；如需不带图片继续，可在图片下选择“不再发给模型”，或调整续聊范围、新建聊天。不会自动重发。",
+  "image-too-large":
+    "服务以请求过大（HTTP 413）拒绝了这次附带图片的请求；这不说明模型不支持识图，识图状态未更改。图片仍在续聊范围内，之后发送会再次附带；可在部分图片下选择“不再发给模型”、调整续聊范围或新建聊天，改用较小或较少的图片。不会自动重发。",
 } as const;
 export type HertaChatFailure = keyof typeof chatFailures;
 export const chatOutputBudgets = [8192, 16384, 32768] as const;
@@ -52,15 +58,32 @@ export interface ChatImageAudit {
   missing: number;
   checkedBackups: number;
 }
+/** One restorable set of chat images moved out of the library (R43). */
+export interface ChatImageBatch {
+  id: string;
+  at: string;
+  files: number;
+  bytes: number;
+}
 export interface ChatStorageUsage {
   audit?: ChatImageAudit;
+  quarantine?: ChatImageBatch[];
   checkedAt: string;
   historyBytes: number;
   historyLimitBytes: number;
-  images: { bytes: number; files: number; limitBytes: number };
+  /** `others`: entries in the image library that are not plain files (a folder, a link), neither
+   *  followed nor counted (R52). `invalid`: the library itself is not a plain folder (R53). */
+  images: { bytes: number; files: number; limitBytes: number; others?: number; invalid?: true };
 }
 export interface HertaChatSnapshot {
+  /** User-owned goal for the selected chat; corrupt values are preserved for explicit recovery. */
+  goal?: import("@herta/core").GoalView;
   storage?: ChatStorageUsage;
+  /** Image cleanup preview awaiting confirmation, and the last cleanup outcome. */
+  imageCleanup?: {
+    preview?: { token: string; files: number; bytes: number; expiresAt: string };
+    notice?: string;
+  };
   memory?: {
     enabled: boolean;
     items: { id: string; text: string; at: string; source: "user" | "idle" }[];
@@ -97,6 +120,9 @@ export interface ChatAttachment {
   image?: MessageImage;
   format?: "pdf" | "docx";
   pages?: number;
+  /** F04 (R117): a sent picture the user stopped sending to the models. Any other value, from a
+   *  later version, is kept and sent as before. */
+  modelUse?: string;
   name: string;
   text: string;
 }
@@ -138,12 +164,21 @@ export function validateChatAttachments(value: unknown): ChatAttachment[] {
       text: item.text,
       ...(item.format ? { format: item.format } : {}),
       ...(item.pages ? { pages: item.pages } : {}),
+      // Only a picture keeps it; a damaged value is left out rather than failing the history.
+      ...((image || item.imageRef) &&
+      typeof item.modelUse === "string" &&
+      /^[a-z_]{1,32}$/.test(item.modelUse)
+        ? { modelUse: item.modelUse }
+        : {}),
     };
   });
 }
 export type HertaChatAction =
   | { type: "activity" }
   | { type: "storage" }
+  | { type: "image-preview" }
+  | { type: "image-isolate"; token: string }
+  | { type: "image-restore" | "image-discard"; id: string }
   | {
       type: "memory";
       operation: "save" | "delete" | "enable";
@@ -155,7 +190,22 @@ export type HertaChatAction =
   | { type: "select" | "archive" | "restore"; id: string }
   | { type: "rename"; id: string; title: string }
   | { type: "pin"; id: string; pinned: boolean }
-  | { type: "context"; id: string; keepTurns: number; note: string };
+  | {
+      type: "context";
+      id: string;
+      /** -2 preserves the authoritative saved boundary; other values select a turn count. */
+      keepTurns: number;
+      note: string;
+      expectedRevision?: number;
+    }
+  /** F04 (R117): stop sending pictures of one sent message to the models, or send them again. */
+  | {
+      type: "picture-use";
+      id: string;
+      messageId: string;
+      indexes: number[];
+      use: "stop" | "send";
+    };
 
 /** A turn starts with a user message; never split a user/reply pair. -1 means all. */
 export function chatContextStart(
@@ -167,3 +217,52 @@ export function chatContextStart(
   const starts = messages.flatMap((m, i) => (m.role === "user" ? [i] : []));
   return starts[Math.max(0, starts.length - keepTurns)] ?? 0;
 }
+
+/** A generated note is only an editable draft; saving still uses the context action. */
+export interface DraftChatContextInput {
+  readonly chatId: string;
+  readonly requestId: string;
+  readonly expectedRevision: number;
+  /** -2 preserves the authoritative saved boundary; never provide an absolute message index. */
+  readonly keepTurns: number;
+  readonly providerId: string;
+  readonly modelId: string;
+  readonly providerRevision: number;
+  readonly reasoningEffort?: string;
+}
+export interface CancelChatContextDraftInput {
+  readonly chatId: string;
+  readonly requestId: string;
+}
+export type DraftChatContextFailure =
+  | "invalid"
+  | "no_target"
+  | "busy"
+  | "conflict"
+  | "cancelled"
+  | "no_content"
+  | "input_limit"
+  | "output_limit"
+  | "configuration"
+  | "provider"
+  | "storage";
+export type DraftChatContextReply =
+  | {
+      readonly ok: true;
+      readonly chatId: string;
+      readonly requestId: string;
+      readonly revision: number;
+      readonly keepTurns: number;
+      readonly boundaryIndex: number;
+      readonly text: string;
+      readonly providerId: string;
+      readonly modelId: string;
+      readonly providerRevision: number;
+      readonly generatedAt: string;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: DraftChatContextFailure;
+      readonly message: string;
+      readonly code?: HertaChatFailure;
+    };

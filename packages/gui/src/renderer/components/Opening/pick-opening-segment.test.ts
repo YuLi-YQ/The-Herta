@@ -13,6 +13,11 @@ function fakeLoaders(): Record<string, () => Promise<SegmentData>> {
 }
 
 describe("pickOpeningSegment", () => {
+  it("returns a rejecting loader when the public build has no opening catalog", async () => {
+    const loader = pickOpeningSegment();
+    expect(typeof loader).toBe("function");
+    await expect(loader()).rejects.toThrow("opening artwork is not distributed in the public build");
+  });
   it("returns the first loader when rng is 0", async () => {
     const loader = pickOpeningSegment(fakeLoaders(), () => 0);
     expect((await loader()).type).toBe("seg-0");

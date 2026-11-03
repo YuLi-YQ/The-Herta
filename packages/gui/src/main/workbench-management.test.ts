@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Session, SessionMetadata } from "@herta/app-server";
+import type { PermissionMode, PlanReply } from "@herta/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   NavigationMutation,
@@ -18,9 +19,255 @@ import type {
 import { createWorkbenchManagement } from "./workbench-management.js";
 
 const roots: string[] = [];
+const faults = vi.hoisted(() => ({ rename: false }));
+vi.mock("node:fs", async (original) => {
+  const actual = await original<typeof import("node:fs")>();
+  return {
+    ...actual,
+    renameSync: (...args: Parameters<typeof actual.renameSync>) => {
+      if (faults.rename) throw new Error("synthetic navigation write failure");
+      return actual.renameSync(...args);
+    },
+  };
+});
 afterEach(() => {
+  faults.rename = false;
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
+});
+
+function planningFixture(baseMode: PermissionMode = "full-access") {
+  const f = fixture();
+  f.management.setPermission({
+    sessionId: "active",
+    mode: baseMode,
+    scope: "session",
+    expectedRevision: f.management.permission().revision,
+    confirmFullAccess: true,
+  });
+  let plan: PlanReply = {
+    ok: true,
+    view: {
+      locked: false,
+      state: {
+        revision: 0,
+        active: false,
+        previousMode: null,
+        plan: null,
+        history: [],
+      },
+    },
+  };
+  const getPlan = vi.fn(() => plan);
+  const active = {
+    sessionId: "active",
+    backendWorkspace: f.workspace,
+    backendWorkspaceIsDefault: false,
+    turnInFlight: false,
+    getPlan,
+  } as unknown as Session;
+  f.setActive(active);
+  const lock = () => {
+    plan = {
+      ok: true,
+      view: {
+        locked: true,
+        state: {
+          revision: 1,
+          active: true,
+          previousMode: baseMode,
+          plan: null,
+          history: [],
+        },
+      },
+    };
+  };
+  return {
+    ...f,
+    active,
+    getPlan,
+    lock,
+    setPlan: (value: PlanReply) => {
+      plan = value;
+    },
+  };
+}
+describe("plan permission lock (R130)", () => {
+  it("overrides the trusted grant, rejects every ordinary mutation route, and changes the permission epoch", () => {
+    const f = planningFixture();
+    const before = f.management.permission();
+    const navigation = f.management.navigation();
+    f.lock();
+    const locked = f.management.permission();
+    expect(locked).toMatchObject({ mode: "read-only", planLocked: true });
+    expect(locked.revision).toBeGreaterThan(before.revision);
+    for (const scope of ["session", "project"] as const)
+      for (const mode of [
+        null,
+        "read-only",
+        "workspace-edit",
+        "full-access",
+      ] as const)
+        expect(() =>
+          f.management.setPermission({
+            sessionId: "active",
+            mode,
+            scope,
+            expectedRevision: locked.revision,
+            confirmFullAccess: true,
+          }),
+        ).toThrow(/计划模式/);
+    expect(f.management.navigation()).toEqual(navigation);
+    expect(f.management.permissionFor("background").mode).toBe(
+      "workspace-edit",
+    );
+  });
+  it("keeps the lock across restart, damaged state, and a failed plan read", () => {
+    const f = planningFixture();
+    f.lock();
+    const restarted = createWorkbenchManagement(f.deps);
+    expect(restarted.permission()).toMatchObject({
+      mode: "read-only",
+      planLocked: true,
+    });
+    f.setPlan({
+      ok: true,
+      view: {
+        locked: true,
+        damaged: true,
+        state: {
+          revision: 0,
+          active: false,
+          previousMode: null,
+          plan: null,
+          history: [],
+        },
+      },
+    });
+    expect(restarted.permission()).toMatchObject({
+      mode: "read-only",
+      planLocked: true,
+      planDamaged: true,
+    });
+    f.getPlan.mockImplementation(() => {
+      throw new Error("unreadable plan storage");
+    });
+    expect(restarted.permission()).toMatchObject({
+      mode: "read-only",
+      planLocked: true,
+    });
+    expect(() =>
+      restarted.setPermission({
+        sessionId: "active",
+        mode: "full-access",
+        scope: "session",
+        expectedRevision: restarted.permission().revision,
+        confirmFullAccess: true,
+      }),
+    ).toThrow(/计划模式/);
+  });
+  it("requires explicit full-access confirmation while still locked, then only unlocks after the plan changes", () => {
+    const f = planningFixture();
+    f.lock();
+    const locked = f.management.permission();
+    expect(() =>
+      f.management.restorePlanPermission(
+        "active",
+        f.workspace,
+        "full-access",
+        false,
+      ),
+    ).toThrow(expect.objectContaining({ code: "confirmation_required" }));
+    expect(f.management.permission().mode).toBe("read-only");
+    expect(
+      f.management.restorePlanPermission(
+        "active",
+        f.workspace,
+        "full-access",
+        true,
+      ),
+    ).toBe("full-access");
+    // This callback does not unlock the plan: a subsequent sidecar write may still fail.
+    expect(f.management.permission()).toMatchObject({
+      mode: "read-only",
+      planLocked: true,
+    });
+    f.setPlan({
+      ok: true,
+      view: {
+        locked: false,
+        state: {
+          revision: 2,
+          active: false,
+          previousMode: null,
+          plan: null,
+          history: [],
+        },
+      },
+    });
+    expect(f.management.permission()).toMatchObject({ mode: "full-access" });
+    expect(f.management.permission().planLocked).toBeUndefined();
+    expect(f.management.permission().revision).toBeGreaterThan(locked.revision);
+  });
+  it("never restores above the current trusted grant and records lower choices before unlocking", () => {
+    const f = planningFixture("workspace-edit");
+    f.lock();
+    expect(
+      f.management.restorePlanPermission(
+        "active",
+        f.workspace,
+        "full-access",
+        false,
+      ),
+    ).toBe("workspace-edit");
+    expect(f.management.permission().mode).toBe("read-only");
+    expect(
+      f.management.restorePlanPermission(
+        "active",
+        f.workspace,
+        "read-only",
+        false,
+      ),
+    ).toBe("read-only");
+    expect(
+      f.management.navigation().tasks.find((t) => t.sessionId === "active")
+        ?.permissionMode,
+    ).toBe("read-only");
+    expect(() =>
+      f.management.restorePlanPermission(
+        "background",
+        f.workspace,
+        "full-access",
+        true,
+      ),
+    ).toThrow(expect.objectContaining({ code: "no_target" }));
+  });
+  it("preserves the original grant and effective read-only mode when the navigation write fails", () => {
+    const f = planningFixture();
+    f.lock();
+    const path = join(f.profile, "project-navigation.json");
+    const before = readFileSync(path);
+    faults.rename = true;
+    expect(() =>
+      f.management.restorePlanPermission(
+        "active",
+        f.workspace,
+        "read-only",
+        false,
+      ),
+    ).toThrow(expect.objectContaining({ code: "storage" }));
+    expect(readFileSync(path)).toEqual(before);
+    expect(f.management.permission()).toMatchObject({
+      mode: "read-only",
+      planLocked: true,
+    });
+  });
+  it("changes the epoch for a lock transition even when the underlying mode was already read-only", () => {
+    const f = planningFixture("read-only");
+    const before = f.management.permission();
+    f.lock();
+    expect(f.management.permission().revision).toBeGreaterThan(before.revision);
+  });
 });
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "herta-management-"));

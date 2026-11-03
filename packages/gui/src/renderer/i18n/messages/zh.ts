@@ -63,7 +63,7 @@ export const zh = {
   "window.notificationsDesc":
     "窗口不在前台时，有事项需要处理或较长的回复完成，会发出通知。",
   "window.keepAwake": "运行时保持唤醒",
-  "window.keepAwakeDesc": "板砖运行期间阻止电脑睡眠；显示器仍可关闭。",
+  "window.keepAwakeDesc": "编程执行器运行期间阻止电脑睡眠；显示器仍可关闭。",
   "window.minimize": "最小化",
   "window.maximize": "最大化",
   "window.restore": "还原",
@@ -291,6 +291,15 @@ export const zh = {
   "approval.reason.commandSystem": "会改动系统设置或操控其他应用，每次都需确认",
   "approval.reason.commandHarnessState":
     "该命令可能触及 .herta（本程序自身的状态），且无法从命令本身判定，每次都需确认",
+  // Ask classes the rules emit but the table missed (R45): the raw English
+  // rule text showed in zh approval cards.
+  "approval.reason.commandInterpreterInline":
+    "解释器直接执行内联代码，请先核对代码内容",
+  "approval.reason.commandEnv": "会改动命令的运行环境（如环境变量），请核对",
+  "approval.reason.commandLocalExec": "运行工作区中的程序，请确认来源可信",
+  "approval.reason.commandOutside": "会访问工作区以外的路径，请核对路径",
+  "approval.reason.commandScript": "运行项目脚本，请确认脚本内容",
+  "approval.reason.outsideWorkspace": "访问工作区以外的路径",
   // A chained line with more than one ask class: the other classes, named.
   "approval.alsoClasses": "另含：{list}",
   // Consequence notes (ADR 0049 §5) — one sentence on what the command will
@@ -461,8 +470,6 @@ export const zh = {
   // Images (ADR 0048). `{f}` is the format token (PNG/JPEG) — data, not
   // chrome, so it is substituted rather than translated.
   "activity.attachment.image": "图片 {f}",
-  "activity.attachment.unreadable.imageTooLarge": "图片过大，未能读图",
-  "activity.attachment.unreadable.noCaption": "已存图片，未能读图",
   "activity.attachment.pages": "页",
   "activity.attachment.extracted": "已提取文本",
   /** The document's own outline, stored beside the text (2026-08-23). */

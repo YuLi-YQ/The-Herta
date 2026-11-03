@@ -1,6 +1,12 @@
 import type {
   AgentEvent,
   ApprovalOverlayState,
+  CompactAction,
+  CompactReply,
+  GoalAction,
+  GoalReply,
+  PlanAction,
+  PlanReply,
   RepoContextSnapshot,
   SessionTopic,
   TerminalRecord,
@@ -33,6 +39,13 @@ export interface AppServerConfig {
     sessionId: string,
     backendWorkspace: string,
   ) => import("@herta/core").PermissionModeState;
+  /** Trusted host restoration while the plan lock is still active. */
+  readonly restorePermissionMode?: (
+    sessionId: string,
+    backendWorkspace: string,
+    previousMode: import("@herta/core").PermissionMode,
+    confirmFullAccess: boolean,
+  ) => import("@herta/core").PermissionMode;
   readonly permissionProtectedPaths?: readonly string[];
   /** Desktop neutral-provider mode. Legacy providers remain CLI-only. */
   readonly neutralProviders?: {
@@ -45,6 +58,15 @@ export interface AppServerConfig {
       readonly executorKey: string | null;
       readonly release?: () => void;
     }>;
+    /** Turns a stored picture into a PNG or JPEG within the request limit (2 MB), e.g. by
+     *  rescaling; null when it cannot. Absent: only pictures already within it are sent. */
+    readonly prepareImage?: import("./neutral-images.js").ImagePreparer;
+    /** R110 (F06): the persona's service refused a request that carried pictures with HTTP
+     *  400/415/422 (imageRequestRefusal). Marks that model for an image re-check; it never changes
+     *  the model's capabilities, and nothing it does changes the turn's own failure. */
+    readonly onImageRequestRefused?: (
+      refused: import("@herta/providers/images").ImageRequestRefused,
+    ) => void;
   };
   /** Absolute. Workspace this app-server serves. */
   readonly workspaceRoot: string;
@@ -293,7 +315,9 @@ export type RewindResult =
  *  note and rewinding the sink cursor. */
 export type WorkspaceSetResult =
   | { readonly ok: true }
-  | { readonly ok: false; readonly reason: "turn_in_progress" };
+  /** `attachments_in_progress`: a copy is being written; moving the attachment
+   *  directory now could orphan or lose it (R100). */
+  | { readonly ok: false; readonly reason: "turn_in_progress" | "attachments_in_progress" };
 
 /** One ingested document (ADR 0033). `unreadable` mirrors the block's digest:
  *  the file was stored but no excerpt was taken, and the record says why. */
@@ -325,8 +349,10 @@ export type AttachResult =
   | { readonly ok: true; readonly files: readonly AttachedFile[] }
   | {
       readonly ok: false;
-      readonly reason: "turn_in_progress" | "too_many" | "no_files";
-    };
+      readonly reason: "turn_in_progress" | "too_many" | "no_files" | "workspace_changing";
+    }
+  /** `requireAll` and a source is gone or unreadable (R100): nothing ingested. */
+  | { readonly ok: false; readonly reason: "missing"; readonly missing: readonly string[] };
 
 /** One picture waiting in the composer (ADR 0048 §4). Stored and captioning;
  *  nothing about it is in the record until the message it rides is sent. */
@@ -358,7 +384,17 @@ export type StageImagesResult =
     }
   | {
       readonly ok: false;
-      readonly reason: "turn_in_progress" | "too_many_images" | "no_files";
+      /** `workspace_changing`: the task's directory is being moved (R100). */
+      readonly reason: "turn_in_progress" | "too_many_images" | "no_files" | "workspace_changing";
+    };
+
+/** Result of `resetPendingImages` (R98): an unreadable pending-picture
+ *  manifest set aside under `backup` (a file name beside it, kept as is). */
+export type ResetPendingImagesResult =
+  | { readonly ok: true; readonly backup: string }
+  | {
+      readonly ok: false;
+      readonly reason: "turn_in_progress" | "nothing_to_reset" | "failed";
     };
 
 /** Result of `removeAttachment`. `removed` counts the blocks marked, which is
@@ -370,6 +406,21 @@ export type RemoveAttachmentResult =
   | {
       readonly ok: false;
       readonly reason: "turn_in_progress" | "not_found" | "in_use";
+    };
+
+/** F04: a picture row as the workbench saw it, by record index and stored path. */
+export interface PictureTarget {
+  readonly index: number;
+  readonly path: string;
+}
+/** Result of `setPictureModelUse`. `changed` counts the rows rewritten (0 when each was already
+ *  so). `not_found`: a target is not a picture row with a stored copy at that path (a rewind since,
+ *  a document, a picture taken back); `invalid`: a malformed request. Nothing changes on either. */
+export type SetPictureModelUseResult =
+  | { readonly ok: true; readonly changed: number }
+  | {
+      readonly ok: false;
+      readonly reason: "turn_in_progress" | "not_found" | "invalid";
     };
 
 // ───── Wire events (one type per AsyncIterable subscription) ─────
@@ -659,6 +710,13 @@ export interface Session {
    *  that started each topic) — the topic rail's jump targets. Empty until
    *  a title exists. */
   readonly topics: readonly SessionTopic[];
+  /** F09: explicit owner-managed goal; data never grants tool permissions. */
+  getGoal?(): GoalReply;
+  updateGoal?(expectedRevision: number, action: GoalAction): GoalReply;
+  getPlan?(): PlanReply;
+  getCompact?(): CompactReply;
+  updateCompact?(expectedRevision: number, action: CompactAction): CompactReply;
+  updatePlan?(expectedRevision: number, action: PlanAction): PlanReply;
   /** True while a turn is running (submitText / opening / regenerate).
    *  Main-initiated navigation (the tray) consults it: switching away
    *  closes this session, which INTERRUPTS the turn — the tray can't show
@@ -674,6 +732,7 @@ export interface Session {
   /** Pictures staged in the composer and not yet sent (ADR 0048 §4) — what
    *  a reloaded window's strip is rebuilt from. Optional like the above. */
   readonly stagedImageList?: readonly StagedImageInfo[];
+  readonly stagedImageError?: string | null;
   /** The dream corpus changed on disk: the next turn re-derives the static
    *  prefix once (ADR 0069 §1b). Optional like the above. */
   markPrefixStale?(): void;
@@ -745,6 +804,11 @@ export interface Session {
    *  Optional: only the GUI SessionImpl implements it. */
   resyncRecord?(): void;
   resolveApproval(opts: ResolveApprovalOpts): Promise<ApprovalResult>;
+  /** Trusted host operation only. Holds an exclusive idle-workspace lease without creating a model turn. */
+  runWorkspaceOperation?<T>(
+    request: import("./workspace-operation.js").WorkspaceOperationRequest,
+    work: (context: import("./workspace-operation.js").WorkspaceOperationContext) => Promise<T>,
+  ): Promise<T>;
   /** Project command allow rules (ADR 0030) for the CURRENT effective
    *  workspace, as display strings (`node src/index.mjs:*`) — the Settings
    *  management list. Optional: only the GUI SessionImpl implements them. */
@@ -776,10 +840,19 @@ export interface Session {
     paths: readonly string[],
     /** How far each file has got, while it is read (2026-10-01). */
     onProgress?: (progress: AttachProgress) => void,
+    /** `requireAll` (R100): refuse, ingesting nothing, if any source is gone. */
+    opts?: { readonly requireAll?: boolean },
   ): Promise<AttachResult>;
   /** Take back an attached document: delete the stored file and mark every
    *  block citing it removed. Idle-only, like attachFiles. */
   removeAttachment?(path: string): Promise<RemoveAttachmentResult>;
+  /** F04: stop sending pictures to the models, or send them again. The rows,
+   *  stored copies and previews stay; only the next requests change.
+   *  Idle-only, like removeAttachment. */
+  setPictureModelUse?(
+    targets: readonly PictureTarget[],
+    use: "stop" | "send",
+  ): Promise<SetPictureModelUseResult>;
   /** Stage pictures in the composer (ADR 0048 §4): store + start captioning
    *  now, append to the record only when the message is sent. Accepts a path
    *  (picker, drop) or raw bytes (paste — a clipboard screenshot has no path
@@ -790,10 +863,24 @@ export interface Session {
       readonly bytes?: Uint8Array;
       readonly name?: string;
     }[],
+    /** `job`: the composer card's id, for `cancelStaging` (R118). */
+    opts?: { readonly job?: string },
   ): Promise<StageImagesResult>;
+  /** Stop a staging call by its job id (R118): its reads are aborted and a
+   *  picture it had not kept yet comes back `cancelled`, with no copy and no
+   *  caption call. False when no call with that id is running. */
+  cancelStaging?(job: string): boolean;
   /** Drop a staged picture and delete its stored copy. Nothing about it ever
    *  reached the record, so — unlike removeAttachment — nothing is marked. */
   unstageImage?(id: string): Promise<boolean>;
+  /** The user's reset of an unreadable pending-picture manifest (R98): the
+   *  damaged file is renamed and kept, no picture file is deleted, and the
+   *  composer can stage again. */
+  resetPendingImages?(): Promise<ResetPendingImagesResult>;
+  /** Read the restored pending pictures among `ids` at send, before anything
+   *  else of the message is committed (R98). Resolves to the ids that could
+   *  not be read; a picture read here is reused by the send. */
+  prepareStagedImages?(ids: readonly string[]): Promise<readonly string[]>;
 
   subscribeRecord(): AsyncIterable<RecordEvent>;
   subscribeOverlay(): AsyncIterable<OverlayEvent>;
@@ -843,3 +930,4 @@ export interface Session {
 
   close(): Promise<void>;
 }
+

@@ -1,0 +1,67 @@
+{
+  "manifest": {
+    "schemaVersion": 2,
+    "apiVersion": 1,
+    "id": "herta.example.text-inspector",
+    "name": "文本检查器",
+    "version": "1.0.0",
+    "description": "在本地统计输入文本，用结果卡查看统计与预览，再按需准备草稿。不读取项目、不联网，也不调用模型。",
+    "entry": "main.js",
+    "capabilities": [
+      {
+        "name": "ui.present"
+      },
+      {
+        "name": "ui.update"
+      },
+      {
+        "name": "draft.append"
+      }
+    ],
+    "actions": [
+      {
+        "id": "inspect",
+        "title": "检查文本",
+        "scope": "both",
+        "export": "inspect",
+        "inputs": [
+          {
+            "id": "text",
+            "label": "需要检查的文本",
+            "type": "text",
+            "required": true,
+            "maxLength": 8000
+          }
+        ],
+        "capabilities": [
+          "ui.present",
+          "ui.update"
+        ]
+      },
+      {
+        "id": "prepare-draft",
+        "title": "整理为草稿",
+        "scope": "both",
+        "export": "prepareDraft",
+        "inputs": [
+          {
+            "id": "summary",
+            "label": "草稿内容（可以修改）",
+            "type": "text",
+            "required": true,
+            "maxLength": 16000
+          }
+        ],
+        "capabilities": [
+          "draft.append"
+        ]
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "main.js",
+      "source": "function utf8Bytes(text) {\n  let bytes = 0;\n  for (let i = 0; i < text.length; i++) {\n    const unit = text.charCodeAt(i);\n    if (unit < 0x80) bytes++;\n    else if (unit < 0x800) bytes += 2;\n    else if (unit >= 0xd800 && unit <= 0xdbff) {\n      const low = text.charCodeAt(++i);\n      if (!(low >= 0xdc00 && low <= 0xdfff)) throw new Error('invalid-text-encoding');\n      bytes += 4;\n    } else if (unit >= 0xdc00 && unit <= 0xdfff) {\n      throw new Error('invalid-text-encoding');\n    } else bytes += 3;\n  }\n  return bytes;\n}\n\nfunction viewHandle(value) {\n  if (!value || typeof value.viewId !== 'string' || !value.viewId ||\n      !Number.isSafeInteger(value.revision) || value.revision < 1) {\n    throw new Error('invalid-view-handle');\n  }\n  return value;\n}\n\nexport async function inspect(input, api) {\n  const initial = viewHandle(await api.ui.present({ view: {\n    title: '文本检查',\n    blocks: [{ type: 'status', tone: 'info', text: '正在计算输入文本。' }],\n    actions: []\n  } }));\n\n  const text = input.text;\n  const parts = text.split(/\\r\\n|\\n|\\r/);\n  const lines = text.length === 0 ? 0 : parts.length - (parts[parts.length - 1] === '' ? 1 : 0);\n  const bytes = utf8Bytes(text);\n  const trimmed = text.trim();\n  const segments = trimmed ? trimmed.split(/\\s+/u).length : 0;\n  const previewCharacters = Array.from(text);\n  const preview = previewCharacters.slice(0, 400).join('');\n  const summary = [\n    '文本检查',\n    '文本行数：' + lines,\n    'UTF-8 字节数：' + bytes + ' B',\n    '空白分隔片段：' + segments,\n    '', '原文：', text\n  ].join('\\n');\n\n  const finalView = {\n    title: '文本检查结果',\n    blocks: [\n      { type: 'fields', items: [\n        { label: '文本行数', value: String(lines) },\n        { label: 'UTF-8 字节数', value: String(bytes) + ' B' },\n        { label: '空白分隔片段', value: String(segments) }\n      ] },\n      { type: 'code', language: 'text', code: preview },\n      { type: 'text', text: 'CRLF、LF、CR 均计为换行，末尾换行不额外增加空行。片段按空白分隔，不做中文分词。'\n        + (previewCharacters.length > 400 ? '原文预览仅显示前 400 个字符；草稿参数保留完整原文。' : '原文预览已完整显示。') },\n      { type: 'status', tone: 'success', text: '本地统计已完成，没有调用模型或读取项目。' }\n    ],\n    actions: [{ id: 'prepare-note', label: '整理为草稿', actionId: 'prepare-draft', inputJson: JSON.stringify({ summary }) }]\n  };\n  const updated = viewHandle(await api.ui.update({ viewId: initial.viewId, revision: initial.revision, view: finalView }));\n  if (updated.viewId !== initial.viewId || updated.revision !== initial.revision + 1) throw new Error('invalid-view-update');\n  return { lines, bytes, segments, summary: '统计已完成。可选择“整理为草稿”，检查或修改参数后再运行。' };\n}\n\nexport async function prepareDraft(input, api) {\n  await api.draft.append({ text: input.summary });\n  return '草稿已准备。点击“追加到草稿”后才会写入编辑区。';\n}\n"
+    }
+  ]
+}

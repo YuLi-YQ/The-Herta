@@ -1,0 +1,227 @@
+/* R133: one visual grammar for the two conversation hosts. The workbench's
+   permission/trace controls and chat's memory/context remain separate features.
+   Both columns are min(960px, canvas - 2*gutter). Native 8px scrollbars reserve
+   8px on each edge; the scroller's remaining gutter is therefore gutter - 8px. */
+:root[data-appearance="observatory"] .herta-shell {
+  --herta-message-space: 24px;
+  --herta-composer-height: 80px;
+  --herta-composer-min-height: 66px;
+  --herta-conversation-toolbar-height: 54px;
+}
+:root[data-appearance="observatory"] .herta-chat-body {
+  grid-template-columns: calc(var(--herta-sidebar-width) + 1px) minmax(0, 1fr);
+}
+:root[data-appearance="observatory"] .herta-chat-body.is-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+:root[data-appearance="observatory"] :is(.herta-sidebar, .herta-chat-history) {
+  padding: 20px 14px 14px;
+  gap: 10px;
+}
+:root[data-appearance="observatory"] :is(.herta-toolbar, .herta-chat-toolbar) {
+  min-height: 54px;
+  padding: 8px 20px;
+  gap: 12px;
+  border-bottom: 0;
+}
+:root[data-appearance="observatory"] :is(.herta-content, .herta-chat-messages) {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+  scrollbar-gutter: stable both-edges;
+  padding: 28px calc(var(--herta-content-gutter) - 8px) 24px;
+}
+:root[data-appearance="observatory"] :is(.herta-content, .herta-chat-messages, .herta-chat-history, .herta-chat-memory)::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+:root[data-appearance="observatory"] :is(.herta-content, .herta-chat-messages, .herta-chat-history, .herta-chat-memory)::-webkit-scrollbar-thumb {
+  background: var(--herta-border);
+  border-radius: 8px;
+}
+:root[data-appearance="observatory"] :is(.herta-transcript, .herta-chat-messages > [data-entrance], .herta-chat-empty) {
+  width: 100%;
+  max-width: var(--herta-content-width);
+  margin-inline: auto;
+}
+:root[data-appearance="observatory"] :is(.herta-transcript > article, .herta-chat-message) {
+  width: auto;
+  max-width: none;
+  margin: 0;
+  padding: 16px 0 var(--herta-message-space);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  line-height: 1.7;
+}
+:root[data-appearance="observatory"] :is(.herta-transcript > article.herta-user, .herta-chat-message.is-user) {
+  width: fit-content;
+  max-width: 90%;
+  margin: 16px 0 var(--herta-message-space) auto;
+  padding: 10px 18px;
+  border-radius: 16px 16px 4px 16px;
+  background: var(--herta-panel);
+}
+:root[data-appearance="observatory"] :is(.herta-transcript > article, .herta-chat-message) > strong {
+  color: var(--herta-secondary);
+  font-size: 12px;
+}
+:root[data-appearance="observatory"] :is(.herta-transcript, .herta-chat-message) .herta-message-time {
+  margin: 4px 0 10px;
+  font-size: 12px;
+}
+:root[data-appearance="observatory"] :is(.herta-transcript, .herta-chat-message) .message-content__actions {
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px 0;
+}
+:root[data-appearance="observatory"] :is(.herta-transcript, .herta-chat-message) .message-content__body > :last-child {
+  margin-bottom: 0;
+}
+:root[data-appearance="observatory"] .herta-chat-conversation > footer {
+  flex-shrink: 0;
+  width: calc(100% - 2 * var(--herta-content-gutter));
+  max-width: var(--herta-content-width);
+  margin: 0 auto 4px;
+  padding: 0;
+  border: 0;
+  background: var(--herta-bg);
+}
+:root[data-appearance="observatory"] :is(.herta-composer-box, .herta-chat-composer) {
+  position: relative;
+  font-size: 14px;
+  padding: 12px;
+  border: 1px solid var(--herta-border);
+  border-radius: 18px;
+  background: var(--herta-panel);
+  box-shadow: none;
+}
+/* Anchor the model menus to the shared input box, not the variable-width model
+   label. The 36px send action otherwise pushes a 320px menu off a narrow edge. */
+:root[data-appearance="observatory"] .composer-model-picker {
+  position: static;
+}
+:root[data-appearance="observatory"] .composer-model-popover {
+  right: 12px;
+  bottom: calc(100% + 8px);
+  width: min(320px, calc(100% - 24px));
+  max-width: calc(100vw - 48px);
+}
+:root[data-appearance="observatory"] :is(.herta-composer-box, .herta-chat-composer):focus-within {
+  border-color: var(--herta-control);
+}
+:root[data-appearance="observatory"] :is(.herta-composer-box, .herta-chat-composer) > textarea {
+  display: block;
+  width: 100%;
+  min-height: var(--herta-composer-min-height);
+  height: var(--herta-composer-height);
+  max-height: min(25vh, 240px);
+  padding: 6px 6px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 14px;
+  line-height: 1.65;
+  resize: vertical;
+}
+:root[data-appearance="observatory"] :is(.herta-composer-box, .herta-chat-composer) > textarea:focus-visible {
+  outline: none;
+}
+:root[data-appearance="observatory"] :is(.herta-composer-controls, .herta-chat-controls, .herta-chat-send-group) {
+  gap: 4px;
+  margin-top: 0;
+  align-items: center;
+}
+:root[data-appearance="observatory"] :is(.herta-composer-controls, .herta-chat-controls) {
+  padding: 4px;
+  font-size: 12px;
+}
+:root[data-appearance="observatory"] :is(.herta-composer-controls, .herta-chat-controls) > :is(button, .herta-chat-upload),
+:root[data-appearance="observatory"] :is(.herta-composer-controls, .herta-chat-controls) > .prompt-action-picker > button {
+  min-height: 34px;
+  padding: 4px 10px;
+  border-color: transparent;
+  border-radius: 10px;
+  background: transparent;
+}
+:root[data-appearance="observatory"] :is(.herta-composer-controls .herta-attach, .herta-chat-controls > .herta-chat-upload) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+}
+:root[data-appearance="observatory"] :is(.herta-composer-controls .herta-send-action, .herta-chat-send-group > .herta-chat-send, .herta-chat-send-group > .herta-chat-stop) {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: var(--herta-accent);
+  color: var(--herta-on-accent);
+}
+:root[data-appearance="observatory"] :is(.herta-round-dashboard, .herta-chat-meta) {
+  justify-content: center;
+  gap: 5px 16px;
+  min-height: 24px;
+  margin-top: 0;
+  padding: 4px 12px 2px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+@media (max-width: 760px) {
+  :root[data-appearance="observatory"] :is(.herta-toolbar, .herta-chat-toolbar) {
+    padding: 6px 12px;
+  }
+}
+/* The two sidebars use the same temporary navigation shelf below the toolbar
+   on small displays. The toggle stays exposed; wide-window preferences survive. */
+@media (max-width: 600px) {
+  :root[data-appearance="observatory"] .herta-shell[data-mode="workbench"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :root[data-appearance="observatory"] .herta-main {
+    grid-column: 1;
+  }
+  :root[data-appearance="observatory"] .herta-resizer {
+    display: none;
+  }
+  :root[data-appearance="observatory"] .herta-chat-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :root[data-appearance="observatory"] :is(.herta-sidebar, .herta-chat-history) {
+    position: fixed;
+    top: calc(64px + var(--herta-conversation-toolbar-height));
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    width: min(var(--herta-sidebar-width), calc(100vw - 48px));
+    max-height: none;
+    border-right: 1px solid var(--herta-border);
+    box-shadow: var(--herta-ui-shadow);
+  }
+  :root[data-appearance="observatory"] :is(.herta-toolbar, .herta-chat-toolbar) {
+    flex-wrap: wrap;
+    gap: 4px 8px;
+  }
+}
+@media (max-height: 720px) {
+  :root[data-appearance="observatory"] .herta-shell {
+    --herta-composer-height: 56px;
+    --herta-composer-min-height: 56px;
+    --herta-conversation-toolbar-height: 44px;
+  }
+  :root[data-appearance="observatory"] :is(.herta-toolbar, .herta-chat-toolbar) {
+    min-height: 44px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  :root[data-appearance="observatory"] :is(.herta-content, .herta-chat-messages) {
+    padding-top: 16px;
+    padding-bottom: 12px;
+  }
+}

@@ -44,6 +44,7 @@ import {
   getProviderSettings,
   saveProvider,
   setProviderBindings,
+  updateProviderModels,
   validateProviderURL,
 } from "./provider-settings.js";
 
@@ -254,4 +255,54 @@ it("leases a text-only model independently, blocks deletion until released and r
  expect(()=>deleteProvider(p.id)).toThrow();
  lease.release();lease.release();
  expect(()=>deleteProvider(p.id)).not.toThrow();
+});
+
+it("keeps a model's test results, images included, across saves that keep the connection (R83)", () => {
+  state.root = mkdtempSync(join(tmpdir(), "herta-provider-settings-"));
+  state.available = true;
+  const first = saveProvider(input()).settings.providers[0]!;
+  // What the text, tools and image checks leave behind.
+  updateProviderModels(first.id, first.revision, (models) =>
+    models.map((m) => ({
+      ...m,
+      capabilities: { ...m.capabilities, streaming: "supported", tools: "supported", images: "supported" },
+      validation: { state: "tools-available", protocol: first.protocol, providerRevision: first.revision, checkedAt: "2026-10-23T00:00:00.000Z" },
+    })),
+  );
+  // Rename, add a model and change the timeout, key kept: nothing measured is lost.
+  const renamed = saveProvider(
+    input({
+      id: first.id,
+      expectedRevision: first.revision,
+      name: "改名后的网关",
+      models: [{ id: "custom-model" }, { id: "second-model" }],
+      defaults: { model: "custom-model", timeoutMs: 90000 },
+      credential: { action: "keep" },
+    }),
+  ).settings.providers[0]!;
+  const kept = renamed.models.find((m) => m.id === "custom-model")!;
+  expect(renamed.revision).toBe(first.revision + 1);
+  expect(kept.capabilities).toEqual({ streaming: "supported", tools: "supported", images: "supported", reasoning: "unknown" });
+  expect(kept.validation).toMatchObject({ state: "tools-available", providerRevision: renamed.revision, protocol: first.protocol });
+  expect(renamed.models.find((m) => m.id === "second-model")).toMatchObject({
+    capabilities: { images: "unknown", tools: "unknown" },
+    validation: { state: "unverified", providerRevision: renamed.revision },
+  });
+  // A different address is a different connection: results reset, marked as needing a new check.
+  const moved = saveProvider(
+    input({ id: first.id, expectedRevision: renamed.revision, baseURL: "https://other.example/v1/", credential: { action: "keep" } }),
+  ).settings.providers[0]!;
+  expect(moved.models[0]).toMatchObject({
+    capabilities: { images: "unknown", tools: "unknown", streaming: "unknown" },
+    validation: { state: "unverified", providerRevision: renamed.revision },
+  });
+  // So is a new key, even at the same address.
+  updateProviderModels(moved.id, moved.revision, (models) =>
+    models.map((m) => ({ ...m, capabilities: { ...m.capabilities, images: "supported" }, validation: { state: "text-available", protocol: moved.protocol, providerRevision: moved.revision } })),
+  );
+  const rekeyed = saveProvider(
+    input({ id: first.id, expectedRevision: moved.revision, baseURL: "https://other.example/v1/", credential: { action: "replace", value: "secret-value-beta" } }),
+  ).settings.providers[0]!;
+  expect(rekeyed.models[0]?.capabilities.images).toBe("unknown");
+  expect(rekeyed.models[0]?.validation.state).toBe("unverified");
 });

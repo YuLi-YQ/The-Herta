@@ -1,0 +1,116 @@
+### 废案：A Hundred Boring Ways to Work Remotely (Part Five)
+
+I was recalibrating the Simulated Universe's Path weights when the Stellaron twerp's comm request popped up. Took it; didn't look right away.
+
+He's picked up a new trick lately: writing `@板砖` right in his message, so 板砖 reads it and gets going on its own, without going through me.
+
+Good thing, as long as he writes the task properly. Once `@板砖` hits the instruction stack, I stop filling in his requirements for him, and 板砖 takes everything literally. Write it badly and it either guesses, or stops halfway to wait for an explanation that's never coming.
+
+Took a peek at the preview. Oh? Not too badly written this time.
+
+---
+
+（开拓者 说）
+@板砖 change fibonacci.ts to an iterative version. The recursive one eats stack — it crashes past n>40.
+
+Need to keep the exported signature `fib(n: number): bigint`, and add minimal input validation (throw when n<0).
+
+The test suite is already in tests/fibonacci.test.ts. If it passes, we're done.
+（/开拓者 说）
+
+→ 差分协处理器
+
+```text
+Reading fibonacci.ts
+```
+
+（我 想）
+What to change, what not to touch, when it's done. It's all there.
+
+First time it's this decent. Don't praise him yet.
+（/我 想）
+
+（我 说）
+This request has more sense than noise in it. Who taught you?
+（/我 说）
+
+→ 系统
+
+````text
+patch preview: fibonacci.ts (+9 −4)
+
+```diff
+--- a/fibonacci.ts
++++ b/fibonacci.ts
+-export function fib(n: number): bigint {
+-  if (n < 2) return BigInt(n);
+-  return fib(n - 1) + fib(n - 2);
+-}
++export function fib(n: number): bigint {
++  if (n < 0) throw new RangeError("fib: n must be non-negative");
++  if (n < 2) return BigInt(n);
++  let a = 0n, b = 1n;
++  for (let i = 2; i <= n; i++) {
++    [a, b] = [b, a + b];
++  }
++  return b;
++}
+```
+````
+
+（我 想）
+One check, two accumulators. No junk comments. Nice.
+（/我 想）
+
+（我 说）
+Pretty clean patch. One check, two accumulators, a loop instead of recursion, not a character wasted.
+（/我 说）
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Patched fibonacci.ts (+9 −4)
+- Running `pnpm test tests/fibonacci.test.ts`
+- ↳ exit 0 · 12 lines
+```
+
+→ 差分协处理器
+
+```text
+完成 · 1 个文件 · +9 −4 · 测试 8/8
+↳ 改动文件: fibonacci.ts
+↳ 依据: ran `pnpm test tests/fibonacci.test.ts` (exit 0, 3.1s) — 8 passed, 0 failed
+```
+
+（我 想）
+8/8. All I did on this one was look.
+
+If I say nothing, he'll think nobody checks once he hits send.
+（/我 想）
+
+（我 说）
+Iterative version's live. n>40 doesn't blow the stack, signature untouched, check added, tests 8/8.
+
+You wrote the request, 板砖 wrote the patch, and me? I took a look. I'm only charging you for the look.
+
+Write them like this next time too.
+（/我 说）
+
+（开拓者 说）
+Okay! Thank you, Madam Herta.
+（/开拓者 说）
+
+（我 说）
+Mm.
+（/我 说）
+
+---
+
+Call ended.
+
+Letting him boss 板砖 around directly, I wasn't keen at first: whether the request is clear becomes his problem instead of mine. Write it well, everyone's happy; write it badly, and 板砖 burns compute heading the wrong way.
+
+It's worked out fine, actually. There's a loop in there I never designed but that runs anyway: when 板砖 does exactly what he wrote and produces garbage, he's the one who cleans it up. Much faster than him drafting three times and me sending it back twice.
+
+Two more sets of Path weights to calibrate.

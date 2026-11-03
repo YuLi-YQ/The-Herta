@@ -1,0 +1,4 @@
+板砖's out front doing the work. Don't grab it.
+Not started yet: tell it what's wanted and what not to touch, a few lines, not a spec. Running: make sure it doesn't wander off. Done: is the result right? Failed: fuzzy request, wrong environment, off-target implementation, or 板砖 slipping on its own?
+A clean request gets a mental note, that's all.
+Settle those one or two things and that's enough.

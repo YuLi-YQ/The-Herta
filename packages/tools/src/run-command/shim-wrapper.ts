@@ -31,11 +31,10 @@ const CMD_UNSAFE_ARG = /[&|<>^%!"\r\n]/;
 
 export type ShimResolution =
   | { kind: "unwrapped"; argv: readonly string[] }
-  | { kind: "wrapped"; argv: readonly string[] }
+  | { kind: "wrapped"; argv: readonly string[]; windowsVerbatimArguments?: true; shimPath?: string }
   | { kind: "unsafe_args"; offending: string };
 
-function resolveShimPath(name: string): string | null {
-  const pathVar = process.env.PATH ?? process.env.Path ?? "";
+function resolveShimPath(name: string, pathVar: string): string | null {
   for (const dir of pathVar.split(delimiter)) {
     if (dir.length === 0) continue;
     for (const ext of [".cmd", ".bat"]) {
@@ -50,12 +49,17 @@ function resolveShimPath(name: string): string | null {
   return null;
 }
 
-export function resolveWindowsShim(argv: readonly string[]): ShimResolution {
+/** Host-only overrides keep constrained callers on the same vetted PATH used
+ * for execution. Existing workbench callers retain their original behavior. */
+export function resolveWindowsShim(argv: readonly string[], options?: {
+  path: string;
+  commandInterpreter: string;
+}): ShimResolution {
   if (process.platform !== "win32") return { kind: "unwrapped", argv };
   const head = argv[0] ?? "";
   if (!SHIM_BASENAMES.has(head)) return { kind: "unwrapped", argv };
 
-  const shimPath = resolveShimPath(head);
+  const shimPath = resolveShimPath(head, options?.path ?? process.env.PATH ?? process.env.Path ?? "");
   if (shimPath === null) return { kind: "unwrapped", argv }; // let ENOENT report
 
   for (const arg of argv.slice(1)) {
@@ -65,6 +69,14 @@ export function resolveWindowsShim(argv: readonly string[]): ShimResolution {
   }
   if (CMD_UNSAFE_ARG.test(shimPath)) {
     return { kind: "unwrapped", argv }; // pathological PATH entry — refuse to wrap
+  }
+  if (options) {
+    // cmd /s removes one surrounding quote pair. The retained inner pairs
+    // quote every argument, including paths and arguments with spaces; Node
+    // must not reinterpret this already-vetted command line as C argv quoting.
+    const line = `"${[shimPath, ...argv.slice(1)].map(arg => `"${arg}"`).join(" ")}"`;
+    return { kind: "wrapped", argv: [options.commandInterpreter, "/d", "/s", "/c", line],
+      windowsVerbatimArguments: true, shimPath };
   }
   return { kind: "wrapped", argv: ["cmd", "/c", shimPath, ...argv.slice(1)] };
 }

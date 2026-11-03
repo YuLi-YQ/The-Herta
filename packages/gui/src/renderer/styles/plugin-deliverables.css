@@ -1,0 +1,38 @@
+/* Same owner-level reader in chat and workbench; no plugin-provided styles or motion. */
+.plugin-deliverables { position: fixed; top: 64px; right: 0; bottom: 0; z-index: 32; display: flex; flex-direction: column; width: min(720px, 92vw); min-width: 0; color: var(--herta-text); background: var(--herta-bg); border-left: 1px solid var(--herta-border); }
+.plugin-deliverables-header { display: flex; align-items: center; justify-content: space-between; flex: none; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--herta-border); }
+.plugin-deliverables-header h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+.plugin-deliverables-header span, .plugin-deliverables-muted { color: var(--herta-muted); font-size: 12px; }
+.plugin-deliverables-body { min-height: 0; min-width: 0; overflow: auto; padding: 16px 20px; overscroll-behavior: contain; }
+.plugin-deliverables-body p { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.plugin-deliverables-body h3 { margin: 12px 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.plugin-deliverables-body h3 > span { color: var(--herta-muted); font-weight: 400; margin-left: 4px; }
+.plugin-deliverables button { color: var(--herta-text); background: var(--herta-bg); border: 1px solid var(--herta-border); border-radius: 6px; padding: 7px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+.plugin-deliverables button:hover:not(:disabled) { background: var(--herta-hover); }
+.plugin-deliverables button:disabled { opacity: .5; cursor: default; }
+.plugin-deliverables button:focus-visible { outline: 2px solid var(--herta-focus); outline-offset: 2px; }
+.plugin-deliverables-list { margin: 0; padding: 0; list-style: none; }
+.plugin-deliverables-list > li { display: flex; gap: 8px; align-items: center; min-width: 0; padding: 8px 0; border-bottom: 1px solid var(--herta-border); }
+.plugin-deliverables-list > li > button:last-child:not(.plugin-deliverables-item) { flex: none; }
+.plugin-deliverables button.plugin-deliverables-item { display: flex; flex: 1; align-items: flex-start; gap: 8px; min-width: 0; border-color: transparent; text-align: left; }
+.plugin-deliverables button.plugin-deliverables-item[aria-pressed="true"] { background: var(--herta-panel); border-color: var(--herta-border); }
+.plugin-deliverables-item > svg { flex: none; margin-top: 2px; }
+.plugin-deliverables-item > span:nth-child(2) { flex: 1; min-width: 0; }
+.plugin-deliverables-item strong { display: block; font-weight: 500; overflow-wrap: anywhere; }
+.plugin-deliverables-item small { display: block; color: var(--herta-muted); margin-top: 5px; font-size: 11px; overflow-wrap: anywhere; }
+.plugin-deliverables-item > span:last-child { max-width: 132px; font-size: 12px; overflow-wrap: anywhere; }
+.plugin-deliverables-error, .plugin-deliverables-removed, .plugin-patch-status:is(.is-failed, .is-conflict) { color: var(--herta-error); }
+.plugin-deliverables-added, .plugin-patch-status.is-applied { color: var(--herta-success); }
+.plugin-patch-status:is(.is-applying, .is-needs-review) { color: var(--herta-warning); }
+.plugin-deliverables-reader { min-width: 0; margin-top: 20px; padding-top: 8px; border-top: 1px solid var(--herta-border); }
+.plugin-deliverables-reader:focus-visible { outline: 2px solid var(--herta-focus); outline-offset: 2px; }
+.plugin-deliverables-reader .round-file-view { min-width: 0; }
+.plugin-deliverables-reader .plugin-controlled-code .file-viewer__code { max-height: 48vh; }
+.plugin-deliverables-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+@media (max-width: 560px) {
+  .plugin-deliverables { width: calc(100vw - 12px); }
+  .plugin-deliverables-header, .plugin-deliverables-body { padding: 12px; }
+  .plugin-deliverables-list > li { flex-wrap: wrap; }
+  .plugin-deliverables button.plugin-deliverables-item { flex-basis: 100%; }
+  .plugin-deliverables-item > span:last-child { max-width: 96px; }
+}

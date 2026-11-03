@@ -31,6 +31,20 @@
 .message-content__heading-1 {
   font-size: 1.25em;
 }
+/* Sub-headings read as headings, not as bold body lines (R44). */
+.message-content__heading-2 {
+  font-size: 1.15em;
+}
+.message-content__heading-3 {
+  font-size: 1.05em;
+}
+.message-content__body .message-content__heading {
+  margin: 1em 0 0.4em;
+  line-height: 1.45;
+}
+.message-content__body > .message-content__heading:first-child {
+  margin-top: 0;
+}
 .message-content__body a {
   color: var(--herta-accent);
   text-decoration: underline;
@@ -97,6 +111,14 @@
 .message-code button:disabled {
   opacity: 0.45;
   cursor: default;
+}
+/* The shell's generic button size (36px) inflated the code toolbar into a
+   tall band; these actions are meant to be compact (R44). */
+.herta-shell .message-code :is(.message-code__toolbar, .message-code__pages) button {
+  min-height: 26px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
 }
 .message-code button:focus-visible,
 .message-content button:focus-visible,

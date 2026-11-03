@@ -1,18 +1,13 @@
 import type { SegmentData } from "./ascii-renderer.js";
 
-/**
- * Lazy importers for the 8 committed opening segment assets. Vite code-splits
- * each entry, so only the chosen segment is fetched at runtime (`{ import:
- * "default" }` resolves to the parsed JSON object).
- */
-const SEGMENT_LOADERS = import.meta.glob<SegmentData>(
-  "../../assets/openings/*.json",
-  { import: "default" },
-) as Record<string, () => Promise<SegmentData>>;
+/** The public application does not mount the legacy opening. Its upstream
+ * artwork is excluded; tests can still inject procedural segment loaders. */
+const SEGMENT_LOADERS: Record<string, () => Promise<SegmentData>> = {};
 
 /**
  * Pick a random one of the opening segment loaders. `loaders`/`rng` are
- * injectable for tests; production uses the real glob + Math.random.
+ * injectable for tests. An absent catalog rejects through the component's
+ * normal asynchronous load-failure path, rather than throwing during mount.
  */
 export function pickOpeningSegment(
   loaders: Record<string, () => Promise<SegmentData>> = SEGMENT_LOADERS,
@@ -20,7 +15,7 @@ export function pickOpeningSegment(
 ): () => Promise<SegmentData> {
   const keys = Object.keys(loaders).sort();
   if (keys.length === 0) {
-    throw new Error("no opening segment assets found");
+    return async () => { throw new Error("opening artwork is not distributed in the public build"); };
   }
   const index = Math.min(keys.length - 1, Math.floor(rng() * keys.length));
   return loaders[keys[index] as string] as () => Promise<SegmentData>;

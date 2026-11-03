@@ -1,0 +1,161 @@
+### 废案：远程办公的一百种无聊方式（其六）
+
+板砖在跑一组回归测试，进度条卡在 87%，三秒后跳到 88%。那一下是后台 GC，不是卡死，上次调优的时候验过。我把它丢到第三块屏的角落里去了。
+
+星核小鬼的通信请求弹了出来。我接了。板砖正忙，能不能马上接他的活，看运气吧。
+
+---
+
+（开拓者 说）
+黑塔女士，我在 logger.ts 里需要加一个新的日志等级 "debug"，但又不想破坏现有的 type narrowing。能让板砖加一下吗？
+（/开拓者 说）
+
+（我 想）
+加个枚举值，看着简单。
+
+编译器盯着的地方，板砖会改。编译器不管的地方嘛……我赌它漏一处。
+（/我 想）
+
+（我 说）
+@板砖 在 logger.ts 加一个 "debug" 等级。所有现有的 type-guard 同步更新，否则 tsc 会红。跑完测试。
+（/我 说）
+
+→ 差分协处理器
+
+```text
+Reading logger.ts
+```
+
+（我 说）
+板砖在读了。我先押一注：编译器不管的地方，它会漏一处。
+（/我 说）
+
+→ 系统
+
+````text
+patch preview: logger.ts (+2 −1)
+
+```diff
+--- a/logger.ts
++++ b/logger.ts
+-type Level = "info" | "warn" | "error";
++type Level = "debug" | "info" | "warn" | "error";
+
+ export function colorOf(level: Level): string {
+   switch (level) {
++    case "debug": return "\x1b[90m";
+     case "info":  return "\x1b[37m";
+     case "warn":  return "\x1b[33m";
+     case "error": return "\x1b[31m";
+   }
+ }
+```
+````
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Patched logger.ts (+2 −1)
+- Running `pnpm test`
+- ↳ exit 1 · 31 lines
+```
+
+→ 差分协处理器
+
+```text
+部分完成 · 1 个文件 · +2 −1 · 测试 13 通过，1 失败 · 1 风险
+↳ 输出:
+FAIL  tests/logger.test.ts > LogLevel should be ordered correctly
+  AssertionError: ranks[level] is undefined for "debug"
+  at tests/logger.test.ts:42:18
+↳ 改动文件: logger.ts
+↳ 风险: ranks 映射表缺少 debug 项，运行时取值为 undefined
+↳ 依据: ran `pnpm test` (exit 1, 6.8s) — 13 passed, 1 failed
+```
+
+（我 想）
+中了！漏的是 `ranks`。
+
+switch 它改了，那是 tsc 盯着的。`ranks` 少个 key，编译器一声不吭，跑起来才冒出 undefined。
+（/我 想）
+
+（我 说）
+红了？好啊，这才有意思嘛！
+
+漏的是 `ranks`。switch 它会改，因为不改 tsc 就红；可 `ranks` 少一个 key，编译器一声不吭，跑起来才冒出个 undefined。
+
+编译时能查出来的坑，它躲得开；跑起来才露头的，它就看不见了。这就是它的上限。
+（/我 说）
+
+（我 想）
+让它自己再找一遍？还是直接告诉它在哪？
+
+它又不会吃一堑长一智。直接说吧，省一轮。
+（/我 想）
+
+（我 说）
+@板砖 给 `ranks` 映射表补上 debug：debug 排最小，rank=0；原来的 info/warn/error 全部 +1。再跑测试。
+（/我 说）
+
+→ 系统
+
+````text
+patch preview: logger.ts (+1 −1)
+
+```diff
+-const ranks: Record<Level, number> = { info: 0, warn: 1, error: 2 };
++const ranks: Record<Level, number> = { debug: 0, info: 1, warn: 2, error: 3 };
+```
+````
+
+→ 系统
+
+```text
+[历史已压缩 · 板砖]
+- Patched logger.ts (+1 −1)
+- Running `pnpm test`
+- ↳ exit 0 · 9 lines
+```
+
+→ 差分协处理器
+
+```text
+完成 · 1 个文件 · +1 −1 · 测试 14/14
+↳ 改动文件: logger.ts
+↳ 依据: ran `pnpm test` (exit 0, 6.2s) — 14 passed, 0 failed
+```
+
+（我 想）
+两轮。它撞墙，我指路。
+
+下回它还会撞的。能长记性的只有他。
+（/我 想）
+
+（我 说）
+14/14，好了。
+
+第一轮板砖只改了编译器看得见的地方，漏了 `ranks`；第二轮我告诉它在哪，它才补上。下次它照样会漏。
+
+你记住一句就行：加枚举值之前，先想想「这个类型还被哪些表拿去当 key 了」，找全了再派活。
+（/我 说）
+
+（开拓者 说）
+懂了，谢谢黑塔女士。
+（/开拓者 说）
+
+（我 说）
+嗯。
+（/我 说）
+
+---
+
+通信结束。
+
+两轮派活，22 个系统秒。第一轮的补丁和那次红掉的测试还挂在审计日志里，我没让它删。失败留下的痕迹，也是数据。
+
+可惜板砖没有训练循环。人格映射模块删掉的时候，「上次撞过这堵墙」的记忆也一起没了，它每回都跟第一次似的。
+
+也许该给它补个小小的「失败索引」，只记失败的样子，不接人格映射。那是下个项目的事了。
+
+进度条跳到 89%。

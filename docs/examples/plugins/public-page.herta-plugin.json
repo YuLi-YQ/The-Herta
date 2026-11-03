@@ -1,0 +1,53 @@
+{
+  "manifest": {
+    "schemaVersion": 2,
+    "apiVersion": 1,
+    "id": "herta.example.public-page",
+    "name": "公开页面",
+    "version": "1.0.0",
+    "description": "仅向 https://example.com 发送 GET 请求，在结果卡中预览纯文本；不读取项目、生成文件、写入草稿或调用模型。",
+    "entry": "main.js",
+    "capabilities": [
+      {
+        "name": "network.request",
+        "origins": [
+          "https://example.com"
+        ],
+        "methods": [
+          "GET"
+        ]
+      },
+      {
+        "name": "ui.present"
+      }
+    ],
+    "actions": [
+      {
+        "id": "read-page",
+        "title": "读取公开页面",
+        "scope": "both",
+        "export": "readPage",
+        "inputs": [
+          {
+            "id": "path",
+            "label": "页面路径",
+            "type": "text",
+            "required": false,
+            "default": "/",
+            "maxLength": 512
+          }
+        ],
+        "capabilities": [
+          "network.request",
+          "ui.present"
+        ]
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "main.js",
+      "source": "export async function readPage(input, api) {\n  const path = input.path;\n  if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || /[\\\\#\\u0000-\\u0020\\u007f]/.test(path)) {\n    throw new Error('invalid-path');\n  }\n  const url = 'https://example.com' + path;\n  const response = await api.network.request({ url, method: 'GET' });\n  const characters = Array.from(response.body);\n  const preview = characters.slice(0, 6000).join('').replace(/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f]/g, '\\uFFFD');\n  await api.ui.present({ view: {\n    title: '公开页面预览',\n    blocks: [\n      { type: 'status', tone: response.ok ? 'success' : 'warning', text: 'HTTP ' + response.status + (response.ok ? '：已收到响应。' : '：服务返回非成功状态。') },\n      { type: 'fields', items: [\n        { label: '地址', value: url },\n        { label: '内容类型', value: response.contentType || '未提供' }\n      ] },\n      { type: 'code', language: 'text', code: preview },\n      { type: 'text', text: '内容按纯文本展示，不执行网页代码。'\n        + (characters.length > 6000 ? '这里只显示前 6000 个字符。' : '正文已完整展示。')\n        + '不支持显示的控制字符替换为 �。没有写入草稿、生成文件或调用模型。' }\n    ],\n    actions: []\n  } });\n  return { status: response.status, ok: response.ok, shownCharacters: Math.min(characters.length, 6000) };\n}\n"
+    }
+  ]
+}

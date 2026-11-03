@@ -57,6 +57,8 @@ export interface ActorTurnDeps {
    *  `buildStaticHertaPrefix`; passed through the driver to the actor
    *  unchanged. */
   readonly staticPrefix: StaticHertaPrefix;
+  /** Captured owner goal context for this turn only. */
+  readonly goalContext?: string;
   /** Shared bus — backend events flow through here for projection. */
   readonly bus: EventBus<AgentEvent>;
   /** Factory that creates a fresh CodingAgentRuntime per `@板砖` invocation. */

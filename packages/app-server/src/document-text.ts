@@ -76,7 +76,10 @@ export type ExtractedDocument =
         | "encrypted"
         | "too_many_pages"
         | "unsupported"
-        | "parse_error";
+        | "parse_error"
+        /** `signal` was aborted (R118): the reader stopped, nothing is wrong
+         *  with the file. Only a caller that passed a signal can see it. */
+        | "cancelled";
       /** PDF only, when the document opened far enough to count. */
       readonly pages?: number;
     };
@@ -167,16 +170,26 @@ export interface ExtractOptions {
    *  number as that page is done — the pending row's progress (2026-10-01).
    *  Display only; whatever it throws is swallowed. */
   readonly onPage?: (done: number, total: number) => void;
+  /** Stops the read (R118). A PDF is checked before it opens and between
+   *  pages, so a cancel lands within one page's work; a Word file is one
+   *  synchronous unzip-and-walk and is only checked before and after it. */
+  readonly signal?: AbortSignal;
 }
+
+/** Read through a call so TypeScript does not carry an earlier check
+ *  across the awaits in between, where an abort can land (R118). */
+const isAborted = (signal: AbortSignal | undefined): boolean =>
+  signal?.aborted === true;
 
 export async function extractDocumentText(
   format: DocumentFormat,
   bytes: Uint8Array,
   opts: ExtractOptions = {},
 ): Promise<ExtractedDocument> {
-  return format === "pdf"
-    ? extractPdfText(bytes, opts)
-    : extractDocxText(bytes);
+  if (isAborted(opts.signal)) return { ok: false, reason: "cancelled" };
+  if (format === "pdf") return extractPdfText(bytes, opts);
+  const result = extractDocxText(bytes);
+  return isAborted(opts.signal) ? { ok: false, reason: "cancelled" } : result;
 }
 
 // ───── PDF ─────
@@ -278,6 +291,7 @@ async function extractPdfText(
   // throw (a throw is a file that vanished without a trace), so a failed
   // import must come back as a stated failure like any other.
   let task: ReturnType<PdfJs["getDocument"]> | undefined;
+  let stop: (() => void) | undefined;
   try {
     const pdfjs = await loadPdfJs();
     // Own copy: pdfjs may transfer/detach the buffer it is handed, and the
@@ -298,7 +312,14 @@ async function extractPdfText(
         ? { maxImageSize: MAX_PICTURE_DECODE_PIXELS }
         : {}),
     });
+    // A cancel mid-open or mid-page also tears the task down (R118), which
+    // rejects whatever pdfjs is awaiting; the catch below reports it.
+    const opened = task;
+    stop = () => void opened.destroy().catch(() => undefined);
+    opts.signal?.addEventListener("abort", stop, { once: true });
+    if (isAborted(opts.signal)) stop(); // aborted while the engine loaded
     const doc = await task.promise;
+    if (isAborted(opts.signal)) return { ok: false, reason: "cancelled" };
     const pages = doc.numPages;
     if (pages > maxPages) return { ok: false, reason: "too_many_pages", pages };
     // Every page opens with its marker line (2026-08-23); pages are separated
@@ -330,6 +351,10 @@ async function extractPdfText(
       // main thread: a few hundred pages froze the window, its drag region
       // and every IPC for the length of the parse (perf audit 2026-09-20).
       if (p > 1) await new Promise<void>((next) => setImmediate(next));
+      // The same yield is where a cancel lands (R118); `finally` below frees
+      // the document as for any other early return.
+      if (isAborted(opts.signal))
+        return { ok: false, reason: "cancelled", pages };
       const page = await doc.getPage(p);
       try {
         const content = await page.getTextContent();
@@ -383,6 +408,7 @@ async function extractPdfText(
       ...(pictures.length > 0 ? { pictures } : {}),
     };
   } catch (err) {
+    if (isAborted(opts.signal)) return { ok: false, reason: "cancelled" };
     // pdfjs raises a distinct exception for a password-protected file; the
     // rest (InvalidPDF, malformed xref, truncated stream) is "could not parse".
     if (isNamedError(err, "PasswordException")) {
@@ -390,6 +416,7 @@ async function extractPdfText(
     }
     return { ok: false, reason: "parse_error" };
   } finally {
+    if (stop !== undefined) opts.signal?.removeEventListener("abort", stop);
     // Frees the fake worker's document state; without it each attach leaks
     // the parsed object graph for the process lifetime.
     if (task !== undefined) await task.destroy().catch(() => undefined);

@@ -60,6 +60,9 @@ export const REFUSAL_DENY_CODES: ReadonlySet<string> = new Set([
   "path_outside_workspace",
   "path_denied",
   "command_blocked",
+  // The permission mode: read-only withholds every mutation until the user
+  // changes the mode, however the call is asked.
+  "permission_read_only",
   // The tool cannot make the change, however it is asked.
   "file_too_large",
   "binary_file",

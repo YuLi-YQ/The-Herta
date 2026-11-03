@@ -180,4 +180,27 @@ describe("runSessionExport", () => {
     ).toBe("failed");
     expect(await runSessionExport({}, "s1")).toBeNull();
   });
+
+  it("ends before the dialog when the composer moved to another task while it read (R124)", async () => {
+    const run = new AbortController();
+    const saved: string[] = [];
+    expect(
+      await runSessionExport(
+        {
+          readSessionForExport: async () => {
+            run.abort();
+            return src();
+          },
+          saveSessionExport: async (name) => {
+            saved.push(name);
+            return { saved: true };
+          },
+        },
+        "s1",
+        () => NOW,
+        run.signal,
+      ),
+    ).toBe("cancelled");
+    expect(saved).toEqual([]);
+  });
 });

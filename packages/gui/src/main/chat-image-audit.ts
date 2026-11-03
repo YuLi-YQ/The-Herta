@@ -3,8 +3,9 @@ import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { ChatImageAudit } from "../shared/herta-chat.js";
 
-/** Read-only inventory of this store and its adjacent automatic backups; never a deletion authorization. */
-export function auditChatImages(history: string): ChatImageAudit {
+/** Read-only inventory of this store and its adjacent automatic backups; never a deletion authorization.
+ *  `unreferenced`, when given, receives each unreferenced image name and size (only meaningful if complete). */
+export function auditChatImages(history: string, unreferenced?: Map<string, number>): ChatImageAudit {
   const result: ChatImageAudit = { complete: true, current: 0, backupOnly: 0, unreferenced: 0, unreferencedBytes: 0, missing: 0, checkedBackups: 0 };
   const required = new Set<string>(), current = new Set<string>(), backups = new Set<string>(), present = new Set<string>();
   let budget = 128 * 1024 * 1024;
@@ -35,7 +36,8 @@ export function auditChatImages(history: string): ChatImageAudit {
   try {
     scan(history, current, true);
     const base = basename(history);
-    const names = readdirSync(dirname(history)).filter(n => n.startsWith(`${base}.`) && n !== `${base}.images` && !n.startsWith(`${base}.memory.`));
+    // The quarantine (R43) holds images the user set aside; it is not a history backup.
+    const names = readdirSync(dirname(history)).filter(n => n.startsWith(`${base}.`) && n !== `${base}.images` && n !== `${base}.images-quarantine` && !n.startsWith(`${base}.memory.`));
     if (names.length > 100) result.complete = false;
     for (const name of names.slice(0, 100)) {
       // Unknown backup conventions are not silently ignored.
@@ -53,7 +55,7 @@ export function auditChatImages(history: string): ChatImageAudit {
         present.add(name);
         if (current.has(name)) result.current++;
         else if (backups.has(name)) result.backupOnly++;
-        else { result.unreferenced++; result.unreferencedBytes += st.size; }
+        else { result.unreferenced++; result.unreferencedBytes += st.size; unreferenced?.set(name, st.size); }
       }
     }
     result.missing = [...required].filter(ref => !present.has(ref)).length;

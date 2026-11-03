@@ -141,6 +141,39 @@ export function attachmentTaskLine(
     : `〔附件〕开拓者提供了文件：${d.name}，位于 ${where}。任务需要时用文件工具自行读取。`;
 }
 
+/**
+ * The line for a picture the host attaches to the executor's request itself
+ * (F02 design 2.8; the neutral driver, app-server `neutral-images.ts`). There
+ * the file line above is wrong twice over: file tools refuse a PNG/JPEG as
+ * binary, and a picture that was sent rides a message right after the
+ * request's anchor. Those messages say which pictures went and why the
+ * others did not; this line only points there, by their own rule (a picture
+ * not attached to a message there was not sent).
+ */
+function pictureTaskLine(d: { name: string; path: string }, lang: PromptLang) {
+  // The same workspace-relative citation as attachmentTaskLine's.
+  return lang === "en"
+    ? `[attachment] The Trailblazer provided a picture: ${d.name} — at ${d.path} (relative to the workspace root). File tools cannot show you a picture. If it was sent to you, it is attached to one of the user messages that open this conversation; if it is not attached there, it was not sent to you.`
+    : `〔附件〕开拓者提供了图片：${d.name}，位于 ${d.path}（相对工作区根目录）。文件工具无法显示图片。若它发给了你，就附在本次对话开头的用户消息中；那里没有附带它，就是没有发给你。`;
+}
+
+/** A picture with a stored copy a request may carry — app-server's
+ *  `imageRowOf` test. Withdrawn, refused and never-stored pictures keep
+ *  their attachmentTaskLine shapes. */
+function sendablePicture(d: {
+  path: string;
+  image?: unknown;
+  unreadable?: string;
+}): boolean {
+  return (
+    d.image !== undefined &&
+    d.path !== "" &&
+    (d.unreadable === undefined ||
+      d.unreadable === "no_caption" ||
+      d.unreadable === "too_large")
+  );
+}
+
 /** Why a document (ADR 0038) never reached disk, in words 板砖 can relay. */
 export function documentFailureReason(
   unreadable: string | undefined,
@@ -186,6 +219,8 @@ export function documentFailureReason(
 export function extractUserMessages(
   record: TerminalRecord,
   lang: PromptLang = "zh",
+  /** The host attaches the pictures to the request itself (pictureTaskLine). */
+  opts: { readonly picturesAttached?: boolean } = {},
 ): ExtractedUserMessages {
   const all: { text: string }[] = [];
   for (const block of record) {
@@ -199,7 +234,13 @@ export function extractUserMessages(
       // An attachment that could not be read is still worth naming: the task
       // may well BE "why can't you read this?", and silence would leave 板砖
       // inventing an answer about a file it was never told about.
-      all.push({ text: attachmentTaskLine(block.digest, lang) });
+      const d = block.digest;
+      all.push({
+        text:
+          opts.picturesAttached === true && sendablePicture(d)
+            ? pictureTaskLine(d, lang)
+            : attachmentTaskLine(d, lang),
+      });
     }
   }
   // Keep from the newest backwards until either cap trips. The newest

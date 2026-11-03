@@ -28,6 +28,24 @@ function requireMapleFonts(hashes, scope) {
   for (const hash of mapleHashes)
     if (!hashes.has(hash))
       failures.push(`fixed Maple Mono font missing: ${scope}`);
+  if (displayFont && !hashes.has(displayFont.sha256))
+    failures.push(`fixed display font missing: ${scope}`);
+}
+// The display face (R76): a Noto Serif SC subset whose bytes, characters and
+// licence hash are recorded beside it by scripts/fetch-display-font.mjs.
+const displayManifest = join(GUI, "src/renderer/assets/fonts/herta-display.json");
+const displayFont = existsSync(displayManifest)
+  ? JSON.parse(readFileSync(displayManifest, "utf8"))
+  : null;
+function checkDisplayFont(fontPath, licencePath) {
+  if (!displayFont) {
+    failures.push("display font manifest missing");
+    return;
+  }
+  if (fontPath && requireFile(fontPath) && sha256(readFileSync(fontPath)) !== displayFont.sha256)
+    failures.push(`display font hash mismatch: ${relative(ROOT, fontPath)}`);
+  if (requireFile(licencePath) && sha256(readFileSync(licencePath)) !== displayFont.licenceSha256)
+    failures.push(`display font licence hash mismatch: ${relative(ROOT, licencePath)}`);
 }
 
 // Unapproved upstream artwork at fixed commit 8fb8099. Catch renamed copies
@@ -159,6 +177,10 @@ walk(join(GUI, "out"), (path) =>
   checkEntry(relative(GUI, path), () => readFileSync(path)),
 );
 checkMapleLicense(join(GUI, "resources/licenses/MapleMono-OFL.txt"));
+checkDisplayFont(
+  join(GUI, "src/renderer/assets/fonts/herta-display.woff2"),
+  join(GUI, "resources/licenses/NotoSerifSC-OFL.txt"),
+);
 const builtFonts = new Set();
 walk(join(GUI, "out/renderer"), (path) => {
   if (path.endsWith(".woff2")) builtFonts.add(sha256(readFileSync(path)));
@@ -182,6 +204,7 @@ if (unpackedFlag !== -1) {
     const unpacked = resolve(argument);
     const resources = join(unpacked, "resources");
     checkMapleLicense(join(resources, "licenses/MapleMono-OFL.txt"));
+    checkDisplayFont(null, join(resources, "licenses/NotoSerifSC-OFL.txt"));
     requireFile(join(unpacked, "The Herta.exe"));
     requireFile(join(unpacked, "LICENSE.electron.txt"));
     requireFile(join(unpacked, "LICENSES.chromium.html"));

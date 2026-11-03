@@ -149,7 +149,7 @@ describe("DeviceGlow", () => {
     expect(calls.drawArrays ?? 0).toBeGreaterThan(during + 2);
   });
 
-  it("uploads a theme's lamp layer once its image has decoded, and draws it (ADR 0057 §2.14)", () => {
+  it("uploads the procedural public mask once its image has decoded, and draws it", () => {
     vi.useFakeTimers();
     mockAsyncRaf();
     const { calls } = mockWebgl();
@@ -169,7 +169,10 @@ describe("DeviceGlow", () => {
     vi.stubGlobal("Image", FakeImage);
     render(<DeviceGlow state="idle" />);
     expect(made.length).toBe(2);
-    expect(made.map((m) => m.src).every((s) => s.length > 0)).toBe(true);
+    expect(made.every((image) => image.src.startsWith("data:image/svg+xml,"))).toBe(true);
+    const mask = decodeURIComponent(made[0]!.src.split(",").slice(1).join(","));
+    expect(mask).toContain("<ellipse");
+    expect(mask).not.toMatch(/(?:href=|<image|<script|url\()/i);
     act(() => {
       vi.advanceTimersByTime(16 * 3);
     });

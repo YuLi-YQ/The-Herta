@@ -9,6 +9,9 @@ import type {
 import { describe, expect, it } from "vitest";
 import { NeutralBackendProvider } from "./neutral-provider.js";
 
+const HUMAN_DECISION_STOP =
+  "If a required human decision is missing, stop execution and report the exact missing information to The Herta persona. Do not guess it or proceed with side effects; the persona will request structured user input.";
+
 function config(protocol: ProviderProtocol): ProviderConfig {
   return {
     id: "executor",
@@ -88,7 +91,11 @@ describe("NeutralBackendProvider real frame/protocol boundary", () => {
         requests[0]?.messages[0]?.role === "user" &&
           requests[0].messages[0].text.trim().length > 0,
       ).toBe(true);
-      expect(requests[0]?.system).toBe(first.backendSystem);
+      // The executor's system is the frame plus the standing stop rule: a
+      // missing human decision halts execution instead of being guessed (R51).
+      expect(requests[0]?.system).toBe(
+        `${first.backendSystem}\n${HUMAN_DECISION_STOP}`,
+      );
       const call: ToolCallRequest = {
         id: "read-actual",
         tool: "read_file",
@@ -127,6 +134,9 @@ describe("NeutralBackendProvider real frame/protocol boundary", () => {
         },
       ]);
       expect(requests[1]?.nativeContext).toBe(native);
+      expect(requests[1]?.system).toBe(
+        `${first.backendSystem}\n\nOne tool result is available.\n${HUMAN_DECISION_STOP}`,
+      );
       expect(first.messages).toHaveLength(0);
       expect(continuation.messages).toHaveLength(2);
       provider.turn = {
@@ -136,6 +146,7 @@ describe("NeutralBackendProvider real frame/protocol boundary", () => {
       await consume(provider, first);
       expect(requests[2]?.nativeContext).toBeUndefined();
       expect(requests[2]?.messages[0]).toEqual(requests[0]?.messages[0]);
+      expect(requests[2]?.system).toBe(requests[0]?.system);
     });
   }
 });

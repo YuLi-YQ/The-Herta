@@ -167,6 +167,7 @@ export interface SessionSnapshotView {
    *  review 2026-09-22, item 7). The composer adopts them into its strip,
    *  then calls `clearRestagedImages`. Null when there is nothing to adopt. */
   readonly restagedImages: readonly StagedImageInfo[] | null;
+  readonly stagedImageError: string | null;
   /** A message sent while 板砖 works (ADR 0063), waiting above the composer:
    *  sent as the next turn the moment this one ends, unless the user
    *  interjects it into the running work (`steerText`) or takes it back.
@@ -253,6 +254,7 @@ const INITIAL: SessionSnapshotView = {
   composerDraft: null,
   composerDraftImages: null,
   restagedImages: null,
+  stagedImageError: null,
   held: null,
   resumable: false,
   composerNotice: null,
@@ -499,6 +501,13 @@ export class SessionStore {
   clearRestagedImages(): void {
     if (this.snapshot.restagedImages === null) return;
     this.emit({ ...this.snapshot, restagedImages: null });
+  }
+
+  /** Main set the unreadable pending-picture manifest aside (R98). Bound to
+   *  the session that was reset: a switch in the meantime keeps the new one's. */
+  clearStagedImageError(sessionId: string): void {
+    if (this.snapshot.sessionId !== sessionId || this.snapshot.stagedImageError === null) return;
+    this.emit({ ...this.snapshot, stagedImageError: null });
   }
 
   /** Hold a message sent while 板砖 works (ADR 0063). ONE held message at a
@@ -770,6 +779,7 @@ export class SessionStore {
       // no message held for a turn that belonged to another session).
       composerDraft: null,
       composerDraftImages: null,
+      stagedImageError: e.stagedImageError ?? null,
       restagedImages:
         e.stagedImages !== undefined && e.stagedImages.length > 0
           ? e.stagedImages
@@ -1272,3 +1282,4 @@ export class SessionStore {
     }
   }
 }
+

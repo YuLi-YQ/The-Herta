@@ -273,4 +273,24 @@ export {
   type UsageNote,
   type UsageNoteSink,
 } from "./usage-note.js";
-export { trustCovers, WORKSPACE_TRUST_CODES } from "./workspace-trust.js";
+export { trustCovers, permissionModeCoversRequest, WORKSPACE_TRUST_CODES } from "./workspace-trust.js";
+export {
+  type GoalEntry, type GoalState, type GoalView, type GoalFailure, type GoalReply, type GoalAction,
+  GOAL_TEXT_LIMIT, GOAL_RESULT_LIMIT, GOAL_HISTORY_LIMIT,
+  emptyGoalState, parseGoalState, parseGoalAction, changeGoal, goalContext,
+} from "./session-goal.js";
+export {
+  type PlanContent, type PlanState, type PlanView, type PlanFailure, type PlanReply, type PlanAction,
+  PLAN_TEXT_LIMIT, PLAN_HISTORY_LIMIT, emptyPlanState, parsePlanState, parsePlanAction,
+  changePlan, capturePlan, planContext,
+} from "./session-plan.js";
+export {
+  type CompactAction,
+  type CompactReason,
+  type CompactRecap,
+  type CompactReply,
+  type CompactStatus,
+  type CompactView,
+  parseCompactAction,
+} from "./session-compact.js";
+export { guardedRecapCachePath } from "./session-io/recap-cache-path.js";

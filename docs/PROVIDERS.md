@@ -1,76 +1,49 @@
-# Provider 与模型接入规范
+# 连接、模型与协议
 
-状态：2026-10-04。第二轮实现配置持久化、加密凭据和绑定；第三轮已接三协议请求、模型发现、能力验证及迁移，第四轮统一审查补齐配置回读、响应资源边界与桌面隔离。真实验证仅为 DeepSeek 兼容服务的 deepseek-flash，不代表官方 OpenAI/Anthropic 或真实旧用户资料迁移通过。范围与证据见 reports/round-3.md、reports/round-4.md。
+Provider是一组用户保存的服务连接，不等于模型厂商。应用支持显式选择以下协议，并保留服务地址的版本或网关路径前缀：
 
-R1 将配置/能力/角色绑定/turn 快照/消息与协议适配边界冻结为 `packages/providers/src/contracts.ts`，由协调者维护。契约文件本身只有类型；实际实现位于 protocols 与桌面 neutral-driver / SessionHost 链路，不能仅凭设置页或类型定义声称协议通过。上游历史耦合见 `PROVIDER_AUDIT.md`，统一审查见 `reports/final-review.md`。
+| protocol | 请求接口 | 例子 |
+| --- | --- | --- |
+| openai-responses | responses | https://api.openai.com/v1 |
+| openai-chat-completions | chat/completions | https://api.deepseek.com |
+| anthropic-messages | messages | https://api.anthropic.com/v1 |
 
-契约要求：`ProviderSettings.schemaVersion = 1`；配置只持有 `credentialRef`，密钥解析在主进程；`revision` 正整数，URL/Key/协议变化使验证失效；模型支持 unknown/supported/unsupported 与 unverified/text-available/tools-available/failed 分开。`TurnProviderSnapshot` 在开始时深复制冻结。`NeutralMessage` 不携带 DeepSeek reasoning 字段；私有 `NativeContext` 限定 providerId/revision/protocol/modelId，不跨协议复用。`tool-arguments-delta` 永不执行，只有完整 JSON/schema 校验后的 `tool-call-ready` 才交权限引擎；协议流异常抛 ProviderError，取消不产生 finished。R3 在复用现有 ProviderAdapter 的工具执行消费点时要维护 call ID 并增加映射测试，不平行发明另一套工具引擎。
+预设和地区地址见[服务商预设](PROVIDER_PRESETS.md)。Gemini预设使用其OpenAI兼容接口，不表示实现了Gemini原生协议。自建兼容服务可手填；界面名称不能替代协议选择，模型列表存在也不代表账号可调用。
 
-## 1. 配置范围
+## 保存与验证
 
-Provider 是用户保存的一组服务连接，不等于协议或模型厂商。允许多个相同协议的 Provider，例如官方 OpenAI、自建 OpenAI 兼容网关、Anthropic 兼容网关；名称由用户自定义。
+在设置的“连接与模型”中填写连接、密钥和模型。保存与显式验证是不同操作；“保存并验证”按聊天或编程用途执行文本/工具检测。聊天要求当前连接的text-available或tools-available；执行模型要求tools-available。图片需另点“测试识图”，其生成测试图和实际答案匹配后才记录能力，文本/工具通过不自动授予识图。
 
-| 字段 | 要求 |
+验证记录绑定protocol、providerRevision和checkedAt。更换地址、协议、鉴权或密钥会使旧连接的验证失效；不改变连接的改名、默认选择等按实际保存规则保留结果。鉴权/临时网络失败与明确能力拒绝分开；未完整返回的检测不应抹掉已有结果。识图日期、连接变化和过期提示可供手动复核，不会后台持续发送付费探测。
+
+实际带图请求收到400/415/422时标记识图待复核，但不臆断全部原因；413另说明请求过大。失败不会通过自动重发已执行工具的回合来掩盖。默认模型与工作台黑塔/执行器绑定可分开；独立聊天在自己的输入区选择，不隐式获得工作区权限。
+
+## 主进程数据契约
+
+| 字段/类型 | 作用 |
 | --- | --- |
-| id / name | 稳定内部 ID 与可编辑显示名，名称变更不影响会话引用 |
-| protocol | `openai-responses`、`openai-chat-completions`、`anthropic-messages` 三种显式模式；界面先选 OpenAI / Anthropic，再显示对应模式 |
-| baseURL | 用户可编辑的 API 根地址，保留网关路径前缀；清晰展示最终请求地址示例 |
-| credentialRef | 指向主进程安全存储中的 API Key；普通配置文件只保存引用 |
-| models | 从服务发现或用户手动添加的模型 ID、可选别名、能力与验证状态 |
-| defaults | 默认模型、超时和受支持的生成参数；不把某厂商参数直接传给另一协议 |
-| revision | 配置版本，用于执行轮次冻结、更新和恢复诊断 |
+| ProviderSettings.schemaVersion = 1 | 保存连接与角色绑定；普通配置不含明文密钥 |
+| id / name | 稳定内部标识与显示名 |
+| protocol / baseURL | 显式协议和API根地址，不接受URL中夹带用户名、密码或密钥 |
+| credentialRef | 只引用主进程凭据存储，密钥不传给renderer或插件 |
+| models | 模型ID/别名、来源、独立能力与验证状态 |
+| defaults | 默认模型、超时和支持的生成选项 |
+| revision | 正整数；冻结当前请求所用连接版本 |
+| TurnProviderSnapshot | 开始回合时深复制冻结的persona/executor配置与绑定 |
+| NativeContext | 限定providerId/revision/protocol/modelId的私有协议续接数据，不跨连接复用 |
 
-官方预设只用于填表，用户始终可改 Base URL。不得根据显示名、域名或模型名前缀隐式选择协议。不预置真实密钥，不将任何模型 ID 作为唯一合法白名单。首版范围不包含 Azure/Bedrock 等独立鉴权协议；兼容服务只要遵守已实现协议即可配置，具体兼容性由验证结果说明。
+能力unknown/supported/unsupported与模型验证unverified/text-available/tools-available/failed是两组不同状态。请求途中改配置只影响后续请求，迟到验证不能覆盖新配置。
 
-## 2. 协议适配与统一执行
+## 请求与工具边界
 
-OpenAI Responses 与 Chat Completions 的请求和事件结构不同，应分别适配；官方新项目可优先 Responses，兼容网关可明确选择 Chat Completions。[OpenAI 官方接口迁移说明](https://developers.openai.com/api/docs/guides/migrate-to-responses)
+统一适配器处理文本、图片、工具定义、调用ID、参数增量、完成原因、用量和取消。tool-arguments-delta只是显示数据；只有完整JSON和schema校验通过的tool-call-ready才可交给权限引擎。工具结果与调用ID对应，不把流片段、重复事件或模型文字当作已执行操作。
 
-Anthropic 使用独立 Messages 适配器，处理自己的系统消息、内容块、流事件、工具调用/结果、停止原因与鉴权头；不得通过替换 Base URL 假装已支持。[Anthropic Messages 文档](https://platform.claude.com/docs/en/api/messages/create)
+主进程发起请求，默认HTTPS；本地HTTP服务与明确允许的远程HTTP分别处理，不能自动降级TLS。Base URL如https://gateway.example/prefix/v1会保留prefix，再追加当前协议端点。适配器不能绕过本地权限，也不会为恢复失败自动换服务/协议重放工具。
 
-内部统一请求表达历史消息、角色约束、工具定义、能力选项和取消信号；统一事件表达文本增量、工具调用 ID/参数增量、完成原因、用量、错误。此处是待设计的抽象，不假称上游已有这些类型。保留各协议恢复所需的原生不透明字段并限定其 Provider/模型归属，不把私有推理字段作为正文显示或跨协议硬转。
+桌面模型传输使用Chromium网络栈及系统信任；插件network.request是另一条受限宿主网络能力，见[插件联网](PLUGIN_NETWORK_V1.md)。关闭模型搜索不等于禁用模型请求，也不会撤销已授予插件的网络能力。
 
-工具参数流必须在完整结束且校验通过后才可执行；保持工具调用与结果的 ID 对应关系，处理多工具调用、非法 JSON、断流和重复事件。禁止自动切换协议/Provider 并重试已经执行过工具的轮次。主进程仍是权限控制边界，适配器不能绕过审批直接执行本地操作。
+## 当前验证范围
 
-## 3. 解除角色层的 DeepSeek 依赖
+已在一个DeepSeek Flash服务上验证真实工具/识图、聊天与工作台单图及历史多图、执行器直接识图和结果转交、两种摘要，以及一个真实生成插件包。其他服务商、官方OpenAI/Anthropic端点及协议组合不能据此自动标成通过；请按自己的连接显式验证。模型返回的用量/缓存/上下文数据缺失时如实显示未知，不以猜测补齐。
 
-将 persona 的角色约束、对话记录与执行器结果构建为供应商无关上下文，再由适配器编码为各协议。保留黑塔与执行器分离，但不要求服务支持原始 completion、assistant prefill 或某个专有停止标记。
-
-必须验证仅配置 OpenAI 或仅配置 Anthropic 时，均可完成角色回复→调度执行器→工具结果→角色结论。不允许后台暗中请求 DeepSeek。旧的 completion 机制可以保留在显式启用的兼容路径中，不作为默认链路或备用服务自动使用。
-
-默认“黑塔对话”和“编程执行”共用一个 Provider + model；高级设置允许独立选择。执行模型必须有经验证的工具能力；对话模型不支持工具时可仅用于角色输出。跨角色混合配置也需测试，不能只测分别聊天成功。
-
-## 4. Base URL 与凭据
-
-Base URL 约定为含版本/网关前缀的 API 根地址，如 `https://api.openai.com/v1`、`https://api.anthropic.com/v1` 或 `https://gateway.example/prefix/v1`。适配器按模式追加 `responses`、`chat/completions` 或 `messages`，不得重复 `/v1`、丢失前缀，或依赖 SDK 不同默认拼接行为。用表驱动测试覆盖尾斜杠、前缀和粘贴完整端点；完整端点输入应提示修正，不能静默猜测。
-
-主进程发起请求，不启用浏览器直连或让用户关闭 CORS 保护。HTTPS 为默认；本地 HTTP 可用于本地服务，远程 HTTP 必须显式选择并说明密钥明文传输，不能自动降级。拒绝 URL 内嵌用户名、密码和密钥查询参数。跨源重定向不得携带凭据。
-
-密钥按 Provider ID 单独保存、替换和删除。编辑 Base URL 时不发送网络请求；目标来源变更后将连接标为未验证，并由用户显式测试/使用该目标。不得向其他 Provider 复用密钥，日志仅显示脱敏配置。首版不提供任意鉴权脚本；无鉴权本地服务可选择“无需 API Key”，该模式不能自动应用于官方服务。
-
-## 5. 模型发现与可用性
-
-支持“获取模型”和“手动添加模型 ID”。按适配器实现模型列表请求、分页及缓存；Anthropic 的模型列表是独立 API，不能沿用 OpenAI 的响应解析。[Anthropic 模型列表文档](https://platform.claude.com/docs/en/api/models/list)
-
-网关可能没有列表接口、返回 403/404 或只列部分模型；这时允许手动输入，不阻断保存。模型列表不能证明该账户一定能生成或调用工具。每个 Provider + model + protocol 记录“未验证 / 文本可用 / 工具可用 / 验证失败”，配置版本变化后失效。模型能力 unknown 不等于 supported。
-
-提供低成本文本测试和单独工具能力测试；后者使用应用内无副作用测试工具，不读取用户项目。测试可能消耗 API 额度，按钮附近简短说明。运行成功也可更新对应能力记录。流式、图片、推理参数及上下文长度按真实能力启用，不硬猜模型前缀，不用模型列表推断价格。
-
-## 6. 切换、持久化与迁移
-
-保存全局默认绑定和会话绑定；每次 turn 开始时冻结 Provider ID、配置版本、模型及参数。本轮结束前切换只影响下一轮，不让流事件混用新配置。删除被当前运行使用的 Provider 时阻止并提示先停止；删除后保留历史文本和非秘密元信息，关联会话要求重新选择连接。
-
-历史采用中立消息与工具记录；切换协议后重新构建上下文，不携带前一服务的会话/响应 ID、签名或私有内容块。无法转换的内容明确标示或要求新建会话，不能悄悄丢失关键工具结果。应用重启不自动重放未完成调用。
-
-迁移旧 DeepSeek 设置时创建对应 Provider、迁移安全存储引用与角色绑定；先备份配置，失败可回退，不清空历史，也不把密钥写入迁移日志。界面移除“没有 DeepSeek Key 就无法运行”的全局门槛。
-
-## 7. 实施与验证范围
-
-R1 核查上游所有 DeepSeek 硬编码、冻结配置/能力/适配器契约；R2 完成 Provider 管理和角色模型选择；R3 完成三个协议模式、角色解耦、模型发现与实际闭环；R4 在安装包复验。
-
-三个模式各自进行确定性协议测试和真实服务闭环测试，至少一个用户配置的非默认 Base URL 完成实测；缺少某一类账号时标记阻塞，不能用另一种协议成功代表全支持。额外覆盖 URL 前缀、模型列表不可用、手填模型、工具不支持、密钥隔离、跨协议切换、旧配置迁移以及只配置一种协议时的独立运行。
-
-2026-10-04 R3 实际登记：三个模式在用户授权的同一兼容服务上分别完成真实任务/工具闭环；Responses 角色与 Messages 执行器混合实测。模型为 deepseek-flash，其他模型及官方服务没有据此获得通过状态。Messages 列表不可用时保留手填；图像/视觉未启用。迁移仅合成旧数据测试，真实旧数据升级待补。详见 [第三轮报告](reports/round-3.md)，历史 R1/R2 审计记录仍保留。
-
-2026-10-05 R6：保存连接不自动发请求或绑定；显式验证后设置当前任务/全局模型。主进程 getProviderReadiness 依据实际 sessionId 的覆盖/默认绑定、加密凭据、协议能力及 revision 决定就绪，submit 再校验；配置变更使旧验证过期。失败只输出有限类别、阶段与安全 HTTP 状态，不向 UI 转发原始响应或密钥。三个模式分别在 DeepSeek 兼容服务 deepseek-flash 完成真实工具请求，详见 reports/round-6.md；官方服务、其他模型仍未测。本地超时/断流/503 与确定性协议测试单独登记，不能计作真实远端 API 通过。
-
+源码入口：[契约](../packages/providers/src/contracts.ts)、[协议编码](../packages/providers/src/protocols/encode.ts)、[模型验证](../packages/gui/src/main/provider-probes.ts)、[工作台驱动](../packages/app-server/src/neutral-driver.ts)。

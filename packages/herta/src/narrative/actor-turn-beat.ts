@@ -74,6 +74,7 @@ export function makeFireBeat(
       attachedMetaThink: deps.attachedMetaThink,
       metaThinkSurface: "speech",
       formatHint: selectBeatHint(resolveHints(deps), trigger.signature),
+      ...(deps.goalContext ? { goalContext: deps.goalContext } : {}),
       openTag: FORCED_SPEECH_OPEN_TAG,
       verbatimSinceLastDispatch: true,
       // Long-session recap (computed once per turn). Orthogonal to the

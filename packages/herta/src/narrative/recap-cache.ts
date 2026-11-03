@@ -1,27 +1,25 @@
-import { mkdirSync, readFileSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
-import { recapCachePath, writeFileAtomicSync } from "@herta/core";
+import { lstatSync, readFileSync, unlinkSync } from "node:fs";
+import { guardedRecapCachePath, writeFileAtomicSync } from "@herta/core";
 import type { RecapCache } from "./session-recap.js";
 
-function cacheDir(workspaceRoot: string): string {
-  return join(workspaceRoot, ".herta", "compaction");
-}
+const MAX_RECAP_BYTES = 2 * 1024 * 1024;
 
 /** The sidecar path, from core — `deleteSessionFiles` removes this same file
  *  when a session is deleted (audit BL8), so the two must not drift. */
-function cacheFile(workspaceRoot: string, sessionId: string): string {
-  return recapCachePath(workspaceRoot, sessionId);
-}
+const cacheFile = guardedRecapCachePath;
 
 export function readRecapCache(
   workspaceRoot: string,
   sessionId: string,
 ): RecapCache | null {
   try {
-    const raw = readFileSync(cacheFile(workspaceRoot, sessionId), "utf8");
+    const file = cacheFile(workspaceRoot, sessionId);
+    if (lstatSync(file).size > MAX_RECAP_BYTES) return null;
+    const raw = readFileSync(file, "utf8");
     const p = JSON.parse(raw) as RecapCache;
     if (
-      typeof p.boundaryIndex !== "number" ||
+      !Number.isSafeInteger(p.boundaryIndex) ||
+      p.boundaryIndex <= 0 ||
       typeof p.recapText !== "string"
     ) {
       return null;
@@ -29,6 +27,11 @@ export function readRecapCache(
     return {
       boundaryIndex: p.boundaryIndex,
       recapText: p.recapText,
+      ...(typeof p.generatedAt === "string" &&
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(p.generatedAt) &&
+      Number.isFinite(Date.parse(p.generatedAt))
+        ? { generatedAt: p.generatedAt }
+        : {}),
       // Legacy sidecars (pre-lang schema, wrote a dead `model` field) read
       // as "zh": every cache written before the field existed came from a
       // zh session. The runtime discards a lang-mismatched cache on read.
@@ -54,8 +57,8 @@ export function deleteRecapCache(
 ): void {
   try {
     unlinkSync(cacheFile(workspaceRoot, sessionId));
-  } catch {
-    // ENOENT and friends: nothing to invalidate.
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
 }
 
@@ -64,12 +67,12 @@ export function writeRecapCache(
   sessionId: string,
   cache: RecapCache,
 ): void {
-  mkdirSync(cacheDir(workspaceRoot), { recursive: true });
+  const serialized = `${JSON.stringify(cache, null, 2)}\n`;
+  if (Buffer.byteLength(serialized, "utf8") > MAX_RECAP_BYTES)
+    throw new Error("Recap cache exceeds its storage limit");
   // fsync'd: the cache must survive a power loss intact or not at all — a
   // renamed-but-empty file would read as "no cache" and cost a re-derive.
-  writeFileAtomicSync(
-    cacheFile(workspaceRoot, sessionId),
-    `${JSON.stringify(cache, null, 2)}\n`,
-    { fsync: true },
-  );
+  writeFileAtomicSync(cacheFile(workspaceRoot, sessionId, true), serialized, {
+    fsync: true,
+  });
 }
